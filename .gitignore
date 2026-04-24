@@ -1,0 +1,24 @@
+# Node / Vite
+node_modules/
+dist/
+*.local
+
+# Env files
+.env
+.env.*
+
+# Source maps (too large for git)
+*.map
+
+# Claude internal
+.claude/
+
+# Non-game folders in this directory
+SideNikke/
+배경/
+원본/
+
+# Loose files not part of the game
+1.png
+1111212.png
+Gemini_Generated_Image_*.png
