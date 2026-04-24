@@ -5,6 +5,7 @@ export type StageKey =
   | "E1_stage5"
   | "E1_stage6"
   | "E1_stage7"
+  | "E1_stage2"
   | "E1_stage4"
   | "E1_stage3"
   | "E1_swim";
@@ -37,23 +38,26 @@ export const STAGE_ORDER: StageKey[] = [
   "E1_stage5",
   "E1_stage6",
   "E1_stage7",
+  "E1_stage2",
   "E1_stage4",
   "E1_stage3",
   "E1_swim",
 ];
 
 // Tier = how many "stage-advancing" parts have been removed at the time
-// this image is the correct one to show. Tier 1 has THREE possible
-// branching images now:
+// this image is the correct one to show. Tier 1 has FOUR branching
+// images — one dedicated image per possible first-removal choice:
 //  - stage5 when the first removed part is boots
 //  - stage6 when the first removed part is cape
 //  - stage7 when the first removed part is sweater
+//  - stage2 when the first removed part is skirt (bottom-only swimsuit)
 // Tiers 2+ always converge regardless of which order the player chose.
 export const STAGE_TIER: Record<StageKey, number> = {
   E1: 0,
   E1_stage5: 1,
   E1_stage6: 1,
   E1_stage7: 1,
+  E1_stage2: 1,
   E1_stage4: 2,
   E1_stage3: 3,
   E1_swim: 4,
@@ -66,10 +70,9 @@ export const STAGE_TIER: Record<StageKey, number> = {
 // the combination matches an authored image, the visual advances;
 // otherwise it stays on the last-best image (and the part still counts
 // as removed in the progress UI).
-// NOTE: E1_stage2 (skirt-off / belt-on) was removed from the active set
-// because belt is no longer a standalone part — the "skirt + belt both
-// off" state is now the finale (E1_swim) directly. The asset file is
-// still on disk but nothing preloads or references it.
+// NOTE: E1_stage2 was re-authored to depict "skirt-off, everything else
+// on" — the bottom-only swimsuit state. It's now the tier-1 image for
+// a skirt-first removal, symmetric with stage5/6/7.
 const STAGE_REQUIREMENTS: [StageKey, string[]][] = [
   ["E1_swim",   ["boots", "cape", "sweater", "skirt"]],
   ["E1_stage3", ["boots", "cape", "sweater"]],
@@ -77,6 +80,7 @@ const STAGE_REQUIREMENTS: [StageKey, string[]][] = [
   ["E1_stage5", ["boots"]],
   ["E1_stage6", ["cape"]],
   ["E1_stage7", ["sweater"]],
+  ["E1_stage2", ["skirt"]],
   ["E1",        []],
 ];
 
@@ -170,10 +174,9 @@ export const PARTS: PartDef[] = [
     // Rich chocolate brown
     tint: 0x5c3d2e,
     order: 4,
-    // E1_stage2 was authored for "skirt off, belt on" which no longer
-    // exists as a state — skirt removal now takes both off, going
-    // straight to the finale image via the isFinished() path.
-    stageAfter: null,
+    // skirt 단독 제거 시 전용 이미지는 E1_stage2 (하의만 수영복).
+    // 실제 이미지 선택은 stageForRemoved()의 부분집합 매칭이 결정함.
+    stageAfter: "E1_stage2",
     prerequisites: [],
   },
 ];
