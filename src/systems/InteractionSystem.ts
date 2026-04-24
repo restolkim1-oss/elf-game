@@ -91,11 +91,7 @@ export class InteractionSystem {
   }
 
   private playSurprise() {
-    const seq: InteractionKey[] = [
-      "ani_surprise1",
-      "ani_surprise2",
-      "ani_surprise2",
-    ];
+    const seq: InteractionKey[] = ["ani_surprise1"];
     seq.forEach((key, idx) => {
       this.sequenceTimers.push(
         this.scene.time.delayedCall(idx * 115, () => {
@@ -117,7 +113,7 @@ export class InteractionSystem {
     const seq: InteractionKey[] = [
       "ani_heart1",
       "ani_heart2",
-      "ani_heart3",
+      "ani_heart1",
       "ani_heart2",
     ];
 

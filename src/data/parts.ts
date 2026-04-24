@@ -52,11 +52,8 @@ export const INTERACTION_ORDER = [
   "ani_idle1",
   "ani_idle2",
   "ani_surprise1",
-  "ani_surprise2",
-  "ani_heart0",
   "ani_heart1",
   "ani_heart2",
-  "ani_heart3",
 ] as const;
 export type InteractionKey = (typeof INTERACTION_ORDER)[number];
 
@@ -65,11 +62,8 @@ export const INTERACTION_ASSET_PATHS: Record<InteractionKey, string> = {
   ani_idle1: "/assets/ani/idle1.png",
   ani_idle2: "/assets/ani/idle2.png",
   ani_surprise1: "/assets/ani/Surprise1.png",
-  ani_surprise2: "/assets/ani/Surprise2.png",
-  ani_heart0: "/assets/ani/Heart0.png",
   ani_heart1: "/assets/ani/Heart1.png",
   ani_heart2: "/assets/ani/Heart2.png",
-  ani_heart3: "/assets/ani/Heart3.png",
 };
 
 // Tier = how many "stage-advancing" parts have been removed at the time
