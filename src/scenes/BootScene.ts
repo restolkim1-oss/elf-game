@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { STAGE_ORDER } from "../data/parts";
+import { STAGE_ORDER, INTERACTION_ORDER } from "../data/parts";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -10,11 +10,15 @@ export class BootScene extends Phaser.Scene {
     STAGE_ORDER.forEach((key) => {
       this.load.image(key, `/assets/${key}.png`);
     });
+    INTERACTION_ORDER.forEach((key) => {
+      this.load.image(key, `/assets/${key}.png`);
+    });
     this.load.image("bg", "/assets/bg.png");
   }
 
   create() {
-    STAGE_ORDER.forEach((key) => {
+    const allKeys = [...STAGE_ORDER, ...INTERACTION_ORDER];
+    allKeys.forEach((key) => {
       if (this.needsCheckerStripping(key)) {
         this.stripCheckerBackground(key);
       }

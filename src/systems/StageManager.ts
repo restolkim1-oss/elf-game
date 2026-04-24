@@ -62,4 +62,28 @@ export class StageManager {
       height: img.displayHeight,
     };
   }
+
+  // Fade every stage image to alpha 0. Used when handing the canvas
+  // over to another system (e.g., interaction mode) that renders its
+  // own character above the stage depth.
+  fadeOutAll(duration = 400) {
+    this.layers.forEach((img) => {
+      this.scene.tweens.killTweensOf(img);
+      this.scene.tweens.add({ targets: img, alpha: 0, duration });
+    });
+  }
+
+  // Force-show a specific stage image, fading out everything else. Used
+  // to restore the finale when returning from interaction mode.
+  showKey(key: StageKey, duration = 400) {
+    this.currentKey = key;
+    this.layers.forEach((img, k) => {
+      this.scene.tweens.killTweensOf(img);
+      this.scene.tweens.add({
+        targets: img,
+        alpha: k === key ? 1 : 0,
+        duration,
+      });
+    });
+  }
 }

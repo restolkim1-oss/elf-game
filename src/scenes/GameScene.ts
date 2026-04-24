@@ -3,6 +3,7 @@ import { PartSystem } from "../systems/PartSystem";
 import { PuzzleSystem } from "../systems/PuzzleSystem";
 import { ProgressSystem } from "../systems/ProgressSystem";
 import { StageManager } from "../systems/StageManager";
+import { InteractionSystem } from "../systems/InteractionSystem";
 import {
   PARTS,
   FINALE_STAGE,
@@ -15,6 +16,8 @@ export class GameScene extends Phaser.Scene {
   private puzzleSystem!: PuzzleSystem;
   private progressSystem!: ProgressSystem;
   private stageManager!: StageManager;
+  private interactionSystem!: InteractionSystem;
+  private interactionActive = false;
 
   // Viewing mode: after the finale fades in, the player can pinch/wheel-
   // zoom and drag-pan the main character view. Disabled during gameplay
@@ -76,6 +79,16 @@ export class GameScene extends Phaser.Scene {
     const characterY = TOP_UI + availableH / 2;
 
     this.stageManager = new StageManager(this, characterX, characterY, scale);
+
+    // Pre-build the interaction layer now (dormant, alpha 0) so there's
+    // zero load delay when the player taps "인터렉션 체험" after clearing.
+    this.interactionSystem = new InteractionSystem(
+      this,
+      characterX,
+      characterY,
+      origH * scale
+    );
+    this.interactionActive = false;
 
     this.progressSystem = new ProgressSystem(PARTS.length);
     this.partSystem = new PartSystem(this, PARTS, () =>
@@ -144,6 +157,53 @@ export class GameScene extends Phaser.Scene {
     // Cross-scene request to re-center / reset zoom (fired from UIScene
     // when the user picks "다시 하기" etc.)
     this.events.on("viewing-reset", () => this.resetView());
+
+    // Interaction-mode switches (fired from the clear menu in UIScene)
+    this.events.on("enter-interaction", () => this.enterInteractionMode());
+    this.events.on("exit-interaction",  () => this.exitInteractionMode());
+  }
+
+  // ---------- Interaction mode (dressed character, tap for reactions) ---
+
+  private enterInteractionMode() {
+    if (this.interactionActive) return;
+    this.interactionActive = true;
+
+    // Disable zoom/pan gestures and reset the camera so the reaction
+    // frames render at their designed position/scale.
+    this.disableViewingMode();
+    this.resetView();
+
+    // Fade out every stage image (the finale/E1_swim included) so only
+    // the interaction layer is visible.
+    this.stageManager.fadeOutAll(420);
+
+    // Activate the interaction system (fade in idle1, enable tap)
+    const { width, height } = this.scale;
+    this.interactionSystem.enable(width, height);
+  }
+
+  private exitInteractionMode() {
+    if (!this.interactionActive) return;
+    this.interactionActive = false;
+    this.interactionSystem.disable();
+    // Bring the finale image back so "돌아가기" lands on the swim stage.
+    this.stageManager.showKey(FINALE_STAGE, 420);
+  }
+
+  private disableViewingMode() {
+    if (!this.viewingMode) return;
+    this.viewingMode = false;
+    this.input.off("wheel",           this.onWheel,       this);
+    this.input.off("pointerdown",     this.onPointerDown, this);
+    this.input.off("pointermove",     this.onPointerMove, this);
+    this.input.off("pointerup",       this.onPointerUp,   this);
+    this.input.off("pointerupoutside",this.onPointerUp,   this);
+    this.events.off("zoom-in");
+    this.events.off("zoom-out");
+    this.events.off("zoom-reset");
+    this.activePointers = [];
+    this.isPanning = false;
   }
 
   // ---------- Viewing mode (zoom/pan after finale) ----------

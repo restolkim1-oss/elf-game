@@ -40,6 +40,7 @@ export class UIScene extends Phaser.Scene {
   private clearMenu: Phaser.GameObjects.Container | null = null;
   private finaleTweens: Phaser.Tweens.Tween[] = [];
   private zoomControls: Phaser.GameObjects.Container | null = null;
+  private interactionControls: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super("UIScene");
@@ -50,6 +51,7 @@ export class UIScene extends Phaser.Scene {
     this.clearMenu = null;
     this.finaleTweens = [];
     this.zoomControls = null;
+    this.interactionControls = null;
     const { width, height } = this.scale;
 
     this.drawTopPanel(width);
@@ -496,7 +498,8 @@ export class UIScene extends Phaser.Scene {
     container.add(dim);
 
     const panelW = width * 0.84;
-    const panelH = u(380);
+    // Tall enough to host three stacked buttons with breathing room
+    const panelH = u(450);
     const panelY = height / 2;
 
     // Drop shadow
@@ -661,13 +664,10 @@ export class UIScene extends Phaser.Scene {
       container.add(lbl);
     };
 
-    makeBtn(panelY + u(30), "✦   다시 하기", () => this.restartGame(), true);
-    makeBtn(
-      panelY + u(96),
-      "✧   계속 감상",
-      () => this.dismissClearMenu(),
-      false
-    );
+    // Three stacked action buttons — 56px spacing, primary on top
+    makeBtn(panelY + u(10), "✦   다시 하기",     () => this.restartGame(),       true);
+    makeBtn(panelY + u(66), "✧   계속 감상",     () => this.dismissClearMenu(),  false);
+    makeBtn(panelY + u(122), "♡   인터렉션 체험", () => this.enterInteractionMode(), false);
 
     // Entrance animation
     container.setAlpha(0);
@@ -716,6 +716,89 @@ export class UIScene extends Phaser.Scene {
     });
     // Nudge the player toward the zoom controls now that the menu is gone
     this.flashHint("· 스크롤 · 핀치 · 드래그로 확대 ·", COLORS.textHighlight);
+  }
+
+  // ---------- Interaction mode entry/exit ----------
+
+  private enterInteractionMode() {
+    // Tear the clear menu down immediately (no dismiss flash)
+    if (this.clearMenu) {
+      const c = this.clearMenu;
+      this.clearMenu = null;
+      this.tweens.add({
+        targets: c,
+        alpha: 0,
+        duration: 320,
+        onComplete: () => c.destroy(),
+      });
+    }
+    // Hide the zoom/pan controls — they don't apply in interaction mode
+    if (this.zoomControls) {
+      const z = this.zoomControls;
+      this.zoomControls = null;
+      this.tweens.add({
+        targets: z,
+        alpha: 0,
+        duration: 260,
+        onComplete: () => z.destroy(),
+      });
+    }
+    const gs = this.scene.get("GameScene");
+    gs.events.emit("enter-interaction");
+    this.drawInteractionControls();
+    this.flashHint("· 캐릭터를 터치해보세요 ·", COLORS.textHighlight);
+  }
+
+  private drawInteractionControls() {
+    if (this.interactionControls) return;
+    const { width, height } = this.scale;
+    const container = this.add.container(0, 0).setDepth(1800);
+    this.interactionControls = container;
+
+    // Single "처음으로" restart button — anchored to the bottom-right
+    const BTN_W = u(140);
+    const BTN_H = u(64);
+    const cx = width - BTN_W / 2 - u(28);
+    const cy = height - BTN_H / 2 - u(140);
+
+    const bg = this.add
+      .rectangle(cx, cy, BTN_W, BTN_H, COLORS.panelMid, 0.94)
+      .setStrokeStyle(u(2), COLORS.gild, 0.95)
+      .setInteractive({ useHandCursor: true });
+    const lbl = this.add
+      .text(cx, cy, "♡  처음으로", {
+        fontFamily: "serif",
+        fontSize: px(17),
+        color: "#ffd572",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    bg.on("pointerover", () => {
+      bg.setFillStyle(COLORS.panelSoft, 0.96);
+      this.tweens.add({ targets: [bg, lbl], scaleX: 1.06, scaleY: 1.06, duration: 130 });
+    });
+    bg.on("pointerout", () => {
+      bg.setFillStyle(COLORS.panelMid, 0.94);
+      this.tweens.add({ targets: [bg, lbl], scaleX: 1, scaleY: 1, duration: 130 });
+    });
+    bg.on("pointerdown", () => {
+      this.tweens.add({
+        targets: [bg, lbl],
+        scaleX: 0.94,
+        scaleY: 0.94,
+        yoyo: true,
+        duration: 100,
+        onComplete: () => this.restartGame(),
+      });
+    });
+
+    container.add(bg);
+    container.add(lbl);
+
+    // Entrance fade
+    container.setAlpha(0);
+    this.tweens.add({ targets: container, alpha: 1, duration: 520, ease: "Quad.easeOut" });
   }
 
   // ---------- Zoom controls (viewing mode) ----------

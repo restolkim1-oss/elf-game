@@ -44,6 +44,20 @@ export const STAGE_ORDER: StageKey[] = [
   "E1_swim",
 ];
 
+// Post-clear interaction mode: clicking the character cycles through
+// reaction frames (idle → surprise → heart loop → idle). These assets
+// share the same character pose/center so we can swap them via alpha.
+export const INTERACTION_ORDER = [
+  "idle1",
+  "idle2",
+  "surprise",
+  "heart1",
+  "heart2",
+  "heart3",
+  "heart4",
+] as const;
+export type InteractionKey = (typeof INTERACTION_ORDER)[number];
+
 // Tier = how many "stage-advancing" parts have been removed at the time
 // this image is the correct one to show. Tier 1 has FOUR branching
 // images — one dedicated image per possible first-removal choice:
