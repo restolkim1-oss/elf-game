@@ -58,13 +58,22 @@ export class GameScene extends Phaser.Scene {
     const baseTex = this.textures.get("E1").getSourceImage() as HTMLImageElement;
     const origW = baseTex.width;
     const origH = baseTex.height;
+    // Account for the top UI panel (~u(124)=248px) and bottom UI panel
+    // (~u(108)=216px). The character must fit entirely BETWEEN them so
+    // the boots never overlap the bottom panel on tall mobile viewports.
+    // Leave ~60px breathing room on each side.
+    const TOP_UI = 2 * 124 + 30;    // top panel + breathing room
+    const BOT_UI = 2 * 108 + 30;    // bottom panel + breathing room
+    const availableH = height - TOP_UI - BOT_UI;
     const scale = Math.min(
-      (height * 0.78) / origH,
-      (width * 0.75) / origW
+      availableH / origH,
+      (width * 0.78) / origW
     );
 
     const characterX = width / 2;
-    const characterY = height * 0.54;
+    // Vertically center the character inside the available band so there
+    // isn't a big empty gap above the head on tall portrait screens.
+    const characterY = TOP_UI + availableH / 2;
 
     this.stageManager = new StageManager(this, characterX, characterY, scale);
 

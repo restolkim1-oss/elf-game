@@ -24,11 +24,11 @@ export interface PartDef {
   // image).
   stageAfter: StageKey | null;
   // Other part IDs that must be removed before THIS part is clickable.
-  // Enforces the only order for which the authored stage images are
-  // visually correct: any-of(boots, cape) → the other → sweater → (belt,
-  // skirt in either order) → finale. Without this, players removing
-  // sweater first would see the stage-5 image (boots-off appearance) and
-  // think the wrong garment came off.
+  // Required because each stage image was authored for a specific state —
+  // removing sweater before boots+cape would NOT change the visual, so
+  // players would think the minigame failed. Enforced order:
+  //   any-of(boots, cape)  → the other  → sweater  → any-of(belt, skirt)
+  //   → finale
   prerequisites: string[];
 }
 
@@ -100,13 +100,14 @@ export const PARTS: PartDef[] = [
     act: "기",
     puzzle: "pattern",
     difficulty: 1,
-    // Knee-high boots span from the knee (~63%) down to the feet (~98%).
-    hitbox: { x: 0.22, y: 0.63, w: 0.56, h: 0.35 },
+    // Knee-high boots span from the knee down to the feet — keep fully
+    // inside its vertical band so it doesn't steal skirt clicks.
+    hitbox: { x: 0.22, y: 0.66, w: 0.56, h: 0.32 },
     // Bright burgundy/maroon for high contrast
     tint: 0x8b2f39,
     order: 1,
     stageAfter: "E1_stage5",
-    // 자유 선택: prerequisites 제거
+    // 부츠는 언제든 먼저 벗길 수 있음 (전용 이미지: E1_stage5)
     prerequisites: [],
   },
   {
@@ -115,12 +116,14 @@ export const PARTS: PartDef[] = [
     act: "승",
     puzzle: "memory",
     difficulty: 2,
-    // Red coat drapes from the left shoulder down to the ankle
-    hitbox: { x: 0.0, y: 0.08, w: 0.32, h: 0.80 },
+    // Red coat drapes on the LEFT side — narrow strip so it doesn't
+    // overlap the sweater/turtleneck click area in the shoulder region.
+    hitbox: { x: 0.0, y: 0.10, w: 0.16, h: 0.78 },
     // Bright scarlet red (이미지와 구분되는 명확한 빨강)
     tint: 0xd43a2f,
     order: 2,
     stageAfter: "E1_stage4",
+    // 코트도 자유 선택 (전용 이미지: E1_stage6)
     prerequisites: [],
   },
   {
@@ -129,13 +132,15 @@ export const PARTS: PartDef[] = [
     act: "승",
     puzzle: "pattern",
     difficulty: 3,
-    // Turtleneck covers the full upper body including arms (10%–44%).
-    hitbox: { x: 0.15, y: 0.08, w: 0.68, h: 0.42 },
+    // Turtleneck covers the upper torso, starting AFTER the cape strip
+    // (x=0.16) and ending above the belt band (y=0.42). No overlaps.
+    hitbox: { x: 0.17, y: 0.09, w: 0.66, h: 0.33 },
     // Golden ochre (더 밝고 구별되는 노란색)
     tint: 0xe5b968,
     order: 3,
     stageAfter: "E1_stage3",
-    prerequisites: [],
+    // 시각적 정합성: 외투 2개가 먼저 벗겨져야 터틀넥 이미지가 맞음
+    prerequisites: ["boots", "cape"],
   },
   {
     id: "belt",
@@ -143,13 +148,14 @@ export const PARTS: PartDef[] = [
     act: "전",
     puzzle: "memory",
     difficulty: 3,
-    // Belt is the thin waistband sitting just above the skirt (~44–51%).
-    hitbox: { x: 0.22, y: 0.44, w: 0.56, h: 0.08 },
+    // Belt band sits between sweater bottom (0.42) and skirt top (0.52).
+    hitbox: { x: 0.22, y: 0.43, w: 0.56, h: 0.08 },
     // Deep charcoal (거의 검은색이지만 약간의 갈색 톤)
     tint: 0x2a2420,
     order: 4,
     stageAfter: null,
-    prerequisites: [],
+    // belt 전용 이미지는 없음 — 시각 변화 없이 프로그레스만 차감
+    prerequisites: ["boots", "cape", "sweater"],
   },
   {
     id: "skirt",
@@ -157,13 +163,13 @@ export const PARTS: PartDef[] = [
     act: "결",
     puzzle: "tetris",
     difficulty: 4,
-    // Mini skirt from just below the belt (~52%) to just above the knee (~63%)
+    // Mini skirt from just below the belt (~52%) to just above the knee (~65%)
     hitbox: { x: 0.22, y: 0.52, w: 0.56, h: 0.13 },
     // Rich chocolate brown (이미지 갈색보다 더 진한 톤)
     tint: 0x5c3d2e,
     order: 5,
     stageAfter: "E1_stage2",
-    prerequisites: [],
+    prerequisites: ["boots", "cape", "sweater"],
   },
 ];
 

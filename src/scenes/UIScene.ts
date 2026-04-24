@@ -723,8 +723,14 @@ export class UIScene extends Phaser.Scene {
   private drawZoomControls() {
     if (this.zoomControls) return;
     const { width, height } = this.scale;
-    const cx = width - u(44);
-    const cy0 = height - u(256);
+    // Larger buttons, anchored further from the edge so they read clearly
+    // on phones. BTN_R is the visual radius of each circular button.
+    const BTN_R = u(32);
+    const GAP = u(74);   // vertical spacing between buttons
+    const cx = width - BTN_R - u(24);
+    // Stack starts high enough that the "처음으로" button clears the
+    // bottom UI panel (~u(108)) with room to spare.
+    const cy0 = height - u(132) - GAP * 3 - u(60);
     const gs = this.scene.get("GameScene");
 
     const container = this.add.container(0, 0).setDepth(1800);
@@ -733,13 +739,13 @@ export class UIScene extends Phaser.Scene {
     // Round icon button forwarding events to GameScene
     const makeIconBtn = (cy: number, glyph: string, evt: string) => {
       const bg = this.add
-        .circle(cx, cy, u(20), COLORS.panelMid, 0.92)
-        .setStrokeStyle(u(1.5), COLORS.gild, 0.9)
+        .circle(cx, cy, BTN_R, COLORS.panelMid, 0.94)
+        .setStrokeStyle(u(2), COLORS.gild, 0.95)
         .setInteractive({ useHandCursor: true });
       const lbl = this.add
         .text(cx, cy, glyph, {
           fontFamily: "serif",
-          fontSize: px(20),
+          fontSize: px(30),
           color: "#ffd572",
           fontStyle: "bold",
         })
@@ -749,7 +755,7 @@ export class UIScene extends Phaser.Scene {
         this.tweens.add({ targets: [bg, lbl], scaleX: 1.08, scaleY: 1.08, duration: 120 });
       });
       bg.on("pointerout", () => {
-        bg.setFillStyle(COLORS.panelMid, 0.92);
+        bg.setFillStyle(COLORS.panelMid, 0.94);
         this.tweens.add({ targets: [bg, lbl], scaleX: 1, scaleY: 1, duration: 120 });
       });
       bg.on("pointerdown", () => {
@@ -760,25 +766,29 @@ export class UIScene extends Phaser.Scene {
       container.add(lbl);
     };
 
-    makeIconBtn(cy0,          "+", "zoom-in");
-    makeIconBtn(cy0 + u(48),  "−", "zoom-out");
-    makeIconBtn(cy0 + u(96),  "⟲", "zoom-reset");
+    makeIconBtn(cy0,              "+", "zoom-in");
+    makeIconBtn(cy0 + GAP,        "−", "zoom-out");
+    makeIconBtn(cy0 + GAP * 2,    "⟲", "zoom-reset");
 
     // Separator line
-    const sep = this.add.rectangle(cx, cy0 + u(132), u(32), u(1), COLORS.gildSoft, 0.6);
+    const sepY = cy0 + GAP * 2 + u(50);
+    const sep = this.add.rectangle(cx, sepY, u(52), u(1), COLORS.gildSoft, 0.6);
     container.add(sep);
 
     // "처음으로" (back to title / restart) — text button below separator
-    const quitY = cy0 + u(158);
+    const quitY = sepY + u(38);
+    const quitW = u(104);
+    const quitH = u(54);
     const quitBg = this.add
-      .rectangle(cx, quitY, u(64), u(36), COLORS.panelMid, 0.92)
-      .setStrokeStyle(u(1), COLORS.gild, 0.7)
+      .rectangle(cx, quitY, quitW, quitH, COLORS.panelMid, 0.94)
+      .setStrokeStyle(u(1.5), COLORS.gild, 0.85)
       .setInteractive({ useHandCursor: true });
     const quitLbl = this.add
       .text(cx, quitY, "처음으로", {
         fontFamily: "serif",
-        fontSize: px(10),
+        fontSize: px(15),
         color: COLORS.text,
+        fontStyle: "bold",
       })
       .setOrigin(0.5);
     quitBg.on("pointerover", () => {

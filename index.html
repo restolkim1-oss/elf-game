@@ -2,7 +2,7 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Elf Unwrap — Prototype</title>
     <style>
       html, body {
@@ -12,13 +12,22 @@
         color: #eee;
         font-family: system-ui, sans-serif;
         overflow: hidden;
+        /* 모바일 URL바 접히고 펼치는 현상으로 100vh 가 계산되는 이슈 방지 */
+        height: 100%;
+        width: 100%;
       }
       #game {
+        /* 100dvh: 현재 실제로 보이는 뷰포트 높이. 지원 안되는 구형은 100vh 로 폴백 */
         width: 100vw;
         height: 100vh;
+        height: 100dvh;
         display: flex;
         align-items: center;
         justify-content: center;
+      }
+      /* Phaser canvas에서 터치 스크롤/확대 제스처가 먹는 것 방지 */
+      canvas {
+        touch-action: none;
       }
     </style>
   </head>
