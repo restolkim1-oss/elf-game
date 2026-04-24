@@ -4,6 +4,7 @@ export type StageKey =
   | "E1"
   | "E1_stage5"
   | "E1_stage6"
+  | "E1_stage7"
   | "E1_stage4"
   | "E1_stage3"
   | "E1_stage2"
@@ -36,6 +37,7 @@ export const STAGE_ORDER: StageKey[] = [
   "E1",
   "E1_stage5",
   "E1_stage6",
+  "E1_stage7",
   "E1_stage4",
   "E1_stage3",
   "E1_stage2",
@@ -43,14 +45,17 @@ export const STAGE_ORDER: StageKey[] = [
 ];
 
 // Tier = how many "stage-advancing" parts have been removed at the time
-// this image is the correct one to show. Tier 1 has TWO possible images:
+// this image is the correct one to show. Tier 1 has THREE possible
+// branching images now:
 //  - stage5 when the first removed part is boots
-//  - stage6 when the first removed part is cape (NEW branching state)
+//  - stage6 when the first removed part is cape
+//  - stage7 when the first removed part is sweater
 // Tiers 2+ always converge regardless of which order the player chose.
 export const STAGE_TIER: Record<StageKey, number> = {
   E1: 0,
   E1_stage5: 1,
   E1_stage6: 1,
+  E1_stage7: 1,
   E1_stage4: 2,
   E1_stage3: 3,
   E1_stage2: 4,
@@ -71,6 +76,7 @@ const STAGE_REQUIREMENTS: [StageKey, string[]][] = [
   ["E1_stage4", ["boots", "cape"]],
   ["E1_stage5", ["boots"]],
   ["E1_stage6", ["cape"]],
+  ["E1_stage7", ["sweater"]],
   ["E1",        []],
 ];
 
@@ -142,8 +148,10 @@ export const PARTS: PartDef[] = [
     // Golden ochre (더 밝고 구별되는 노란색)
     tint: 0xe5b968,
     order: 3,
-    stageAfter: "E1_stage3",
-    // 자유 순서 — 이미지는 조합이 맞을 때만 바뀜
+    // sweater 단독 제거 시 전용 이미지는 E1_stage7, 외투 2개까지 벗긴 뒤엔
+    // E1_stage3. 실제 선택은 stageForRemoved()의 부분집합 매칭이 결정함.
+    stageAfter: "E1_stage7",
+    // 자유 순서
     prerequisites: [],
   },
   {
