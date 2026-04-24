@@ -23,6 +23,8 @@ export class InteractionSystem {
   private enabled = false;
   private sequenceTimers: Phaser.Time.TimerEvent[] = [];
   private readonly reactionHoldMs = 2400;
+  private readonly surpriseHoldFrame: InteractionKey = "ani_idle2";
+  private readonly heartHoldFrame: InteractionKey = "ani_heart2";
 
   constructor(
     scene: Phaser.Scene,
@@ -101,6 +103,11 @@ export class InteractionSystem {
       );
     });
     this.sequenceTimers.push(
+      this.scene.time.delayedCall(seq.length * 115, () => {
+        this.showFrame(this.surpriseHoldFrame);
+      })
+    );
+    this.sequenceTimers.push(
       this.scene.time.delayedCall(seq.length * 115 + this.reactionHoldMs, () => {
         this.setIdleLocked();
       })
@@ -125,6 +132,11 @@ export class InteractionSystem {
         })
       );
     });
+    this.sequenceTimers.push(
+      this.scene.time.delayedCall(seq.length * 110, () => {
+        this.showFrame(this.heartHoldFrame);
+      })
+    );
 
     this.sequenceTimers.push(
       this.scene.time.delayedCall(seq.length * 110 + this.reactionHoldMs, () => {
