@@ -35,6 +35,7 @@ export class PartSystem {
   private targetedCb: TargetedCallback | null = null;
   private lockedCb: LockedCallback | null = null;
   private getBounds: () => Bounds;
+  private puzzleActive = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -52,6 +53,11 @@ export class PartSystem {
 
   onPartLocked(cb: LockedCallback) {
     this.lockedCb = cb;
+  }
+
+  // Called by GameScene when a puzzle starts/ends
+  setPuzzleActive(active: boolean) {
+    this.puzzleActive = active;
   }
 
   start() {
@@ -121,6 +127,8 @@ export class PartSystem {
         this.applyRestingStyle(part.id);
       });
       rect.on("pointerdown", () => {
+        // Block clicks while a puzzle is active to prevent double-launching
+        if (this.puzzleActive) return;
         if (this.removed.has(part.id)) return;
         const v = this.visuals.get(part.id);
         if (v?.locked) {

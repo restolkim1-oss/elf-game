@@ -60,26 +60,37 @@ export const STAGE_TIER: Record<StageKey, number> = {
   E1_swim: 5,
 };
 
-// Given the set of removed part IDs, which stage image best represents
-// the character RIGHT NOW? Tier 0/2/3/4/5 are purely count-driven. Tier 1
-// picks stage5 for boots-first and stage6 for cape-first (the only two
-// authored branching images). Prerequisites enforce that only boots or
-// cape can be removed first, so this fallback is never hit.
+// Given the set of removed part IDs, pick the stage image that best
+// represents the character's ACTUAL state right now.
+// Each stage image was authored for a specific combination of removed
+// items — we match by combination, not by count, so free-order removal
+// never shows the wrong garment disappearing.
+//
+//  E1         – nothing removed (base)
+//  E1_stage5  – boots removed (coat still on)
+//  E1_stage6  – cape removed  (boots still on)
+//  E1_stage4  – boots + cape both removed
+//  E1_stage3  – boots + cape + sweater removed
+//  E1_stage2  – boots + cape + sweater + skirt removed
+//  E1_swim    – all removed (bikini finale)
 export function stageForRemoved(removedIds: Set<string>): StageKey {
-  const advancing = [...removedIds].filter((id) => {
-    const p = PARTS.find((part) => part.id === id);
-    return p?.stageAfter != null;
-  });
-  const count = advancing.length;
-  if (count === 0) return "E1";
-  if (count === 1) {
-    if (removedIds.has("cape")) return "E1_stage6";
-    return "E1_stage5";
-  }
-  if (count === 2) return "E1_stage4";
-  if (count === 3) return "E1_stage3";
-  if (count === 4) return "E1_stage2";
-  return "E1_swim";
+  const has = (id: string) => removedIds.has(id);
+
+  if (has("boots") && has("cape") && has("sweater") && has("belt") && has("skirt"))
+    return "E1_swim";
+  if (has("boots") && has("cape") && has("sweater") && has("skirt"))
+    return "E1_stage2";
+  if (has("boots") && has("cape") && has("sweater"))
+    return "E1_stage3";
+  if (has("boots") && has("cape"))
+    return "E1_stage4";
+  // Only one outer layer removed — use the dedicated single-removal image.
+  if (has("cape") && !has("boots")) return "E1_stage6";
+  if (has("boots") && !has("cape")) return "E1_stage5";
+  // Sweater / belt / skirt removed without outer layers → no authored image
+  // that accurately reflects this state; keep the base image so nothing
+  // visually wrong is shown.
+  return "E1";
 }
 
 export const PARTS: PartDef[] = [
@@ -90,12 +101,12 @@ export const PARTS: PartDef[] = [
     puzzle: "pattern",
     difficulty: 1,
     // Knee-high boots span from the knee (~63%) down to the feet (~98%).
-    // Previously started at 0.82 which cut off the upper boot — clicks on
-    // the knee/calf area were landing on the skirt rect instead.
     hitbox: { x: 0.22, y: 0.63, w: 0.56, h: 0.35 },
-    tint: 0x5a3825,
+    // Bright burgundy/maroon for high contrast
+    tint: 0x8b2f39,
     order: 1,
     stageAfter: "E1_stage5",
+    // 자유 선택: prerequisites 제거
     prerequisites: [],
   },
   {
@@ -104,10 +115,10 @@ export const PARTS: PartDef[] = [
     act: "승",
     puzzle: "memory",
     difficulty: 2,
-    // Red coat drapes from the left shoulder down to the ankle, occupying
-    // the full left side of the image. Widened from the original 0.22 strip.
+    // Red coat drapes from the left shoulder down to the ankle
     hitbox: { x: 0.0, y: 0.08, w: 0.32, h: 0.80 },
-    tint: 0xc0392b,
+    // Bright scarlet red (이미지와 구분되는 명확한 빨강)
+    tint: 0xd43a2f,
     order: 2,
     stageAfter: "E1_stage4",
     prerequisites: [],
@@ -120,10 +131,11 @@ export const PARTS: PartDef[] = [
     difficulty: 3,
     // Turtleneck covers the full upper body including arms (10%–44%).
     hitbox: { x: 0.15, y: 0.08, w: 0.68, h: 0.42 },
-    tint: 0xd9c79a,
+    // Golden ochre (더 밝고 구별되는 노란색)
+    tint: 0xe5b968,
     order: 3,
     stageAfter: "E1_stage3",
-    prerequisites: ["boots", "cape"],
+    prerequisites: [],
   },
   {
     id: "belt",
@@ -132,12 +144,12 @@ export const PARTS: PartDef[] = [
     puzzle: "memory",
     difficulty: 3,
     // Belt is the thin waistband sitting just above the skirt (~44–51%).
-    // Made taller than the original 0.04 so it's easier to tap.
     hitbox: { x: 0.22, y: 0.44, w: 0.56, h: 0.08 },
-    tint: 0x1a1a1a,
+    // Deep charcoal (거의 검은색이지만 약간의 갈색 톤)
+    tint: 0x2a2420,
     order: 4,
     stageAfter: null,
-    prerequisites: ["sweater"],
+    prerequisites: [],
   },
   {
     id: "skirt",
@@ -145,13 +157,13 @@ export const PARTS: PartDef[] = [
     act: "결",
     puzzle: "tetris",
     difficulty: 4,
-    // Mini skirt from just below the belt (~52%) to just above the knee
-    // (~63%) — non-overlapping with both belt above and boots below.
+    // Mini skirt from just below the belt (~52%) to just above the knee (~63%)
     hitbox: { x: 0.22, y: 0.52, w: 0.56, h: 0.13 },
-    tint: 0x4b2e1f,
+    // Rich chocolate brown (이미지 갈색보다 더 진한 톤)
+    tint: 0x5c3d2e,
     order: 5,
     stageAfter: "E1_stage2",
-    prerequisites: ["sweater"],
+    prerequisites: [],
   },
 ];
 

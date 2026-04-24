@@ -229,8 +229,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   private drawActLabel(width: number) {
+    // 캐릭터 이름 표시 (기승전결 대신)
     this.actLabel = this.add
-      .text(width / 2, u(12), "◆   기   ◆", {
+      .text(width / 2, u(12), "◆   엘 린   ◆", {
         fontFamily: "serif",
         fontSize: px(20),
         color: "#ffd572",
@@ -239,22 +240,15 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     // Flanking lines
-    this.add.rectangle(
-      width / 2 - u(90),
-      u(24),
-      u(64),
-      u(1),
-      COLORS.gildSoft,
-      0.55
-    );
-    this.add.rectangle(
-      width / 2 + u(90),
-      u(24),
-      u(64),
-      u(1),
-      COLORS.gildSoft,
-      0.55
-    );
+    this.add.rectangle(width / 2 - u(96), u(24), u(60), u(1), COLORS.gildSoft, 0.55);
+    this.add.rectangle(width / 2 + u(96), u(24), u(60), u(1), COLORS.gildSoft, 0.55);
+    // Flanking tip diamonds
+    this.add.text(width / 2 - u(128), u(24), "◆", {
+      fontFamily: "serif", fontSize: px(7), color: "#8a6a3d",
+    }).setOrigin(0.5);
+    this.add.text(width / 2 + u(128), u(24), "◆", {
+      fontFamily: "serif", fontSize: px(7), color: "#8a6a3d",
+    }).setOrigin(0.5);
 
     this.progressCount = this.add
       .text(width / 2, u(42), "0 / " + PARTS.length, {
@@ -328,43 +322,91 @@ export class UIScene extends Phaser.Scene {
   }
 
   private drawCornerOrnaments(width: number, height: number) {
-    const g = this.add.graphics();
-    g.lineStyle(u(1), COLORS.gild, 0.55);
-    const size = u(22);
-    const inset = u(10);
-    g.beginPath();
-    g.moveTo(inset + size, inset);
-    g.lineTo(inset, inset);
-    g.lineTo(inset, inset + size);
-    g.moveTo(width - inset - size, inset);
-    g.lineTo(width - inset, inset);
-    g.lineTo(width - inset, inset + size);
-    g.moveTo(inset + size, height - inset);
-    g.lineTo(inset, height - inset);
-    g.lineTo(inset, height - inset - size);
-    g.moveTo(width - inset - size, height - inset);
-    g.lineTo(width - inset, height - inset);
-    g.lineTo(width - inset, height - inset - size);
-    g.strokePath();
+    // ── Side vignette strips ──────────────────────────────────────────
+    // Soft dark bands on left and right so edges don't look bare/sharp
+    const SIDE_W = u(40);
+    const midY = height / 2;
 
-    // Corner diamonds
-    g.lineStyle(u(1), COLORS.gild, 0.7);
-    const dia = u(3);
+    // Left strip: dark → transparent (simulated with stacked rects)
     [
-      [inset + size, inset + size],
-      [width - inset - size, inset + size],
-      [inset + size, height - inset - size],
-      [width - inset - size, height - inset - size],
-    ].forEach(([x, y]) => {
+      { a: 0.55, w: SIDE_W * 0.25 },
+      { a: 0.38, w: SIDE_W * 0.5 },
+      { a: 0.22, w: SIDE_W * 0.75 },
+      { a: 0.10, w: SIDE_W },
+    ].forEach(({ a, w }) => {
+      this.add.rectangle(w / 2, midY, w, height, COLORS.panelDeep, a).setDepth(5);
+      this.add.rectangle(width - w / 2, midY, w, height, COLORS.panelDeep, a).setDepth(5);
+    });
+
+    // ── Vertical decorative lines on each side ───────────────────────
+    const lineX = u(20);
+    const lineH = height * 0.28;         // only in the middle stretch
+    const g2 = this.add.graphics().setDepth(1001);
+    // Left line + right line (dashed feel via two rects)
+    [[lineX, midY], [width - lineX, midY]].forEach(([x, y]) => {
+      g2.lineStyle(u(1), COLORS.gild, 0.28);
+      g2.beginPath();
+      g2.moveTo(x, y - lineH / 2);
+      g2.lineTo(x, y + lineH / 2);
+      g2.strokePath();
+      // Centre diamond on the line
+      const d = u(4);
+      g2.lineStyle(u(1), COLORS.gild, 0.55);
+      g2.beginPath();
+      g2.moveTo(x,     y - d);
+      g2.lineTo(x + d, y);
+      g2.lineTo(x,     y + d);
+      g2.lineTo(x - d, y);
+      g2.closePath();
+      g2.strokePath();
+    });
+
+    // ── Corner brackets (longer, more elegant) ───────────────────────
+    const g = this.add.graphics().setDepth(1002);
+    g.lineStyle(u(1.2), COLORS.gild, 0.65);
+    const arm  = u(44);   // bracket arm length
+    const inset = u(12);
+    const corners: [number, number, number, number][] = [
+      [inset,          inset,          1,  1],   // top-left
+      [width - inset,  inset,         -1,  1],   // top-right
+      [inset,          height - inset, 1, -1],   // bottom-left
+      [width - inset,  height - inset,-1, -1],   // bottom-right
+    ];
+    corners.forEach(([cx, cy, sx, sy]) => {
       g.beginPath();
-      g.moveTo(x, y - dia);
-      g.lineTo(x + dia, y);
-      g.lineTo(x, y + dia);
-      g.lineTo(x - dia, y);
+      g.moveTo(cx + sx * arm, cy);
+      g.lineTo(cx,             cy);
+      g.lineTo(cx,             cy + sy * arm);
+      g.strokePath();
+    });
+
+    // Inner corner dots
+    g.lineStyle(u(1), COLORS.gild, 0.8);
+    corners.forEach(([cx, cy, sx, sy]) => {
+      const ox = cx + sx * (arm + u(4));
+      const oy = cy + sy * (arm + u(4));
+      const d  = u(3);
+      g.beginPath();
+      g.moveTo(ox,     oy - d);
+      g.lineTo(ox + d, oy);
+      g.lineTo(ox,     oy + d);
+      g.lineTo(ox - d, oy);
       g.closePath();
       g.strokePath();
     });
-    g.setDepth(1000);
+
+    // Outer corner diamonds (at the very tip of each bracket)
+    g.lineStyle(u(1), COLORS.gild, 0.45);
+    corners.forEach(([cx, cy]) => {
+      const d = u(5);
+      g.beginPath();
+      g.moveTo(cx,     cy - d);
+      g.lineTo(cx + d, cy);
+      g.lineTo(cx,     cy + d);
+      g.lineTo(cx - d, cy);
+      g.closePath();
+      g.strokePath();
+    });
   }
 
   // ---------- State updates ----------
@@ -415,13 +457,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateAct(current: number, total: number) {
-    const ratio = current / total;
-    let act: string;
-    if (ratio < 0.25) act = "기";
-    else if (ratio < 0.5) act = "승";
-    else if (ratio < 0.85) act = "전";
-    else act = "결";
-    this.actLabel.setText(`◆   ${act}   ◆`);
+    // 이름은 고정, 진행 카운트만 업데이트
     this.progressCount.setText(`${current} / ${total}`);
   }
 

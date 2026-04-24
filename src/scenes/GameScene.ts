@@ -43,7 +43,7 @@ export class GameScene extends Phaser.Scene {
 
     const bg = this.add.image(width / 2, height / 2, "bg");
     const bgScale = Math.max(width / bg.width, height / bg.height);
-    bg.setScale(bgScale).setAlpha(0.35).setTint(0x6a4a7a);
+    bg.setScale(bgScale).setAlpha(0.8);
 
     const vignette = this.add.graphics();
     vignette.fillStyle(0x0a050f, 0.65);
@@ -88,7 +88,11 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.partSystem.onPartTargeted((part) => {
+      // Block other parts from being clicked while puzzle is active
+      this.partSystem.setPuzzleActive(true);
       this.puzzleSystem.start(part, (success) => {
+        // Re-enable part clicking when puzzle ends
+        this.partSystem.setPuzzleActive(false);
         if (success) {
           this.partSystem.removePart(part.id);
           this.progressSystem.advance();
