@@ -121,7 +121,7 @@ export const PARTS: PartDef[] = [
     tint: 0x8b2f39,
     order: 1,
     stageAfter: "E1_stage5",
-    // 부츠는 언제든 먼저 벗길 수 있음 (전용 이미지: E1_stage5)
+    // 부츠는 코트와 함께 1순위 — 자유 선택
     prerequisites: [],
   },
   {
@@ -137,7 +137,7 @@ export const PARTS: PartDef[] = [
     tint: 0xd43a2f,
     order: 2,
     stageAfter: "E1_stage4",
-    // 코트도 자유 선택 (전용 이미지: E1_stage6)
+    // 코트는 부츠와 함께 1순위 — 자유 선택
     prerequisites: [],
   },
   {
@@ -152,11 +152,10 @@ export const PARTS: PartDef[] = [
     // Golden ochre (더 밝고 구별되는 노란색)
     tint: 0xe5b968,
     order: 3,
-    // sweater 단독 제거 시 전용 이미지는 E1_stage7, 외투 2개까지 벗긴 뒤엔
-    // E1_stage3. 실제 선택은 stageForRemoved()의 부분집합 매칭이 결정함.
-    stageAfter: "E1_stage7",
-    // 자유 순서
-    prerequisites: [],
+    stageAfter: "E1_stage3",
+    // 외투 2개가 먼저 벗겨져야 함 — E1_stage7(터틀넥 단독 이미지)은
+    // 현재 사용되지 않지만 나중에 자유 순서로 돌아갈 때를 대비해 유지.
+    prerequisites: ["boots", "cape"],
   },
   {
     // Belt was merged into skirt — there's no dedicated belt image and
@@ -174,10 +173,10 @@ export const PARTS: PartDef[] = [
     // Rich chocolate brown
     tint: 0x5c3d2e,
     order: 4,
-    // skirt 단독 제거 시 전용 이미지는 E1_stage2 (하의만 수영복).
-    // 실제 이미지 선택은 stageForRemoved()의 부분집합 매칭이 결정함.
-    stageAfter: "E1_stage2",
-    prerequisites: [],
+    // skirt는 마지막 단계 — 벗기면 finale(E1_swim)로 넘어감.
+    // E1_stage2(하의만 수영복)는 자유 순서일 때 쓰이지만 현재는 미사용.
+    stageAfter: null,
+    prerequisites: ["boots", "cape", "sweater"],
   },
 ];
 
