@@ -7,7 +7,6 @@ export type StageKey =
   | "E1_stage7"
   | "E1_stage4"
   | "E1_stage3"
-  | "E1_stage2"
   | "E1_swim";
 
 export interface PartDef {
@@ -40,7 +39,6 @@ export const STAGE_ORDER: StageKey[] = [
   "E1_stage7",
   "E1_stage4",
   "E1_stage3",
-  "E1_stage2",
   "E1_swim",
 ];
 
@@ -58,8 +56,7 @@ export const STAGE_TIER: Record<StageKey, number> = {
   E1_stage7: 1,
   E1_stage4: 2,
   E1_stage3: 3,
-  E1_stage2: 4,
-  E1_swim: 5,
+  E1_swim: 4,
 };
 
 // Each authored stage image maps to the exact SET of removed parts it
@@ -69,9 +66,12 @@ export const STAGE_TIER: Record<StageKey, number> = {
 // the combination matches an authored image, the visual advances;
 // otherwise it stays on the last-best image (and the part still counts
 // as removed in the progress UI).
+// NOTE: E1_stage2 (skirt-off / belt-on) was removed from the active set
+// because belt is no longer a standalone part — the "skirt + belt both
+// off" state is now the finale (E1_swim) directly. The asset file is
+// still on disk but nothing preloads or references it.
 const STAGE_REQUIREMENTS: [StageKey, string[]][] = [
-  ["E1_swim",   ["boots", "cape", "sweater", "skirt", "belt"]],
-  ["E1_stage2", ["boots", "cape", "sweater", "skirt"]],
+  ["E1_swim",   ["boots", "cape", "sweater", "skirt"]],
   ["E1_stage3", ["boots", "cape", "sweater"]],
   ["E1_stage4", ["boots", "cape"]],
   ["E1_stage5", ["boots"]],
@@ -155,33 +155,25 @@ export const PARTS: PartDef[] = [
     prerequisites: [],
   },
   {
-    id: "belt",
-    label: "벨트",
-    act: "전",
-    puzzle: "memory",
-    difficulty: 3,
-    // Belt band sits between sweater bottom (0.42) and skirt top (0.52).
-    hitbox: { x: 0.22, y: 0.43, w: 0.56, h: 0.08 },
-    // Deep charcoal (거의 검은색이지만 약간의 갈색 톤)
-    tint: 0x2a2420,
-    order: 4,
-    stageAfter: null,
-    // 자유 순서 — belt 전용 이미지는 없지만 프로그레스는 차감됨
-    prerequisites: [],
-  },
-  {
+    // Belt was merged into skirt — there's no dedicated belt image and
+    // asking the player to solve two separate minigames for the same
+    // waist region was redundant. One tetris puzzle now removes both at
+    // once; the hitbox spans from the belt band all the way to the skirt
+    // hem.
     id: "skirt",
-    label: "가죽 스커트",
+    label: "벨트 & 스커트",
     act: "결",
     puzzle: "tetris",
     difficulty: 4,
-    // Mini skirt from just below the belt (~52%) to just above the knee (~65%)
-    hitbox: { x: 0.22, y: 0.52, w: 0.56, h: 0.13 },
-    // Rich chocolate brown (이미지 갈색보다 더 진한 톤)
+    // Belt band (y≈0.43) through skirt hem (y≈0.65).
+    hitbox: { x: 0.22, y: 0.43, w: 0.56, h: 0.22 },
+    // Rich chocolate brown
     tint: 0x5c3d2e,
-    order: 5,
-    stageAfter: "E1_stage2",
-    // 자유 순서
+    order: 4,
+    // E1_stage2 was authored for "skirt off, belt on" which no longer
+    // exists as a state — skirt removal now takes both off, going
+    // straight to the finale image via the isFinished() path.
+    stageAfter: null,
     prerequisites: [],
   },
 ];
