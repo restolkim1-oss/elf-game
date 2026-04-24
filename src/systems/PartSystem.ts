@@ -146,7 +146,6 @@ export class PartSystem {
           this.lockedCb?.(part, lockReason(part.id, this.removed));
           return;
         }
-        console.log(`[PartSystem] triggering puzzle for ${part.id}`);
         this.targetedCb?.(part);
       });
 

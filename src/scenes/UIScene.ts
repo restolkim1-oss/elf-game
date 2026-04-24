@@ -667,7 +667,7 @@ export class UIScene extends Phaser.Scene {
     // Three stacked action buttons — 56px spacing, primary on top
     makeBtn(panelY + u(10), "✦   다시 하기",     () => this.restartGame(),       true);
     makeBtn(panelY + u(66), "✧   계속 감상",     () => this.dismissClearMenu(),  false);
-    makeBtn(panelY + u(122), "♡   인터렉션 체험", () => this.enterInteractionMode(), false);
+    makeBtn(panelY + u(122), "♡   인터랙션 체험", () => this.enterInteractionMode(), false);
 
     // Entrance animation
     container.setAlpha(0);

@@ -81,7 +81,7 @@ export class GameScene extends Phaser.Scene {
     this.stageManager = new StageManager(this, characterX, characterY, scale);
 
     // Pre-build the interaction layer now (dormant, alpha 0) so there's
-    // zero load delay when the player taps "인터렉션 체험" after clearing.
+    // zero load delay when the player taps "인터랙션 체험" after clearing.
     this.interactionSystem = new InteractionSystem(
       this,
       characterX,
