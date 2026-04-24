@@ -8,10 +8,17 @@ interface InteractionFrame {
   baseScale: number;
 }
 
+interface OpaqueBounds {
+  width: number;
+  height: number;
+  centerX: number;
+  centerY: number;
+}
+
 export class InteractionSystem {
   private scene: Phaser.Scene;
   private frames: Map<InteractionKey, InteractionFrame> = new Map();
-  private activeKey: InteractionKey = "ani_idle1";
+  private activeKey: InteractionKey = "ani_idle0";
   private hitZone: Phaser.GameObjects.Rectangle | null = null;
   private enabled = false;
   private sequenceTimers: Phaser.Time.TimerEvent[] = [];
@@ -30,24 +37,22 @@ export class InteractionSystem {
         .setOrigin(0.5, 0.5)
         .setAlpha(0)
         .setDepth(18);
-      const srcH = img.height;
-      if (srcH > 0) {
-        img.setScale(targetHeight / srcH);
-      }
       this.frames.set(key, {
         img,
         baseX: centerX,
         baseY: centerY,
-        baseScale: img.scaleX,
+        baseScale: 1,
       });
     });
+
+    this.calibrateFrames(centerX, centerY, targetHeight);
   }
 
   enable(width: number, height: number) {
     if (this.enabled) return;
     this.enabled = true;
     this.stopSequence();
-    this.showFrame("ani_idle1");
+    this.showFrame("ani_idle0");
 
     this.hitZone = this.scene.add
       .rectangle(width / 2, height / 2, width, height, 0xffffff, 0.001)
@@ -137,7 +142,7 @@ export class InteractionSystem {
   }
 
   private setIdleLocked() {
-    this.showFrame("ani_idle1");
+    this.showFrame("ani_idle0");
   }
 
   private stopSequence() {
@@ -177,5 +182,105 @@ export class InteractionSystem {
       duration,
       ease: "Sine.easeOut",
     });
+  }
+
+  // Align every interaction frame to ani_idle0 by opaque-pixel bounds so
+  // differing canvas trims/scale don't cause jumpy size or position.
+  private calibrateFrames(centerX: number, centerY: number, targetHeight: number) {
+    const refKey: InteractionKey = "ani_idle0";
+    const refFrame = this.frames.get(refKey);
+    if (!refFrame) return;
+
+    const refSource = this.getTextureSource(refFrame.img);
+    if (!refSource) return;
+    const refCanvasH = refSource.height || 1;
+    const refBounds = this.getOpaqueBounds(refSource);
+    const refScale = targetHeight / refCanvasH;
+    const targetOpaqueHeight = refBounds.height * refScale;
+    const refOffsetX = refBounds.centerX - refSource.width / 2;
+    const refOffsetY = refBounds.centerY - refSource.height / 2;
+
+    this.frames.forEach((frame) => {
+      const src = this.getTextureSource(frame.img);
+      if (!src) {
+        frame.baseX = centerX;
+        frame.baseY = centerY;
+        frame.baseScale = refScale;
+        return;
+      }
+      const b = this.getOpaqueBounds(src);
+      const scale = b.height > 0 ? targetOpaqueHeight / b.height : refScale;
+      const offsetX = b.centerX - src.width / 2;
+      const offsetY = b.centerY - src.height / 2;
+
+      frame.baseScale = scale;
+      frame.baseX = centerX + (refOffsetX - offsetX) * scale;
+      frame.baseY = centerY + (refOffsetY - offsetY) * scale;
+    });
+  }
+
+  private getTextureSource(
+    img: Phaser.GameObjects.Image
+  ): { width: number; height: number } & CanvasImageSource | null {
+    const src = img.texture.getSourceImage() as
+      | (CanvasImageSource & { width: number; height: number })
+      | null;
+    if (!src || !src.width || !src.height) return null;
+    return src;
+  }
+
+  private getOpaqueBounds(
+    src: CanvasImageSource & { width: number; height: number }
+  ): OpaqueBounds {
+    const w = src.width;
+    const h = src.height;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      return {
+        width: w,
+        height: h,
+        centerX: w / 2,
+        centerY: h / 2,
+      };
+    }
+    ctx.drawImage(src, 0, 0);
+    const data = ctx.getImageData(0, 0, w, h).data;
+
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const a = data[(y * w + x) * 4 + 3];
+        if (a <= 5) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (maxX < minX || maxY < minY) {
+      return {
+        width: w,
+        height: h,
+        centerX: w / 2,
+        centerY: h / 2,
+      };
+    }
+
+    const bw = maxX - minX + 1;
+    const bh = maxY - minY + 1;
+    return {
+      width: bw,
+      height: bh,
+      centerX: minX + bw / 2,
+      centerY: minY + bh / 2,
+    };
   }
 }
