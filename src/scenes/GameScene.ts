@@ -8,6 +8,7 @@ import {
   PARTS,
   FINALE_STAGE,
   STAGE_TIER,
+  type StageKey,
   stageForRemoved,
 } from "../data/parts";
 
@@ -18,6 +19,9 @@ export class GameScene extends Phaser.Scene {
   private stageManager!: StageManager;
   private interactionSystem!: InteractionSystem;
   private interactionActive = false;
+  private interactionReturnKey: StageKey = "E1";
+  private removed = new Set<string>();
+  private finaleTriggered = false;
 
   // Viewing mode: after the finale fades in, the player can pinch/wheel-
   // zoom and drag-pan the main character view. Disabled during gameplay
@@ -41,6 +45,9 @@ export class GameScene extends Phaser.Scene {
     this.viewingMode = false;
     this.activePointers = [];
     this.isPanning = false;
+    this.finaleTriggered = false;
+    this.removed = new Set<string>();
+    this.interactionReturnKey = "E1";
     this.cameras.main.setZoom(1);
     this.cameras.main.setScroll(0, 0);
 
@@ -101,8 +108,7 @@ export class GameScene extends Phaser.Scene {
     // (cape first). All other tiers are count-driven. The monotonic guard
     // (compare TIERS not raw keys) prevents the crossfade from ever
     // running backwards even though stage5/stage6 share a tier.
-    const removed = new Set<string>();
-    this.partSystem.setRemovedSet(removed);
+    this.partSystem.setRemovedSet(this.removed);
 
     this.partSystem.onPartLocked((part, reason) => {
       // Forward to UIScene so the hint bar can flash the ordering rule
@@ -118,17 +124,10 @@ export class GameScene extends Phaser.Scene {
         if (success) {
           this.partSystem.removePart(part.id);
           this.progressSystem.advance();
-          removed.add(part.id);
+          this.removed.add(part.id);
           this.events.emit("progress", this.progressSystem.getProgress());
           if (this.progressSystem.isFinished()) {
-            this.events.emit("finale");
-            this.time.delayedCall(1400, () => {
-              this.stageManager.transitionTo(FINALE_STAGE, 1200);
-              // Enable viewing-mode zoom once the finale image is up
-              this.time.delayedCall(1300, () => {
-                this.enableViewingMode();
-              });
-            });
+            this.triggerFinale();
           } else {
             // Re-evaluate on EVERY removal (not just when the part has a
             // dedicated stageAfter image). With free order, a later
@@ -136,7 +135,7 @@ export class GameScene extends Phaser.Scene {
             // authored image (e.g., removing skirt after boots+cape+sweater
             // advances directly to E1_stage2). We never regress — the
             // tier guard keeps the visual monotonic.
-            const targetKey = stageForRemoved(removed);
+            const targetKey = stageForRemoved(this.removed);
             const currentKey = this.stageManager.getCurrentKey();
             if (targetKey === currentKey) return;
             const targetTier = STAGE_TIER[targetKey];
@@ -161,6 +160,7 @@ export class GameScene extends Phaser.Scene {
     // Interaction-mode switches (fired from the clear menu in UIScene)
     this.events.on("enter-interaction", () => this.enterInteractionMode());
     this.events.on("exit-interaction",  () => this.exitInteractionMode());
+    this.events.on("force-clear", () => this.forceClearAll());
   }
 
   // ---------- Interaction mode (dressed character, tap for reactions) ---
@@ -168,6 +168,9 @@ export class GameScene extends Phaser.Scene {
   private enterInteractionMode() {
     if (this.interactionActive) return;
     this.interactionActive = true;
+    this.interactionReturnKey = this.stageManager.getCurrentKey();
+    this.partSystem.setPuzzleActive(true);
+    this.partSystem.setInputEnabled(false);
 
     // Disable zoom/pan gestures and reset the camera so the reaction
     // frames render at their designed position/scale.
@@ -187,8 +190,9 @@ export class GameScene extends Phaser.Scene {
     if (!this.interactionActive) return;
     this.interactionActive = false;
     this.interactionSystem.disable();
-    // Bring the finale image back so "돌아가기" lands on the swim stage.
-    this.stageManager.showKey(FINALE_STAGE, 420);
+    this.partSystem.setPuzzleActive(false);
+    this.partSystem.setInputEnabled(true);
+    this.stageManager.showKey(this.interactionReturnKey, 420);
   }
 
   private disableViewingMode() {
@@ -356,6 +360,36 @@ export class GameScene extends Phaser.Scene {
     const padH = visW * 0.25;
     cam.scrollX = Phaser.Math.Clamp(cam.scrollX, -padH, width  - visW + padH);
     cam.scrollY = Phaser.Math.Clamp(cam.scrollY, -padV, height - visH + padV);
+  }
+
+  private forceClearAll() {
+    if (this.interactionActive) {
+      this.exitInteractionMode();
+    }
+
+    for (const part of PARTS) {
+      if (this.removed.has(part.id)) continue;
+      this.partSystem.removePart(part.id);
+      this.removed.add(part.id);
+      this.progressSystem.advance();
+    }
+
+    this.events.emit("progress", this.progressSystem.getProgress());
+    if (this.progressSystem.isFinished()) {
+      this.triggerFinale(240, 700);
+    }
+  }
+
+  private triggerFinale(transitionDelay = 1400, transitionDuration = 1200) {
+    if (this.finaleTriggered) return;
+    this.finaleTriggered = true;
+    this.events.emit("finale");
+    this.time.delayedCall(transitionDelay, () => {
+      this.stageManager.transitionTo(FINALE_STAGE, transitionDuration);
+      this.time.delayedCall(Math.max(300, transitionDuration + 100), () => {
+        this.enableViewingMode();
+      });
+    });
   }
 
   private resetView() {

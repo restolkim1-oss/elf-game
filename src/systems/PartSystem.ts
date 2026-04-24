@@ -36,6 +36,7 @@ export class PartSystem {
   private lockedCb: LockedCallback | null = null;
   private getBounds: () => Bounds;
   private puzzleActive = false;
+  private inputEnabled = true;
 
   constructor(
     scene: Phaser.Scene,
@@ -58,6 +59,28 @@ export class PartSystem {
   // Called by GameScene when a puzzle starts/ends
   setPuzzleActive(active: boolean) {
     this.puzzleActive = active;
+  }
+
+  // Used by GameScene when switching to interaction mode.
+  setInputEnabled(enabled: boolean) {
+    this.inputEnabled = enabled;
+    this.visuals.forEach((v, id) => {
+      if (this.removed.has(id)) return;
+      if (enabled) {
+        v.rect.setInteractive({ useHandCursor: true });
+        v.rect.setAlpha(0.001);
+        this.applyRestingStyle(id);
+      } else {
+        v.rect.disableInteractive();
+        this.scene.tweens.killTweensOf(v.rect);
+        this.scene.tweens.killTweensOf(v.marker);
+        this.scene.tweens.killTweensOf(v.markerRing);
+        v.rect.setAlpha(0);
+        v.marker.setAlpha(0);
+        v.markerRing.setAlpha(0);
+        v.lockIcon.setAlpha(0);
+      }
+    });
   }
 
   start() {
@@ -97,6 +120,7 @@ export class PartSystem {
         .setAlpha(0);
 
       rect.on("pointerover", () => {
+        if (!this.inputEnabled) return;
         if (this.removed.has(part.id)) return;
         const v = this.visuals.get(part.id);
         if (!v) return;
@@ -117,6 +141,7 @@ export class PartSystem {
         }
       });
       rect.on("pointerout", () => {
+        if (!this.inputEnabled) return;
         if (this.removed.has(part.id)) return;
         this.scene.tweens.killTweensOf(rect);
         this.scene.tweens.add({
@@ -127,6 +152,7 @@ export class PartSystem {
         this.applyRestingStyle(part.id);
       });
       rect.on("pointerdown", () => {
+        if (!this.inputEnabled) return;
         // Block clicks while a puzzle is active to prevent double-launching
         if (this.puzzleActive) return;
         if (this.removed.has(part.id)) return;
@@ -187,6 +213,7 @@ export class PartSystem {
     const v = this.visuals.get(id);
     if (!v) return;
     if (this.removed.has(id)) return;
+    if (!this.inputEnabled) return;
     this.scene.tweens.killTweensOf(v.marker);
     this.scene.tweens.killTweensOf(v.markerRing);
     this.scene.tweens.killTweensOf(v.lockIcon);

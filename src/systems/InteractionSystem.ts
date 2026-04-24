@@ -22,6 +22,7 @@ export class InteractionSystem {
   private hitZone: Phaser.GameObjects.Rectangle | null = null;
   private enabled = false;
   private sequenceTimers: Phaser.Time.TimerEvent[] = [];
+  private readonly reactionHoldMs = 2400;
 
   constructor(
     scene: Phaser.Scene,
@@ -93,7 +94,6 @@ export class InteractionSystem {
     const seq: InteractionKey[] = [
       "ani_surprise1",
       "ani_surprise2",
-      "ani_surprise3",
       "ani_surprise2",
     ];
     seq.forEach((key, idx) => {
@@ -105,7 +105,7 @@ export class InteractionSystem {
       );
     });
     this.sequenceTimers.push(
-      this.scene.time.delayedCall(seq.length * 115 + 80, () => {
+      this.scene.time.delayedCall(seq.length * 115 + this.reactionHoldMs, () => {
         this.setIdleLocked();
       })
     );
@@ -117,10 +117,6 @@ export class InteractionSystem {
     const seq: InteractionKey[] = [
       "ani_heart1",
       "ani_heart2",
-      "ani_heart3",
-      "ani_heart4",
-      "ani_heart5",
-      "ani_heart4",
       "ani_heart3",
       "ani_heart2",
     ];
@@ -135,7 +131,7 @@ export class InteractionSystem {
     });
 
     this.sequenceTimers.push(
-      this.scene.time.delayedCall(seq.length * 110 + 90, () => {
+      this.scene.time.delayedCall(seq.length * 110 + this.reactionHoldMs, () => {
         this.setIdleLocked();
       })
     );

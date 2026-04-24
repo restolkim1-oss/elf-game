@@ -41,6 +41,7 @@ export class UIScene extends Phaser.Scene {
   private finaleTweens: Phaser.Tweens.Tween[] = [];
   private zoomControls: Phaser.GameObjects.Container | null = null;
   private interactionControls: Phaser.GameObjects.Container | null = null;
+  private quickActions: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super("UIScene");
@@ -52,6 +53,7 @@ export class UIScene extends Phaser.Scene {
     this.finaleTweens = [];
     this.zoomControls = null;
     this.interactionControls = null;
+    this.quickActions = null;
     const { width, height } = this.scale;
 
     this.drawTopPanel(width);
@@ -59,6 +61,7 @@ export class UIScene extends Phaser.Scene {
     this.drawActLabel(width);
     this.drawProgressPills(width);
     this.drawCornerOrnaments(width, height);
+    this.drawQuickActions(width, height);
 
     const game = this.scene.get("GameScene");
 
@@ -411,6 +414,70 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  private drawQuickActions(width: number, _height: number) {
+    if (this.quickActions) return;
+    const gs = this.scene.get("GameScene");
+    const c = this.add.container(0, 0).setDepth(1750);
+    this.quickActions = c;
+
+    const makeBtn = (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      label: string,
+      onClick: () => void
+    ) => {
+      const bg = this.add
+        .rectangle(x, y, w, h, COLORS.panelMid, 0.94)
+        .setStrokeStyle(u(1.5), COLORS.gild, 0.9)
+        .setInteractive({ useHandCursor: true });
+      const txt = this.add
+        .text(x, y, label, {
+          fontFamily: "serif",
+          fontSize: px(11),
+          color: "#ffd572",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
+      bg.on("pointerover", () => {
+        bg.setFillStyle(COLORS.panelSoft, 0.96);
+        this.tweens.add({ targets: [bg, txt], scaleX: 1.04, scaleY: 1.04, duration: 110 });
+      });
+      bg.on("pointerout", () => {
+        bg.setFillStyle(COLORS.panelMid, 0.94);
+        this.tweens.add({ targets: [bg, txt], scaleX: 1, scaleY: 1, duration: 110 });
+      });
+      bg.on("pointerdown", () => {
+        this.tweens.add({
+          targets: [bg, txt],
+          scaleX: 0.94,
+          scaleY: 0.94,
+          yoyo: true,
+          duration: 90,
+          onComplete: onClick,
+        });
+      });
+      c.add(bg);
+      c.add(txt);
+    };
+
+    const btnW = u(126);
+    const btnH = u(38);
+    const x = width - btnW / 2 - u(18);
+    const topY = u(146);
+
+    makeBtn(x, topY, btnW, btnH, "INTERACT", () => {
+      gs.events.emit("enter-interaction");
+      this.drawInteractionControls();
+      this.flashHint("Interaction mode", COLORS.textHighlight);
+    });
+    makeBtn(x, topY + u(48), btnW, btnH, "ALL CLEAR", () => {
+      gs.events.emit("force-clear");
+      this.flashHint("All clear mode", COLORS.textHighlight);
+    });
+  }
+
   // ---------- State updates ----------
 
   private markCleared(partId: string) {
@@ -743,6 +810,7 @@ export class UIScene extends Phaser.Scene {
         onComplete: () => z.destroy(),
       });
     }
+    if (this.quickActions) this.quickActions.setVisible(false);
     const gs = this.scene.get("GameScene");
     gs.events.emit("enter-interaction");
     this.drawInteractionControls();
@@ -755,50 +823,68 @@ export class UIScene extends Phaser.Scene {
     const container = this.add.container(0, 0).setDepth(1800);
     this.interactionControls = container;
 
-    // Single "처음으로" restart button — anchored to the bottom-right
     const BTN_W = u(140);
-    const BTN_H = u(64);
+    const BTN_H = u(56);
     const cx = width - BTN_W / 2 - u(28);
-    const cy = height - BTN_H / 2 - u(140);
+    const baseY = height - BTN_H / 2 - u(148);
 
-    const bg = this.add
-      .rectangle(cx, cy, BTN_W, BTN_H, COLORS.panelMid, 0.94)
-      .setStrokeStyle(u(2), COLORS.gild, 0.95)
-      .setInteractive({ useHandCursor: true });
-    const lbl = this.add
-      .text(cx, cy, "♡  처음으로", {
-        fontFamily: "serif",
-        fontSize: px(17),
-        color: "#ffd572",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
-
-    bg.on("pointerover", () => {
-      bg.setFillStyle(COLORS.panelSoft, 0.96);
-      this.tweens.add({ targets: [bg, lbl], scaleX: 1.06, scaleY: 1.06, duration: 130 });
-    });
-    bg.on("pointerout", () => {
-      bg.setFillStyle(COLORS.panelMid, 0.94);
-      this.tweens.add({ targets: [bg, lbl], scaleX: 1, scaleY: 1, duration: 130 });
-    });
-    bg.on("pointerdown", () => {
-      this.tweens.add({
-        targets: [bg, lbl],
-        scaleX: 0.94,
-        scaleY: 0.94,
-        yoyo: true,
-        duration: 100,
-        onComplete: () => this.restartGame(),
+    const makeBtn = (y: number, label: string, onClick: () => void) => {
+      const bg = this.add
+        .rectangle(cx, y, BTN_W, BTN_H, COLORS.panelMid, 0.94)
+        .setStrokeStyle(u(2), COLORS.gild, 0.95)
+        .setInteractive({ useHandCursor: true });
+      const lbl = this.add
+        .text(cx, y, label, {
+          fontFamily: "serif",
+          fontSize: px(15),
+          color: "#ffd572",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
+      bg.on("pointerover", () => {
+        bg.setFillStyle(COLORS.panelSoft, 0.96);
+        this.tweens.add({ targets: [bg, lbl], scaleX: 1.05, scaleY: 1.05, duration: 120 });
       });
-    });
+      bg.on("pointerout", () => {
+        bg.setFillStyle(COLORS.panelMid, 0.94);
+        this.tweens.add({ targets: [bg, lbl], scaleX: 1, scaleY: 1, duration: 120 });
+      });
+      bg.on("pointerdown", () => {
+        this.tweens.add({
+          targets: [bg, lbl],
+          scaleX: 0.94,
+          scaleY: 0.94,
+          yoyo: true,
+          duration: 90,
+          onComplete: onClick,
+        });
+      });
+      container.add(bg);
+      container.add(lbl);
+    };
 
-    container.add(bg);
-    container.add(lbl);
+    makeBtn(baseY, "BACK", () => this.exitInteractionModeUi());
+    makeBtn(baseY + u(64), "RESTART", () => this.restartGame());
 
-    // Entrance fade
     container.setAlpha(0);
     this.tweens.add({ targets: container, alpha: 1, duration: 520, ease: "Quad.easeOut" });
+  }
+
+  private exitInteractionModeUi() {
+    if (this.interactionControls) {
+      const c = this.interactionControls;
+      this.interactionControls = null;
+      this.tweens.add({
+        targets: c,
+        alpha: 0,
+        duration: 220,
+        onComplete: () => c.destroy(),
+      });
+    }
+    if (this.quickActions) this.quickActions.setVisible(true);
+    const gs = this.scene.get("GameScene");
+    gs.events.emit("exit-interaction");
+    this.flashHint("Back to game mode", COLORS.textHighlight);
   }
 
   // ---------- Zoom controls (viewing mode) ----------
