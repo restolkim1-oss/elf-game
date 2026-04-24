@@ -23,12 +23,9 @@ export interface PartDef {
   // just removed. `null` keeps the current visual (belt has no dedicated
   // image).
   stageAfter: StageKey | null;
-  // Other part IDs that must be removed before THIS part is clickable.
-  // Required because each stage image was authored for a specific state —
-  // removing sweater before boots+cape would NOT change the visual, so
-  // players would think the minigame failed. Enforced order:
-  //   any-of(boots, cape)  → the other  → sweater  → any-of(belt, skirt)
-  //   → finale
+  // Prerequisite part IDs. Currently empty on every part — players may
+  // remove parts in any order. Kept as an array so a future locking
+  // rule can be turned on per-part without refactoring.
   prerequisites: string[];
 }
 
@@ -60,37 +57,44 @@ export const STAGE_TIER: Record<StageKey, number> = {
   E1_swim: 5,
 };
 
-// Given the set of removed part IDs, pick the stage image that best
-// represents the character's ACTUAL state right now.
-// Each stage image was authored for a specific combination of removed
-// items — we match by combination, not by count, so free-order removal
-// never shows the wrong garment disappearing.
-//
-//  E1         – nothing removed (base)
-//  E1_stage5  – boots removed (coat still on)
-//  E1_stage6  – cape removed  (boots still on)
-//  E1_stage4  – boots + cape both removed
-//  E1_stage3  – boots + cape + sweater removed
-//  E1_stage2  – boots + cape + sweater + skirt removed
-//  E1_swim    – all removed (bikini finale)
-export function stageForRemoved(removedIds: Set<string>): StageKey {
-  const has = (id: string) => removedIds.has(id);
+// Each authored stage image maps to the exact SET of removed parts it
+// depicts. To pick the best image for any in-progress state, we match
+// the largest subset of the player's removed set against these
+// requirements. This lets the player remove parts in any order — when
+// the combination matches an authored image, the visual advances;
+// otherwise it stays on the last-best image (and the part still counts
+// as removed in the progress UI).
+const STAGE_REQUIREMENTS: [StageKey, string[]][] = [
+  ["E1_swim",   ["boots", "cape", "sweater", "skirt", "belt"]],
+  ["E1_stage2", ["boots", "cape", "sweater", "skirt"]],
+  ["E1_stage3", ["boots", "cape", "sweater"]],
+  ["E1_stage4", ["boots", "cape"]],
+  ["E1_stage5", ["boots"]],
+  ["E1_stage6", ["cape"]],
+  ["E1",        []],
+];
 
-  if (has("boots") && has("cape") && has("sweater") && has("belt") && has("skirt"))
-    return "E1_swim";
-  if (has("boots") && has("cape") && has("sweater") && has("skirt"))
-    return "E1_stage2";
-  if (has("boots") && has("cape") && has("sweater"))
-    return "E1_stage3";
-  if (has("boots") && has("cape"))
-    return "E1_stage4";
-  // Only one outer layer removed — use the dedicated single-removal image.
-  if (has("cape") && !has("boots")) return "E1_stage6";
-  if (has("boots") && !has("cape")) return "E1_stage5";
-  // Sweater / belt / skirt removed without outer layers → no authored image
-  // that accurately reflects this state; keep the base image so nothing
-  // visually wrong is shown.
-  return "E1";
+// Pick the authored stage image whose requirement set is a subset of
+// the player's removed set and has the MOST matching elements. Ties
+// break by higher tier (never regress once we're deeper in the scene).
+export function stageForRemoved(removedIds: Set<string>): StageKey {
+  let best: StageKey = "E1";
+  let bestCount = -1;
+  let bestTier = -1;
+
+  for (const [key, reqs] of STAGE_REQUIREMENTS) {
+    if (!reqs.every((id) => removedIds.has(id))) continue;
+    const tier = STAGE_TIER[key];
+    if (
+      reqs.length > bestCount ||
+      (reqs.length === bestCount && tier > bestTier)
+    ) {
+      best = key;
+      bestCount = reqs.length;
+      bestTier = tier;
+    }
+  }
+  return best;
 }
 
 export const PARTS: PartDef[] = [
@@ -139,8 +143,8 @@ export const PARTS: PartDef[] = [
     tint: 0xe5b968,
     order: 3,
     stageAfter: "E1_stage3",
-    // 시각적 정합성: 외투 2개가 먼저 벗겨져야 터틀넥 이미지가 맞음
-    prerequisites: ["boots", "cape"],
+    // 자유 순서 — 이미지는 조합이 맞을 때만 바뀜
+    prerequisites: [],
   },
   {
     id: "belt",
@@ -154,8 +158,8 @@ export const PARTS: PartDef[] = [
     tint: 0x2a2420,
     order: 4,
     stageAfter: null,
-    // belt 전용 이미지는 없음 — 시각 변화 없이 프로그레스만 차감
-    prerequisites: ["boots", "cape", "sweater"],
+    // 자유 순서 — belt 전용 이미지는 없지만 프로그레스는 차감됨
+    prerequisites: [],
   },
   {
     id: "skirt",
@@ -169,7 +173,8 @@ export const PARTS: PartDef[] = [
     tint: 0x5c3d2e,
     order: 5,
     stageAfter: "E1_stage2",
-    prerequisites: ["boots", "cape", "sweater"],
+    // 자유 순서
+    prerequisites: [],
   },
 ];
 

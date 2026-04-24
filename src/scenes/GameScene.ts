@@ -116,7 +116,13 @@ export class GameScene extends Phaser.Scene {
                 this.enableViewingMode();
               });
             });
-          } else if (part.stageAfter !== null) {
+          } else {
+            // Re-evaluate on EVERY removal (not just when the part has a
+            // dedicated stageAfter image). With free order, a later
+            // removal can complete a combination that matches a richer
+            // authored image (e.g., removing skirt after boots+cape+sweater
+            // advances directly to E1_stage2). We never regress — the
+            // tier guard keeps the visual monotonic.
             const targetKey = stageForRemoved(removed);
             const currentKey = this.stageManager.getCurrentKey();
             if (targetKey === currentKey) return;
