@@ -1,5 +1,9 @@
 import Phaser from "phaser";
-import { STAGE_ORDER, INTERACTION_ORDER } from "../data/parts";
+import {
+  STAGE_ORDER,
+  INTERACTION_ORDER,
+  INTERACTION_ASSET_PATHS,
+} from "../data/parts";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -11,7 +15,7 @@ export class BootScene extends Phaser.Scene {
       this.load.image(key, `/assets/${key}.png`);
     });
     INTERACTION_ORDER.forEach((key) => {
-      this.load.image(key, `/assets/${key}.png`);
+      this.load.image(key, INTERACTION_ASSET_PATHS[key]);
     });
     this.load.image("bg", "/assets/bg.png");
   }

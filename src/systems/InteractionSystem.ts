@@ -1,8 +1,6 @@
 import Phaser from "phaser";
 import { INTERACTION_ORDER, type InteractionKey } from "../data/parts";
 
-type InteractionState = "idle" | "surprise" | "heart";
-
 interface InteractionFrame {
   img: Phaser.GameObjects.Image;
   baseX: number;
@@ -13,17 +11,10 @@ interface InteractionFrame {
 export class InteractionSystem {
   private scene: Phaser.Scene;
   private frames: Map<InteractionKey, InteractionFrame> = new Map();
-  private state: InteractionState = "idle";
-  private idleFrame: "idle1" | "idle2" = "idle1";
-  private heartFrame: 1 | 2 | 3 | 4 = 1;
-
-  private breathTimer: Phaser.Time.TimerEvent | null = null;
-  private returnTimer: Phaser.Time.TimerEvent | null = null;
-  private heartCycleTimer: Phaser.Time.TimerEvent | null = null;
-  private surpriseChainTimer: Phaser.Time.TimerEvent | null = null;
-
+  private activeKey: InteractionKey = "ani_idle1";
   private hitZone: Phaser.GameObjects.Rectangle | null = null;
   private enabled = false;
+  private sequenceTimers: Phaser.Time.TimerEvent[] = [];
 
   constructor(
     scene: Phaser.Scene,
@@ -55,18 +46,8 @@ export class InteractionSystem {
   enable(width: number, height: number) {
     if (this.enabled) return;
     this.enabled = true;
-    this.state = "idle";
-    this.idleFrame = "idle1";
-    this.heartFrame = 1;
-
-    this.frames.forEach((frame, key) => {
-      this.scene.tweens.killTweensOf(frame.img);
-      frame.img.setAlpha(key === "idle1" ? 1 : 0);
-      frame.img.setPosition(frame.baseX, frame.baseY);
-      frame.img.setScale(frame.baseScale);
-    });
-
-    this.startBreathing();
+    this.stopSequence();
+    this.showFrame("ani_idle1");
 
     this.hitZone = this.scene.add
       .rectangle(width / 2, height / 2, width, height, 0xffffff, 0.001)
@@ -78,45 +59,101 @@ export class InteractionSystem {
   disable() {
     if (!this.enabled) return;
     this.enabled = false;
-    this.stopAllTimers();
+    this.stopSequence();
     this.frames.forEach((frame) => {
       this.scene.tweens.killTweensOf(frame.img);
-      this.scene.tweens.add({
-        targets: frame.img,
-        alpha: 0,
-        duration: 260,
-        ease: "Sine.easeOut",
-      });
+      frame.img.setAlpha(0);
+      frame.img.setPosition(frame.baseX, frame.baseY);
+      frame.img.setScale(frame.baseScale);
     });
     if (this.hitZone) {
       this.hitZone.destroy();
       this.hitZone = null;
     }
-    this.state = "idle";
   }
 
   private handleTap() {
     if (!this.enabled) return;
-    if (this.state === "idle") {
-      this.goSurprise();
-      return;
+    // New taps immediately restart the reaction so the character responds
+    // to the latest touch without waiting for a previous sequence to end.
+    this.stopSequence();
+    if (Math.random() < 0.5) {
+      this.playSurprise();
+    } else {
+      this.playHeart();
     }
-    if (this.state === "surprise") {
-      this.goHeart();
-      return;
-    }
-    this.goHeart();
   }
 
-  private clearReturnTimers() {
-    if (this.returnTimer) {
-      this.returnTimer.remove();
-      this.returnTimer = null;
-    }
-    if (this.surpriseChainTimer) {
-      this.surpriseChainTimer.remove();
-      this.surpriseChainTimer = null;
-    }
+  private playSurprise() {
+    const seq: InteractionKey[] = [
+      "ani_surprise1",
+      "ani_surprise2",
+      "ani_surprise3",
+      "ani_surprise2",
+    ];
+    seq.forEach((key, idx) => {
+      this.sequenceTimers.push(
+        this.scene.time.delayedCall(idx * 115, () => {
+          this.showFrame(key);
+          this.nudgeFrame(key, -8, 1.016, 100);
+        })
+      );
+    });
+    this.sequenceTimers.push(
+      this.scene.time.delayedCall(seq.length * 115 + 80, () => {
+        this.setIdleLocked();
+      })
+    );
+  }
+
+  private playHeart() {
+    // Same-name frame family is swapped with hard cuts so the
+    // sequence reads like contiguous animation, not blur/fade transitions.
+    const seq: InteractionKey[] = [
+      "ani_heart1",
+      "ani_heart2",
+      "ani_heart3",
+      "ani_heart4",
+      "ani_heart5",
+      "ani_heart4",
+      "ani_heart3",
+      "ani_heart2",
+    ];
+
+    seq.forEach((key, idx) => {
+      this.sequenceTimers.push(
+        this.scene.time.delayedCall(idx * 110, () => {
+          this.showFrame(key);
+          this.nudgeFrame(key, -4, 1.01, 120);
+        })
+      );
+    });
+
+    this.sequenceTimers.push(
+      this.scene.time.delayedCall(seq.length * 110 + 90, () => {
+        this.setIdleLocked();
+      })
+    );
+  }
+
+  private setIdleLocked() {
+    this.showFrame("ani_idle1");
+  }
+
+  private stopSequence() {
+    this.sequenceTimers.forEach((t) => t.remove());
+    this.sequenceTimers = [];
+  }
+
+  private showFrame(key: InteractionKey) {
+    this.activeKey = key;
+    this.frames.forEach((frame, frameKey) => {
+      const img = frame.img;
+      this.scene.tweens.killTweensOf(img);
+      img.setPosition(frame.baseX, frame.baseY);
+      img.setScale(frame.baseScale);
+      img.setAlpha(frameKey === key ? 1 : 0);
+    });
   }
 
   private nudgeFrame(
@@ -127,6 +164,7 @@ export class InteractionSystem {
   ) {
     const frame = this.frames.get(key);
     if (!frame) return;
+    if (this.activeKey !== key) return;
     const img = frame.img;
     this.scene.tweens.killTweensOf(img);
     img.setY(frame.baseY + yOffset);
@@ -138,108 +176,6 @@ export class InteractionSystem {
       scaleY: frame.baseScale,
       duration,
       ease: "Sine.easeOut",
-    });
-  }
-
-  private goSurprise() {
-    this.state = "surprise";
-    this.stopBreathing();
-    this.clearReturnTimers();
-    this.crossfadeTo("surprise", 240);
-    this.nudgeFrame("surprise", -10, 1.018, 200);
-    // Chain to heart automatically so one tap feels like a full reaction.
-    this.surpriseChainTimer = this.scene.time.delayedCall(780, () => {
-      if (this.state === "surprise") this.goHeart();
-    });
-  }
-
-  private goHeart() {
-    this.clearReturnTimers();
-    if (this.state !== "heart") {
-      this.state = "heart";
-      this.heartFrame = 1;
-      this.crossfadeTo("heart1", 250);
-      this.nudgeFrame("heart1", -6, 1.012, 260);
-      this.startHeartCycle();
-    } else {
-      const key = `heart${this.heartFrame}` as InteractionKey;
-      this.nudgeFrame(key, -3, 1.008, 180);
-    }
-    this.returnTimer = this.scene.time.delayedCall(4200, () => this.goIdle());
-  }
-
-  private goIdle() {
-    this.state = "idle";
-    this.clearReturnTimers();
-    if (this.heartCycleTimer) {
-      this.heartCycleTimer.remove();
-      this.heartCycleTimer = null;
-    }
-    this.idleFrame = "idle1";
-    this.crossfadeTo("idle1", 420);
-    this.nudgeFrame("idle1", 4, 0.992, 320);
-    this.startBreathing();
-  }
-
-  private startBreathing() {
-    if (this.breathTimer) this.breathTimer.remove();
-    this.breathTimer = this.scene.time.addEvent({
-      delay: 2400,
-      loop: true,
-      callback: () => {
-        if (this.state !== "idle") return;
-        this.idleFrame = this.idleFrame === "idle1" ? "idle2" : "idle1";
-        this.crossfadeTo(this.idleFrame, 760);
-        this.nudgeFrame(this.idleFrame, 5, 0.994, 520);
-      },
-    });
-  }
-
-  private stopBreathing() {
-    if (this.breathTimer) {
-      this.breathTimer.remove();
-      this.breathTimer = null;
-    }
-  }
-
-  private startHeartCycle() {
-    if (this.heartCycleTimer) this.heartCycleTimer.remove();
-    this.heartCycleTimer = this.scene.time.addEvent({
-      delay: 430,
-      loop: true,
-      callback: () => {
-        if (this.state !== "heart") return;
-        this.heartFrame = (this.heartFrame === 4
-          ? 1
-          : this.heartFrame + 1) as 1 | 2 | 3 | 4;
-        const key = `heart${this.heartFrame}` as InteractionKey;
-        this.crossfadeTo(key, 300);
-        this.nudgeFrame(key, -3, 1.009, 240);
-      },
-    });
-  }
-
-  private stopAllTimers() {
-    this.stopBreathing();
-    this.clearReturnTimers();
-    if (this.heartCycleTimer) {
-      this.heartCycleTimer.remove();
-      this.heartCycleTimer = null;
-    }
-  }
-
-  private crossfadeTo(key: InteractionKey, duration = 300) {
-    this.frames.forEach((frame, k) => {
-      const img = frame.img;
-      const targetAlpha = k === key ? 1 : 0;
-      if (Math.abs(img.alpha - targetAlpha) < 0.005) return;
-      this.scene.tweens.killTweensOf(img);
-      this.scene.tweens.add({
-        targets: img,
-        alpha: targetAlpha,
-        duration,
-        ease: k === key ? "Sine.easeOut" : "Sine.easeIn",
-      });
     });
   }
 }
