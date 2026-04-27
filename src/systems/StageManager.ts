@@ -4,7 +4,11 @@ import { STAGE_ORDER, type StageKey } from "../data/parts";
 export class StageManager {
   private scene: Phaser.Scene;
   private layers: Map<StageKey, Phaser.GameObjects.Image> = new Map();
+  private extraLayers: Map<string, Phaser.GameObjects.Image> = new Map();
   private currentKey: StageKey;
+  private centerX: number;
+  private centerY: number;
+  private scale: number;
 
   constructor(
     scene: Phaser.Scene,
@@ -14,6 +18,9 @@ export class StageManager {
     textureForKey?: (key: StageKey) => string
   ) {
     this.scene = scene;
+    this.centerX = centerX;
+    this.centerY = centerY;
+    this.scale = scale;
     this.currentKey = STAGE_ORDER[0];
 
     STAGE_ORDER.forEach((key) => {
@@ -38,6 +45,7 @@ export class StageManager {
     const toImg = this.layers.get(next);
     if (!fromImg || !toImg) return;
 
+    this.fadeOutExtraLayers(duration);
     this.scene.tweens.add({
       targets: fromImg,
       alpha: 0,
@@ -52,6 +60,51 @@ export class StageManager {
     });
 
     this.currentKey = next;
+  }
+
+  transitionToTexture(layerId: string, textureKey: string, duration = 650) {
+    const fromImg = this.layers.get(this.currentKey);
+    if (!fromImg || !this.scene.textures.exists(textureKey)) return false;
+
+    let toImg = this.extraLayers.get(layerId);
+    if (!toImg) {
+      toImg = this.scene.add
+        .image(this.centerX, this.centerY, textureKey)
+        .setOrigin(0.5, 0.5)
+        .setScale(this.scale)
+        .setAlpha(0)
+        .setDepth(10);
+      this.extraLayers.set(layerId, toImg);
+    } else {
+      toImg.setTexture(textureKey).setAlpha(0).setVisible(true);
+    }
+
+    this.layers.forEach((img) => {
+      this.scene.tweens.killTweensOf(img);
+      this.scene.tweens.add({
+        targets: img,
+        alpha: 0,
+        duration,
+        ease: "Quad.easeInOut",
+      });
+    });
+    this.extraLayers.forEach((img, id) => {
+      if (id === layerId) return;
+      this.scene.tweens.killTweensOf(img);
+      this.scene.tweens.add({
+        targets: img,
+        alpha: 0,
+        duration,
+        ease: "Quad.easeInOut",
+      });
+    });
+    this.scene.tweens.add({
+      targets: toImg,
+      alpha: 1,
+      duration,
+      ease: "Quad.easeInOut",
+    });
+    return true;
   }
 
   getDisplayBounds(): { left: number; top: number; width: number; height: number } {
@@ -73,18 +126,32 @@ export class StageManager {
       this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({ targets: img, alpha: 0, duration });
     });
+    this.fadeOutExtraLayers(duration);
   }
 
   // Force-show a specific stage image, fading out everything else. Used
   // to restore the finale when returning from interaction mode.
   showKey(key: StageKey, duration = 400) {
     this.currentKey = key;
+    this.fadeOutExtraLayers(duration);
     this.layers.forEach((img, k) => {
       this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({
         targets: img,
         alpha: k === key ? 1 : 0,
         duration,
+      });
+    });
+  }
+
+  private fadeOutExtraLayers(duration: number) {
+    this.extraLayers.forEach((img) => {
+      this.scene.tweens.killTweensOf(img);
+      this.scene.tweens.add({
+        targets: img,
+        alpha: 0,
+        duration,
+        ease: "Quad.easeInOut",
       });
     });
   }

@@ -48,6 +48,8 @@ export class UIScene extends Phaser.Scene {
   private progressCount!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private statText!: Phaser.GameObjects.Text;
+  private affinityGaugeText!: Phaser.GameObjects.Text;
+  private affinityGaugeFill!: Phaser.GameObjects.Rectangle;
   private readonly defaultHint =
     "파츠를 선택하고 미니게임을 클리어해 코인과 호감도를 올려보세요.";
 
@@ -83,6 +85,7 @@ export class UIScene extends Phaser.Scene {
     this.drawTopPanel(width);
     this.drawBottomPanel(width, height);
     this.drawActLabel(width);
+    this.drawAffinityGauge(width);
     this.drawProgressPills(width);
     this.drawRemovalOrder(width);
     this.drawCornerOrnaments(width, height);
@@ -200,6 +203,38 @@ export class UIScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5, 0);
+  }
+
+  private drawAffinityGauge(width: number) {
+    const gaugeW = u(210);
+    const gaugeH = u(22);
+    const x = width - gaugeW / 2 - u(24);
+    const y = u(28);
+    this.add
+      .rectangle(x, y, gaugeW + u(24), u(58), COLORS.panelDeep, 0.72)
+      .setStrokeStyle(u(1.5), COLORS.gildHot, 0.78);
+    this.add
+      .text(x, y - u(22), "호감도", {
+        fontFamily: "serif",
+        fontSize: px(13),
+        color: COLORS.textHighlight,
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    this.add
+      .rectangle(x, y + u(6), gaugeW, gaugeH, COLORS.panelSoft, 0.96)
+      .setStrokeStyle(u(1.2), COLORS.gild, 0.8);
+    this.affinityGaugeFill = this.add
+      .rectangle(x - gaugeW / 2, y + u(6), 1, gaugeH - u(4), 0xff8fab, 0.95)
+      .setOrigin(0, 0.5);
+    this.affinityGaugeText = this.add
+      .text(x, y + u(6), "0 / 100", {
+        fontFamily: "serif",
+        fontSize: px(12),
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
   }
 
   private drawProgressPills(width: number) {
@@ -649,6 +684,9 @@ export class UIScene extends Phaser.Scene {
     this.statText.setText(
       `코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`
     );
+    const ratio = Phaser.Math.Clamp(state.affinity / state.affinityMax, 0, 1);
+    this.affinityGaugeFill.width = u(210) * ratio;
+    this.affinityGaugeText.setText(`${state.affinity} / ${state.affinityMax}`);
     if (this.shopMenu) {
       const old = this.shopMenu;
       old.destroy();
@@ -742,8 +780,6 @@ export class UIScene extends Phaser.Scene {
   private showClearCelebration() {
     if (this.clearCelebration) return;
     const { width, height } = this.scale;
-    const stageSet = this.lastEconomy?.stageSet ?? 1;
-    const imageKey = stageSet === 2 ? "E2_clear" : "E1_clear";
     const c = this.add.container(width / 2, height * 0.42).setDepth(1980);
     this.clearCelebration = c;
 
@@ -771,13 +807,6 @@ export class UIScene extends Phaser.Scene {
       .ellipse(0, 0, width * 0.72, u(210), COLORS.gildHot, 0.16)
       .setStrokeStyle(u(2), COLORS.gildHot, 0.38);
     c.add(glow);
-
-    if (this.textures.exists(imageKey)) {
-      const img = this.add.image(0, u(12), imageKey).setOrigin(0.5);
-      const scale = Math.min((width * 0.78) / img.width, (height * 0.72) / img.height);
-      img.setScale(scale).setAlpha(0.96);
-      c.add(img);
-    }
 
     const title = this.add
       .text(0, -height * 0.29, "CLEAR!", {
@@ -992,7 +1021,7 @@ export class UIScene extends Phaser.Scene {
       { label: "+", action: () => gs.events.emit("zoom-in"), font: px(28) },
       { label: "-", action: () => gs.events.emit("zoom-out"), font: px(28) },
       { label: "원위치", action: () => gs.events.emit("zoom-reset"), font: px(11) },
-      { label: "재시작", action: () => this.restartGame(), font: px(11) },
+      { label: "다음", action: () => gs.events.emit("next-stage"), font: px(11) },
     ];
     const startY = panelY - panelH / 2 + u(46);
     items.forEach((item, idx) => {
@@ -1048,12 +1077,4 @@ export class UIScene extends Phaser.Scene {
     container.add(txt);
   }
 
-  private restartGame() {
-    this.finaleTweens.forEach((t) => t.stop());
-    this.finaleTweens = [];
-    const gs = this.scene.get("GameScene");
-    gs.events.emit("viewing-reset");
-    gs.scene.restart();
-    this.scene.restart();
-  }
 }

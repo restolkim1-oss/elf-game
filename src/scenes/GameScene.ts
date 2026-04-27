@@ -381,7 +381,14 @@ export class GameScene extends Phaser.Scene {
     this.finaleTriggered = true;
     this.events.emit("finale");
     this.time.delayedCall(transitionDelay, () => {
-      this.stageManager.transitionTo(FINALE_STAGE, transitionDuration);
+      const showedClearArt = this.stageManager.transitionToTexture(
+        "clear",
+        this.resolveClearTextureKey(),
+        transitionDuration
+      );
+      if (!showedClearArt) {
+        this.stageManager.transitionTo(FINALE_STAGE, transitionDuration);
+      }
       this.time.delayedCall(Math.max(300, transitionDuration + 100), () => {
         this.enableViewingMode();
       });
@@ -402,6 +409,11 @@ export class GameScene extends Phaser.Scene {
   private resolveBackgroundKey(): string {
     if (this.stageSet === 2 && this.textures.exists("bg2")) return "bg2";
     return "bg";
+  }
+
+  private resolveClearTextureKey(): string {
+    if (this.stageSet === 2) return "E2_clear";
+    return "E1_clear";
   }
 
   private switchStageSet(next: StageSet) {
