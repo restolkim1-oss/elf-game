@@ -38,6 +38,7 @@ export class GameScene extends Phaser.Scene {
   private removed = new Set<string>();
   private finaleTriggered = false;
   private puzzleBusy = false;
+  private abortingPuzzle = false;
 
   private stageSet: StageSet = 1;
   private stage2StoryUnlocked = false;
@@ -135,9 +136,11 @@ export class GameScene extends Phaser.Scene {
     this.partSystem.onPartTargeted((part) => {
       if (this.puzzleBusy) return;
       this.puzzleBusy = true;
+      this.events.emit("puzzle-busy", true);
       this.partSystem.setPuzzleActive(true);
       this.puzzleSystem.start(part, (success) => {
         this.puzzleBusy = false;
+        this.events.emit("puzzle-busy", false);
         this.partSystem.setPuzzleActive(false);
         if (success) {
           this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
@@ -159,7 +162,12 @@ export class GameScene extends Phaser.Scene {
             }
           }
         } else {
-          this.events.emit("failure", part.id);
+          if (this.puzzleSystem.consumeLastCancelled() || this.abortingPuzzle) {
+            this.abortingPuzzle = false;
+            this.feedback("미니게임을 포기했습니다.");
+          } else {
+            this.events.emit("failure", part.id);
+          }
         }
       });
     });
@@ -181,6 +189,8 @@ export class GameScene extends Phaser.Scene {
     this.events.on("buy-item", (id: ShopItemId) => this.buyItem(id));
     this.events.on("gift-item", (id: ShopItemId) => this.giftItem(id));
     this.events.on("request-economy-sync", () => this.emitEconomyState());
+    this.events.on("abort-current-puzzle", () => this.abortCurrentPuzzle());
+    this.events.emit("puzzle-busy", false);
   }
 
   private enterInteractionMode() {
@@ -437,18 +447,31 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.puzzleBusy = true;
+    this.events.emit("puzzle-busy", true);
     this.partSystem.setPuzzleActive(true);
     const farmPart = this.createFarmPart();
     this.feedback("미니게임을 시작합니다.");
     this.puzzleSystem.start(farmPart, (success) => {
       this.puzzleBusy = false;
+      this.events.emit("puzzle-busy", false);
       this.partSystem.setPuzzleActive(false);
       if (success) {
         this.grantCoins(10 + farmPart.difficulty * 4, "미니게임 클리어");
       } else {
-        this.feedback("미니게임 실패");
+        if (this.puzzleSystem.consumeLastCancelled() || this.abortingPuzzle) {
+          this.abortingPuzzle = false;
+          this.feedback("미니게임을 포기했습니다.");
+        } else {
+          this.feedback("미니게임 실패");
+        }
       }
     });
+  }
+
+  private abortCurrentPuzzle() {
+    if (!this.puzzleBusy) return;
+    this.abortingPuzzle = true;
+    this.puzzleSystem.abortCurrent();
   }
 
   private createFarmPart() {

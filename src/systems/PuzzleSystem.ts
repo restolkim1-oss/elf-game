@@ -3,13 +3,15 @@ import type { PartDef } from "../data/parts";
 import { UI_SCALE } from "../main";
 
 const u = (n: number) => n * UI_SCALE;
-const gpx = (n: number) => `${Math.round(n * UI_SCALE * 1.35)}px`;
+const gpx = (n: number) => `${Math.round(n * UI_SCALE * 1.55)}px`;
 
 type PuzzleResult = (success: boolean) => void;
 
 export class PuzzleSystem {
   private scene: Phaser.Scene;
   private overlay: Phaser.GameObjects.Container | null = null;
+  private activeDone: PuzzleResult | null = null;
+  private cancelled = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -17,20 +19,41 @@ export class PuzzleSystem {
 
   start(part: PartDef, done: PuzzleResult) {
     this.cleanup();
+    this.cancelled = false;
+    this.activeDone = done;
     switch (part.puzzle) {
       case "instant":
-        this.playInstant(done);
+        this.playInstant();
         break;
       case "pattern":
-        this.startPattern(part, done);
+        this.startPattern(part);
         break;
       case "tetris":
-        this.startTetris(part, done);
+        this.startTetris(part);
         break;
       case "memory":
-        this.startMemory(part, done);
+        this.startMemory(part);
         break;
     }
+  }
+
+  abortCurrent() {
+    if (!this.activeDone) return;
+    this.cancelled = true;
+    this.finish(false);
+  }
+
+  consumeLastCancelled() {
+    const v = this.cancelled;
+    this.cancelled = false;
+    return v;
+  }
+
+  private finish(success: boolean) {
+    const done = this.activeDone;
+    this.activeDone = null;
+    this.cleanup();
+    if (done) done(success);
   }
 
   private cleanup() {
@@ -38,11 +61,11 @@ export class PuzzleSystem {
     this.overlay = null;
   }
 
-  private playInstant(done: PuzzleResult) {
-    this.scene.time.delayedCall(120, () => done(true));
+  private playInstant() {
+    this.scene.time.delayedCall(120, () => this.finish(true));
   }
 
-  private makePanel(title: string, subtitle: string, heightRatio = 0.54) {
+  private makePanel(title: string, subtitle: string, heightRatio = 0.56) {
     const { width, height } = this.scene.scale;
     const w = width * 0.9;
     const h = height * heightRatio;
@@ -53,10 +76,11 @@ export class PuzzleSystem {
     const bg = this.scene.add
       .rectangle(width / 2, height / 2, w, h, 0x14091a, 0.97)
       .setStrokeStyle(u(2), 0xd4a656, 0.95);
-    const innerBorder = this.scene.add
+    const inner = this.scene.add
       .rectangle(width / 2, height / 2, w - u(10), h - u(10), 0x000000, 0)
-      .setStrokeStyle(u(1), 0xd4a656, 0.4);
-    const line = this.scene.add.rectangle(width / 2, top + u(52), w * 0.82, u(1), 0xd4a656, 0.8);
+      .setStrokeStyle(u(1), 0xd4a656, 0.45);
+    const line = this.scene.add.rectangle(width / 2, top + u(56), w * 0.84, u(1), 0xd4a656, 0.82);
+
     const titleText = this.scene.add
       .text(width / 2, top + u(18), title, {
         fontFamily: "serif",
@@ -67,49 +91,53 @@ export class PuzzleSystem {
         wordWrap: { width: w * 0.82 },
       })
       .setOrigin(0.5, 0);
+
     const subtitleText = this.scene.add
-      .text(width / 2, top + u(62), subtitle, {
+      .text(width / 2, top + u(68), subtitle, {
         fontFamily: "serif",
-        fontSize: gpx(12),
+        fontSize: gpx(13),
         color: "#d4a656",
-        fontStyle: "italic",
+        fontStyle: "bold",
         align: "center",
-        wordWrap: { width: w * 0.82 },
+        wordWrap: { width: w * 0.84 },
       })
       .setOrigin(0.5, 0);
 
-    this.overlay = this.scene.add
-      .container(0, 0, [shadow, bg, innerBorder, line, titleText, subtitleText])
-      .setDepth(500);
-
+    this.overlay = this.scene.add.container(0, 0, [shadow, bg, inner, line, titleText, subtitleText]).setDepth(500);
     return { w, h, top, bottom };
   }
 
-  private startPattern(part: PartDef, done: PuzzleResult) {
+  private addCancelButton(y: number) {
+    const { width } = this.scene.scale;
+    this.addMiniButton(width / 2, y, u(180), u(36), "포기", () => {
+      this.cancelled = true;
+      this.finish(false);
+    });
+  }
+
+  private startPattern(part: PartDef) {
     const { width, height } = this.scene.scale;
-    this.makePanel(part.label, "순서를 보고 같은 순서로 눌러주세요.", 0.44);
+    const panel = this.makePanel(part.label, "순서를 본 뒤 같은 순서로 누르세요.", 0.46);
 
     const colors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f];
     const sequenceLength = 2 + part.difficulty;
-    const sequence = Array.from({ length: sequenceLength }, () =>
-      Math.floor(Math.random() * colors.length)
-    );
+    const sequence = Array.from({ length: sequenceLength }, () => Math.floor(Math.random() * colors.length));
 
     const statusText = this.scene.add
-      .text(width / 2, height / 2 - u(14), "집중해서 보세요...", {
+      .text(width / 2, height / 2 - u(18), "집중해서 보세요...", {
         fontFamily: "serif",
         fontSize: gpx(15),
         color: "#f3e6c9",
-        fontStyle: "italic",
+        fontStyle: "bold",
       })
       .setOrigin(0.5);
     this.overlay?.add(statusText);
 
     const buttons: Phaser.GameObjects.Rectangle[] = [];
-    const size = u(58);
+    const size = u(62);
     colors.forEach((c, i) => {
       const b = this.scene.add
-        .rectangle(width / 2 + (i - 1.5) * u(78), height / 2 + u(62), size, size, c)
+        .rectangle(width / 2 + (i - 1.5) * u(84), height / 2 + u(64), size, size, c)
         .setStrokeStyle(u(2), 0xd4a656, 0.5)
         .setInteractive({ useHandCursor: true });
       buttons.push(b);
@@ -123,16 +151,13 @@ export class PuzzleSystem {
     buttons.forEach((b, i) => {
       b.on("pointerdown", () => {
         if (locked || finished) return;
-        this.scene.tweens.add({ targets: b, scaleX: 1.18, scaleY: 1.18, yoyo: true, duration: 130 });
+        this.scene.tweens.add({ targets: b, scaleX: 1.18, scaleY: 1.18, yoyo: true, duration: 120 });
         if (i !== sequence[playerIdx]) {
           finished = true;
           locked = true;
           statusText.setText("실패");
           statusText.setColor("#e0868b");
-          this.scene.time.delayedCall(600, () => {
-            this.cleanup();
-            done(false);
-          });
+          this.scene.time.delayedCall(480, () => this.finish(false));
           return;
         }
         playerIdx++;
@@ -142,10 +167,7 @@ export class PuzzleSystem {
           locked = true;
           statusText.setText("성공");
           statusText.setColor("#86e08d");
-          this.scene.time.delayedCall(400, () => {
-            this.cleanup();
-            done(true);
-          });
+          this.scene.time.delayedCall(380, () => this.finish(true));
         }
       });
     });
@@ -159,40 +181,67 @@ export class PuzzleSystem {
       const btn = buttons[sequence[step]];
       this.scene.tweens.add({
         targets: btn,
-        scaleX: 1.25,
-        scaleY: 1.25,
+        scaleX: 1.26,
+        scaleY: 1.26,
         yoyo: true,
-        duration: 260,
+        duration: 250,
         onComplete: () => showSequence(step + 1),
       });
     };
 
     this.scene.time.delayedCall(500, () => showSequence(0));
+    this.addCancelButton(panel.bottom - u(34));
   }
 
-  private startTetris(part: PartDef, done: PuzzleResult) {
+  private startTetris(part: PartDef) {
     void part;
     const { width } = this.scene.scale;
-    const panel = this.makePanel("블록 정리", "줄 3개를 지우면 성공입니다.", 0.72);
+    const panel = this.makePanel("블록 정리", "줄 3개를 지우면 성공입니다.", 0.74);
 
     const cols = 6;
-    const rows = 12;
+    const rows = 10;
     const gap = u(2);
-    const maxCellByH = (panel.h * 0.58 - gap * (rows - 1)) / rows;
-    const maxCellByW = (panel.w * 0.42 - gap * (cols - 1)) / cols;
-    const cell = Math.min(u(26), maxCellByH, maxCellByW);
+    const maxCellByH = (panel.h * 0.62 - gap * (rows - 1)) / rows;
+    const maxCellByW = (panel.w * 0.56 - gap * (cols - 1)) / cols;
+    const cell = Math.min(u(34), maxCellByH, maxCellByW);
     const boardW = cols * cell + (cols - 1) * gap;
     const boardH = rows * cell + (rows - 1) * gap;
     const boardX = width / 2 - boardW / 2 + cell / 2;
-    const boardY = panel.top + u(114);
+    const boardY = panel.top + u(118);
 
     type Shape = number[][][];
     const shapes: { color: number; rots: Shape }[] = [
-      { color: 0x5dade2, rots: [[[0, 0], [0, 1], [0, 2]], [[0, 0], [1, 0], [2, 0]]] },
+      {
+        color: 0x5dade2,
+        rots: [
+          [[0, 0], [0, 1], [0, 2], [0, 3]],
+          [[0, 0], [1, 0], [2, 0], [3, 0]],
+        ],
+      },
       { color: 0xf4d03f, rots: [[[0, 0], [0, 1], [1, 0], [1, 1]]] },
-      { color: 0xaf7ac5, rots: [[[0, 0], [0, 1], [0, 2], [1, 1]], [[0, 1], [1, 0], [1, 1], [2, 1]]] },
-      { color: 0x2ecc71, rots: [[[0, 1], [0, 2], [1, 0], [1, 1]], [[0, 0], [1, 0], [1, 1], [2, 1]]] },
-      { color: 0xe74c3c, rots: [[[0, 0], [0, 1], [1, 1], [1, 2]], [[0, 1], [1, 0], [1, 1], [2, 0]]] },
+      {
+        color: 0xaf7ac5,
+        rots: [
+          [[0, 0], [0, 1], [0, 2], [1, 1]],
+          [[0, 1], [1, 0], [1, 1], [2, 1]],
+          [[1, 0], [1, 1], [1, 2], [0, 1]],
+          [[0, 0], [1, 0], [2, 0], [1, 1]],
+        ],
+      },
+      {
+        color: 0x2ecc71,
+        rots: [
+          [[0, 1], [0, 2], [1, 0], [1, 1]],
+          [[0, 0], [1, 0], [1, 1], [2, 1]],
+        ],
+      },
+      {
+        color: 0xe74c3c,
+        rots: [
+          [[0, 0], [0, 1], [1, 1], [1, 2]],
+          [[0, 1], [1, 0], [1, 1], [2, 0]],
+        ],
+      },
     ];
 
     const board: (number | null)[][] = Array.from({ length: rows }, () => Array(cols).fill(null));
@@ -210,10 +259,11 @@ export class PuzzleSystem {
     }
 
     const status = this.scene.add
-      .text(width / 2, panel.top + u(84), "지운 줄 0 / 3", {
+      .text(width / 2, panel.top + u(88), "지운 줄 0 / 3", {
         fontFamily: "serif",
-        fontSize: gpx(12),
+        fontSize: gpx(13),
         color: "#f3e6c9",
+        fontStyle: "bold",
       })
       .setOrigin(0.5, 0);
     this.overlay?.add(status);
@@ -230,7 +280,9 @@ export class PuzzleSystem {
       shapes[s].rots[r % shapes[s].rots.length].map(([dy, dx]) => [y + dy, x + dx] as [number, number]);
 
     const canPlace = (s: number, r: number, y: number, x: number) =>
-      getCells(s, r, y, x).every(([yy, xx]) => yy >= 0 && yy < rows && xx >= 0 && xx < cols && board[yy][xx] === null);
+      getCells(s, r, y, x).every(
+        ([yy, xx]) => yy >= 0 && yy < rows && xx >= 0 && xx < cols && board[yy][xx] === null
+      );
 
     const draw = () => {
       for (let r = 0; r < rows; r++) {
@@ -258,10 +310,7 @@ export class PuzzleSystem {
         dropEvent?.remove(false);
         status.setText("실패");
         status.setColor("#e0868b");
-        this.scene.time.delayedCall(700, () => {
-          this.cleanup();
-          done(false);
-        });
+        this.scene.time.delayedCall(600, () => this.finish(false));
         return;
       }
       draw();
@@ -269,7 +318,9 @@ export class PuzzleSystem {
 
     const lockPiece = () => {
       for (const [yy, xx] of getCells(shapeIdx, rot, curRow, curCol)) {
-        if (yy >= 0 && yy < rows && xx >= 0 && xx < cols) board[yy][xx] = shapes[shapeIdx].color;
+        if (yy >= 0 && yy < rows && xx >= 0 && xx < cols) {
+          board[yy][xx] = shapes[shapeIdx].color;
+        }
       }
       let lineCount = 0;
       for (let r = rows - 1; r >= 0; r--) {
@@ -289,10 +340,7 @@ export class PuzzleSystem {
         dropEvent?.remove(false);
         status.setText("성공");
         status.setColor("#86e08d");
-        this.scene.time.delayedCall(700, () => {
-          this.cleanup();
-          done(true);
-        });
+        this.scene.time.delayedCall(520, () => this.finish(true));
         return;
       }
       spawn();
@@ -306,15 +354,7 @@ export class PuzzleSystem {
       draw();
       return true;
     };
-    const softDrop = () => {
-      if (!tryMove(1, 0)) lockPiece();
-    };
-    const hardDrop = () => {
-      while (tryMove(1, 0)) {
-        /* falling */
-      }
-      lockPiece();
-    };
+
     const rotate = () => {
       const next = (rot + 1) % shapes[shapeIdx].rots.length;
       if (canPlace(shapeIdx, next, curRow, curCol)) {
@@ -323,36 +363,66 @@ export class PuzzleSystem {
       }
     };
 
-    dropEvent = this.scene.time.addEvent({ delay: 720, loop: true, callback: softDrop });
+    const softDrop = () => {
+      if (!tryMove(1, 0)) lockPiece();
+    };
 
-    const btnY = Math.min(panel.bottom - u(82), boardY + boardH + u(28));
+    const hardDrop = () => {
+      while (tryMove(1, 0)) {
+        /* keep falling */
+      }
+      lockPiece();
+    };
+
+    dropEvent = this.scene.time.addEvent({ delay: 640, loop: true, callback: softDrop });
+
+    const btnY = Math.min(panel.bottom - u(92), boardY + boardH + u(30));
     const defs = [
-      { label: "<", dx: -u(84), fn: () => tryMove(0, -1) },
-      { label: "회전", dx: -u(28), fn: rotate },
-      { label: "v", dx: u(28), fn: softDrop },
-      { label: ">", dx: u(84), fn: () => tryMove(0, 1) },
+      { label: "◀", dx: -u(92), fn: () => tryMove(0, -1) },
+      { label: "회전", dx: -u(30), fn: rotate },
+      { label: "▼", dx: u(30), fn: softDrop },
+      { label: "▶", dx: u(92), fn: () => tryMove(0, 1) },
     ];
-    defs.forEach((d) => this.addMiniButton(width / 2 + d.dx, btnY, u(44), u(40), d.label, d.fn));
-    this.addMiniButton(width / 2, btnY + u(48), u(168), u(34), "즉시 낙하", hardDrop);
+    defs.forEach((d) => this.addMiniButton(width / 2 + d.dx, btnY, u(56), u(42), d.label, d.fn));
+    this.addMiniButton(width / 2, btnY + u(52), u(200), u(36), "즉시 낙하", hardDrop);
+    this.addCancelButton(btnY + u(98));
+
+    const keyboard = this.scene.input.keyboard;
+    if (keyboard) {
+      const onKey = (e: KeyboardEvent) => {
+        if (finished) return;
+        if (e.key === "ArrowLeft") tryMove(0, -1);
+        else if (e.key === "ArrowRight") tryMove(0, 1);
+        else if (e.key === "ArrowDown") softDrop();
+        else if (e.key === "ArrowUp" || e.key === "x" || e.key === "X") rotate();
+        else if (e.key === " ") hardDrop();
+      };
+      keyboard.on("keydown", onKey);
+      this.overlay?.once("destroy", () => keyboard.off("keydown", onKey));
+    }
 
     spawn();
   }
 
-  private startMemory(part: PartDef, done: PuzzleResult) {
+  private startMemory(part: PartDef) {
     const { width } = this.scene.scale;
     const pairs = Math.min(6, 2 + part.difficulty);
     const totalCards = pairs * 2;
     const cols = pairs <= 3 ? 3 : pairs === 4 ? 4 : pairs === 5 ? 5 : 4;
     const rows = Math.ceil(totalCards / cols);
-    const panel = this.makePanel(part.label, "같은 그림 짝을 모두 맞추세요.", rows <= 3 ? 0.54 : 0.64);
+    const panel = this.makePanel(part.label, "같은 그림 짝을 모두 맞추세요.", rows <= 3 ? 0.56 : 0.66);
 
-    const maxBoardW = width * 0.72;
-    const maxBoardH = panel.h * 0.54;
-    const gap = u(6);
-    const cell = Math.min((maxBoardW - gap * (cols - 1)) / cols, (maxBoardH - gap * (rows - 1)) / rows, u(58));
+    const maxBoardW = width * 0.74;
+    const maxBoardH = panel.h * 0.55;
+    const gap = u(7);
+    const cell = Math.min(
+      (maxBoardW - gap * (cols - 1)) / cols,
+      (maxBoardH - gap * (rows - 1)) / rows,
+      u(64)
+    );
     const boardW = cell * cols + gap * (cols - 1);
     const boardLeft = width / 2 - boardW / 2;
-    const boardTop = panel.top + u(116);
+    const boardTop = panel.top + u(118);
     const symbols = ["◆", "★", "♥", "✦", "❖", "☽"];
     const colors = [0xe74c3c, 0xf1c40f, 0x3498db, 0x2ecc71, 0xaf7ac5, 0xe67e22];
     const tokens = shuffleInPlace(
@@ -382,7 +452,12 @@ export class PuzzleSystem {
         .setStrokeStyle(u(1.5), 0xd4a656, 0.85)
         .setInteractive({ useHandCursor: true });
       const back = this.scene.add
-        .text(x, y, "◈", { fontFamily: "serif", fontSize: gpx(18), color: "#d4a656", fontStyle: "bold" })
+        .text(x, y, "◈", {
+          fontFamily: "serif",
+          fontSize: gpx(18),
+          color: "#d4a656",
+          fontStyle: "bold",
+        })
         .setOrigin(0.5)
         .setAlpha(0.55);
       const front = this.scene.add
@@ -410,10 +485,11 @@ export class PuzzleSystem {
     const attemptBudget = pairs + Math.max(2, Math.floor(pairs * 0.75));
 
     const status = this.scene.add
-      .text(width / 2, panel.top + u(86), `짝 0 / ${pairs}  |  기회 ${attemptBudget}`, {
+      .text(width / 2, panel.top + u(88), `짝 0 / ${pairs}  |  기회 ${attemptBudget}`, {
         fontFamily: "serif",
-        fontSize: gpx(12),
+        fontSize: gpx(13),
         color: "#f3e6c9",
+        fontStyle: "bold",
       })
       .setOrigin(0.5);
     this.overlay?.add(status);
@@ -421,6 +497,7 @@ export class PuzzleSystem {
     const updateStatus = () => {
       status.setText(`짝 ${matches} / ${pairs}  |  기회 ${Math.max(0, attemptBudget - attempts)}`);
     };
+
     const showCard = (card: Card, show: boolean) => {
       card.flipped = show;
       card.bg.setFillStyle(show ? 0x0e0614 : 0x2a1a34, show ? 1 : 0.98);
@@ -428,6 +505,7 @@ export class PuzzleSystem {
       card.front.setAlpha(show ? 1 : 0);
       card.back.setAlpha(show ? 0 : 0.55);
     };
+
     const tryFlip = (card: Card) => {
       if (finished || locked || card.flipped || card.matched) return;
       showCard(card, true);
@@ -441,7 +519,7 @@ export class PuzzleSystem {
       first = null;
       locked = true;
       if (a.token.id === b.token.id) {
-        this.scene.time.delayedCall(280, () => {
+        this.scene.time.delayedCall(260, () => {
           a.matched = true;
           b.matched = true;
           matches++;
@@ -451,15 +529,12 @@ export class PuzzleSystem {
             finished = true;
             status.setText("성공");
             status.setColor("#86e08d");
-            this.scene.time.delayedCall(600, () => {
-              this.cleanup();
-              done(true);
-            });
+            this.scene.time.delayedCall(520, () => this.finish(true));
           }
         });
       } else {
         updateStatus();
-        this.scene.time.delayedCall(620, () => {
+        this.scene.time.delayedCall(600, () => {
           showCard(a, false);
           showCard(b, false);
           locked = false;
@@ -467,23 +542,34 @@ export class PuzzleSystem {
             finished = true;
             status.setText("실패");
             status.setColor("#e0868b");
-            this.scene.time.delayedCall(700, () => {
-              this.cleanup();
-              done(false);
-            });
+            this.scene.time.delayedCall(620, () => this.finish(false));
           }
         });
       }
     };
+
+    this.addCancelButton(panel.bottom - u(34));
   }
 
-  private addMiniButton(x: number, y: number, w: number, h: number, label: string, action: () => void) {
+  private addMiniButton(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    label: string,
+    action: () => void
+  ) {
     const bg = this.scene.add
       .rectangle(x, y, w, h, 0x2a1a34, 0.95)
       .setStrokeStyle(u(1.5), 0xd4a656, 0.75)
       .setInteractive({ useHandCursor: true });
     const text = this.scene.add
-      .text(x, y, label, { fontFamily: "serif", fontSize: gpx(12), color: "#f3e6c9", fontStyle: "bold" })
+      .text(x, y, label, {
+        fontFamily: "serif",
+        fontSize: gpx(12),
+        color: "#f3e6c9",
+        fontStyle: "bold",
+      })
       .setOrigin(0.5);
     bg.on("pointerdown", action);
     this.overlay?.add(bg);
