@@ -55,6 +55,7 @@ export class UIScene extends Phaser.Scene {
   private shopMenu: Phaser.GameObjects.Container | null = null;
   private zoomControls: Phaser.GameObjects.Container | null = null;
   private bottomMenu: Phaser.GameObjects.Container | null = null;
+  private clearCelebration: Phaser.GameObjects.Container | null = null;
   private finaleTweens: Phaser.Tweens.Tween[] = [];
   private lastEconomy: EconomyState | null = null;
   private puzzleBusy = false;
@@ -74,6 +75,7 @@ export class UIScene extends Phaser.Scene {
     this.shopMenu = null;
     this.zoomControls = null;
     this.bottomMenu = null;
+    this.clearCelebration = null;
     this.finaleTweens = [];
     this.puzzleBusy = false;
 
@@ -724,6 +726,7 @@ export class UIScene extends Phaser.Scene {
   private onFinale() {
     this.hintText.setText("클리어 완료");
     this.hintText.setColor(COLORS.textHighlight);
+    this.showClearCelebration();
     this.finaleTweens.push(
       this.tweens.add({
         targets: this.actLabel,
@@ -734,6 +737,148 @@ export class UIScene extends Phaser.Scene {
       })
     );
     this.time.delayedCall(3000, () => this.showClearMenu());
+  }
+
+  private showClearCelebration() {
+    if (this.clearCelebration) return;
+    const { width, height } = this.scale;
+    const stageSet = this.lastEconomy?.stageSet ?? 1;
+    const imageKey = stageSet === 2 ? "E2_clear" : "E1_clear";
+    const c = this.add.container(width / 2, height * 0.34).setDepth(1980);
+    this.clearCelebration = c;
+
+    const burst = this.add.graphics();
+    for (let i = 0; i < 28; i++) {
+      const angle = (Math.PI * 2 * i) / 28;
+      const len = u(92 + (i % 4) * 20);
+      const x1 = Math.cos(angle) * u(40);
+      const y1 = Math.sin(angle) * u(24);
+      const x2 = Math.cos(angle) * len;
+      const y2 = Math.sin(angle) * len * 0.62;
+      burst.lineStyle(
+        u(i % 3 === 0 ? 2.4 : 1.2),
+        i % 2 === 0 ? COLORS.gildHot : 0xffffff,
+        0.72
+      );
+      burst.beginPath();
+      burst.moveTo(x1, y1);
+      burst.lineTo(x2, y2);
+      burst.strokePath();
+    }
+    c.add(burst);
+
+    const glow = this.add
+      .ellipse(0, 0, width * 0.72, u(210), COLORS.gildHot, 0.16)
+      .setStrokeStyle(u(2), COLORS.gildHot, 0.38);
+    c.add(glow);
+
+    if (this.textures.exists(imageKey)) {
+      const img = this.add.image(0, u(8), imageKey).setOrigin(0.5);
+      const scale = Math.min((width * 0.48) / img.width, u(170) / img.height, 1);
+      img.setScale(scale).setAlpha(0.96);
+      c.add(img);
+    }
+
+    const title = this.add
+      .text(0, -u(78), "CLEAR!", {
+        fontFamily: "serif",
+        fontSize: px(42),
+        color: COLORS.textHighlight,
+        fontStyle: "bold",
+        stroke: "#3b2410",
+        strokeThickness: u(5),
+        align: "center",
+      })
+      .setOrigin(0.5);
+    c.add(title);
+
+    const bubbleW = Math.min(width * 0.82, u(430));
+    const bubble = this.add
+      .rectangle(0, u(88), bubbleW, u(64), 0xfff1cf, 0.94)
+      .setStrokeStyle(u(2), COLORS.gildHot, 0.95);
+    const bubbleTip = this.add.triangle(
+      -bubbleW * 0.22,
+      u(125),
+      0,
+      0,
+      u(22),
+      0,
+      u(8),
+      u(22),
+      0xfff1cf,
+      0.94
+    );
+    const message = this.add
+      .text(0, u(88), "축하해! 클리어했구나!", {
+        fontFamily: "serif",
+        fontSize: px(18),
+        color: "#2e2118",
+        fontStyle: "bold",
+        align: "center",
+      })
+      .setOrigin(0.5);
+    c.add([bubble, bubbleTip, message]);
+
+    for (let i = 0; i < 18; i++) {
+      const sparkle = this.add
+        .star(
+          Phaser.Math.Between(-Math.floor(width * 0.38), Math.floor(width * 0.38)),
+          Phaser.Math.Between(-u(90), u(145)),
+          5,
+          u(3),
+          u(9),
+          i % 2 === 0 ? COLORS.gildHot : 0xffffff,
+          0.92
+        )
+        .setScale(0);
+      c.add(sparkle);
+      this.finaleTweens.push(
+        this.tweens.add({
+          targets: sparkle,
+          scale: { from: 0, to: Phaser.Math.FloatBetween(0.8, 1.55) },
+          alpha: { from: 0.2, to: 1 },
+          angle: Phaser.Math.Between(-50, 50),
+          yoyo: true,
+          repeat: -1,
+          delay: i * 70,
+          duration: Phaser.Math.Between(620, 1050),
+          ease: "Sine.easeInOut",
+        })
+      );
+    }
+
+    c.setAlpha(0).setScale(0.78);
+    this.finaleTweens.push(
+      this.tweens.add({
+        targets: c,
+        alpha: 1,
+        scale: 1,
+        duration: 520,
+        ease: "Back.easeOut",
+      })
+    );
+    this.finaleTweens.push(
+      this.tweens.add({
+        targets: glow,
+        scaleX: { from: 0.92, to: 1.08 },
+        scaleY: { from: 0.9, to: 1.04 },
+        alpha: { from: 0.14, to: 0.28 },
+        yoyo: true,
+        repeat: -1,
+        duration: 900,
+        ease: "Sine.easeInOut",
+      })
+    );
+    this.finaleTweens.push(
+      this.tweens.add({
+        targets: title,
+        scale: { from: 1, to: 1.08 },
+        yoyo: true,
+        repeat: -1,
+        duration: 760,
+        ease: "Sine.easeInOut",
+      })
+    );
   }
 
   private showClearMenu() {
@@ -843,47 +988,73 @@ export class UIScene extends Phaser.Scene {
     const gs = this.scene.get("GameScene");
     const c = this.add.container(0, 0).setDepth(1800);
     this.zoomControls = c;
-    const y = height - u(36);
-    this.makeButton(
-      c,
-      width / 2 - u(132),
-      y,
-      u(76),
-      u(40),
-      "+",
-      () => gs.events.emit("zoom-in"),
-      px(16)
-    );
-    this.makeButton(
-      c,
-      width / 2 - u(44),
-      y,
-      u(76),
-      u(40),
-      "-",
-      () => gs.events.emit("zoom-out"),
-      px(16)
-    );
-    this.makeButton(
-      c,
-      width / 2 + u(44),
-      y,
-      u(76),
-      u(40),
-      "원위치",
-      () => gs.events.emit("zoom-reset"),
-      px(10)
-    );
-    this.makeButton(
-      c,
-      width / 2 + u(132),
-      y,
-      u(76),
-      u(40),
-      "재시작",
-      () => this.restartGame(),
-      px(10)
-    );
+    const panelW = u(88);
+    const panelH = u(292);
+    const panelX = width - panelW / 2 - u(14);
+    const panelY = height / 2 + u(34);
+    const panel = this.add
+      .rectangle(panelX, panelY, panelW, panelH, COLORS.panelDeep, 0.62)
+      .setStrokeStyle(u(1.5), COLORS.gildHot, 0.72);
+    c.add(panel);
+
+    const items = [
+      { label: "+", action: () => gs.events.emit("zoom-in"), font: px(28) },
+      { label: "-", action: () => gs.events.emit("zoom-out"), font: px(28) },
+      { label: "원위치", action: () => gs.events.emit("zoom-reset"), font: px(11) },
+      { label: "재시작", action: () => this.restartGame(), font: px(11) },
+    ];
+    const startY = panelY - panelH / 2 + u(46);
+    items.forEach((item, idx) => {
+      this.makeTranslucentButton(
+        c,
+        panelX,
+        startY + idx * u(66),
+        u(68),
+        u(54),
+        item.label,
+        item.action,
+        item.font
+      );
+    });
+  }
+
+  private makeTranslucentButton(
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    label: string,
+    onClick: () => void,
+    fontSize = px(14)
+  ) {
+    const bg = this.add
+      .rectangle(x, y, w, h, COLORS.panelSoft, 0.72)
+      .setStrokeStyle(u(1.8), COLORS.gildHot, 0.92)
+      .setInteractive({ useHandCursor: true });
+    const txt = this.add
+      .text(x, y, label, {
+        fontFamily: "serif",
+        fontSize,
+        color: COLORS.textHighlight,
+        fontStyle: "bold",
+        align: "center",
+      })
+      .setOrigin(0.5);
+    bg.on("pointerover", () => bg.setFillStyle(COLORS.panelMid, 0.86));
+    bg.on("pointerout", () => bg.setFillStyle(COLORS.panelSoft, 0.72));
+    bg.on("pointerdown", () => {
+      this.tweens.add({
+        targets: [bg, txt],
+        scaleX: 0.92,
+        scaleY: 0.92,
+        yoyo: true,
+        duration: 90,
+        onComplete: onClick,
+      });
+    });
+    container.add(bg);
+    container.add(txt);
   }
 
   private restartGame() {
