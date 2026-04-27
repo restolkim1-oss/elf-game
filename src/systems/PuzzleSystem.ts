@@ -87,7 +87,7 @@ export class PuzzleSystem {
 
   private startPattern(part: PartDef, done: PuzzleResult) {
     const { width, height } = this.scene.scale;
-    this.makePanel(part.label, "Watch the sequence, then tap in order.", 0.44);
+    this.makePanel(part.label, "순서를 보고 같은 순서로 눌러주세요.", 0.44);
 
     const colors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f];
     const sequenceLength = 2 + part.difficulty;
@@ -96,7 +96,7 @@ export class PuzzleSystem {
     );
 
     const statusText = this.scene.add
-      .text(width / 2, height / 2 - u(14), "Watch carefully...", {
+      .text(width / 2, height / 2 - u(14), "집중해서 보세요...", {
         fontFamily: "serif",
         fontSize: gpx(15),
         color: "#f3e6c9",
@@ -127,7 +127,7 @@ export class PuzzleSystem {
         if (i !== sequence[playerIdx]) {
           finished = true;
           locked = true;
-          statusText.setText("Failed");
+          statusText.setText("실패");
           statusText.setColor("#e0868b");
           this.scene.time.delayedCall(600, () => {
             this.cleanup();
@@ -140,7 +140,7 @@ export class PuzzleSystem {
         if (playerIdx >= sequence.length) {
           finished = true;
           locked = true;
-          statusText.setText("Success");
+          statusText.setText("성공");
           statusText.setColor("#86e08d");
           this.scene.time.delayedCall(400, () => {
             this.cleanup();
@@ -152,7 +152,7 @@ export class PuzzleSystem {
 
     const showSequence = (step: number) => {
       if (step >= sequence.length) {
-        statusText.setText(`Your turn (${sequenceLength} steps)`);
+        statusText.setText(`내 차례 (${sequenceLength}단계)`);
         locked = false;
         return;
       }
@@ -173,7 +173,7 @@ export class PuzzleSystem {
   private startTetris(part: PartDef, done: PuzzleResult) {
     void part;
     const { width } = this.scene.scale;
-    const panel = this.makePanel("Block Clear", "Clear 3 lines to win.", 0.72);
+    const panel = this.makePanel("블록 정리", "줄 3개를 지우면 성공입니다.", 0.72);
 
     const cols = 6;
     const rows = 12;
@@ -210,7 +210,7 @@ export class PuzzleSystem {
     }
 
     const status = this.scene.add
-      .text(width / 2, panel.top + u(84), "Lines 0 / 3", {
+      .text(width / 2, panel.top + u(84), "지운 줄 0 / 3", {
         fontFamily: "serif",
         fontSize: gpx(12),
         color: "#f3e6c9",
@@ -256,7 +256,7 @@ export class PuzzleSystem {
       if (!canPlace(shapeIdx, rot, curRow, curCol)) {
         finished = true;
         dropEvent?.remove(false);
-        status.setText("Failed");
+        status.setText("실패");
         status.setColor("#e0868b");
         this.scene.time.delayedCall(700, () => {
           this.cleanup();
@@ -282,12 +282,12 @@ export class PuzzleSystem {
       }
       if (lineCount > 0) {
         cleared += lineCount;
-        status.setText(`Lines ${Math.min(cleared, 3)} / 3`);
+        status.setText(`지운 줄 ${Math.min(cleared, 3)} / 3`);
       }
       if (cleared >= 3) {
         finished = true;
         dropEvent?.remove(false);
-        status.setText("Success");
+        status.setText("성공");
         status.setColor("#86e08d");
         this.scene.time.delayedCall(700, () => {
           this.cleanup();
@@ -328,12 +328,12 @@ export class PuzzleSystem {
     const btnY = Math.min(panel.bottom - u(82), boardY + boardH + u(28));
     const defs = [
       { label: "<", dx: -u(84), fn: () => tryMove(0, -1) },
-      { label: "R", dx: -u(28), fn: rotate },
+      { label: "회전", dx: -u(28), fn: rotate },
       { label: "v", dx: u(28), fn: softDrop },
       { label: ">", dx: u(84), fn: () => tryMove(0, 1) },
     ];
     defs.forEach((d) => this.addMiniButton(width / 2 + d.dx, btnY, u(44), u(40), d.label, d.fn));
-    this.addMiniButton(width / 2, btnY + u(48), u(168), u(34), "DROP", hardDrop);
+    this.addMiniButton(width / 2, btnY + u(48), u(168), u(34), "즉시 낙하", hardDrop);
 
     spawn();
   }
@@ -344,7 +344,7 @@ export class PuzzleSystem {
     const totalCards = pairs * 2;
     const cols = pairs <= 3 ? 3 : pairs === 4 ? 4 : pairs === 5 ? 5 : 4;
     const rows = Math.ceil(totalCards / cols);
-    const panel = this.makePanel(part.label, "Match all pairs before attempts run out.", rows <= 3 ? 0.54 : 0.64);
+    const panel = this.makePanel(part.label, "같은 그림 짝을 모두 맞추세요.", rows <= 3 ? 0.54 : 0.64);
 
     const maxBoardW = width * 0.72;
     const maxBoardH = panel.h * 0.54;
@@ -353,7 +353,7 @@ export class PuzzleSystem {
     const boardW = cell * cols + gap * (cols - 1);
     const boardLeft = width / 2 - boardW / 2;
     const boardTop = panel.top + u(116);
-    const symbols = ["A", "B", "C", "D", "E", "F"];
+    const symbols = ["◆", "★", "♥", "✦", "❖", "☽"];
     const colors = [0xe74c3c, 0xf1c40f, 0x3498db, 0x2ecc71, 0xaf7ac5, 0xe67e22];
     const tokens = shuffleInPlace(
       Array.from({ length: pairs }, (_, i) => [
@@ -382,7 +382,7 @@ export class PuzzleSystem {
         .setStrokeStyle(u(1.5), 0xd4a656, 0.85)
         .setInteractive({ useHandCursor: true });
       const back = this.scene.add
-        .text(x, y, "?", { fontFamily: "serif", fontSize: gpx(20), color: "#d4a656", fontStyle: "bold" })
+        .text(x, y, "◈", { fontFamily: "serif", fontSize: gpx(18), color: "#d4a656", fontStyle: "bold" })
         .setOrigin(0.5)
         .setAlpha(0.55);
       const front = this.scene.add
@@ -410,7 +410,7 @@ export class PuzzleSystem {
     const attemptBudget = pairs + Math.max(2, Math.floor(pairs * 0.75));
 
     const status = this.scene.add
-      .text(width / 2, panel.top + u(86), `Pairs 0 / ${pairs}  |  Try ${attemptBudget}`, {
+      .text(width / 2, panel.top + u(86), `짝 0 / ${pairs}  |  기회 ${attemptBudget}`, {
         fontFamily: "serif",
         fontSize: gpx(12),
         color: "#f3e6c9",
@@ -419,7 +419,7 @@ export class PuzzleSystem {
     this.overlay?.add(status);
 
     const updateStatus = () => {
-      status.setText(`Pairs ${matches} / ${pairs}  |  Try ${Math.max(0, attemptBudget - attempts)}`);
+      status.setText(`짝 ${matches} / ${pairs}  |  기회 ${Math.max(0, attemptBudget - attempts)}`);
     };
     const showCard = (card: Card, show: boolean) => {
       card.flipped = show;
@@ -449,7 +449,7 @@ export class PuzzleSystem {
           locked = false;
           if (matches >= pairs) {
             finished = true;
-            status.setText("Success");
+            status.setText("성공");
             status.setColor("#86e08d");
             this.scene.time.delayedCall(600, () => {
               this.cleanup();
@@ -465,7 +465,7 @@ export class PuzzleSystem {
           locked = false;
           if (attempts >= attemptBudget && matches < pairs) {
             finished = true;
-            status.setText("Failed");
+            status.setText("실패");
             status.setColor("#e0868b");
             this.scene.time.delayedCall(700, () => {
               this.cleanup();

@@ -39,14 +39,6 @@ interface EconomyState {
     perfume: number;
   };
   stageSet: 1 | 2 | 3;
-  stageUnlocks: {
-    stage2: boolean;
-    stage3: boolean;
-  };
-  stageUnlockThresholds: {
-    stage2: number;
-    stage3: number;
-  };
 }
 
 export class UIScene extends Phaser.Scene {
@@ -55,7 +47,8 @@ export class UIScene extends Phaser.Scene {
   private progressCount!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private statText!: Phaser.GameObjects.Text;
-  private defaultHint = "Tap a part, clear mini-games, earn coins, and gift items.";
+  private defaultHint =
+    "파츠를 선택하고 미니게임을 클리어해 코인과 호감도를 올려보세요.";
 
   private clearMenu: Phaser.GameObjects.Container | null = null;
   private shopMenu: Phaser.GameObjects.Container | null = null;
@@ -92,15 +85,15 @@ export class UIScene extends Phaser.Scene {
     });
     game.events.on("part-removed", (part: (typeof PARTS)[number]) => {
       this.markCleared(part.id);
-      this.flashHint(`${part.label} cleared`, COLORS.success);
+      this.flashHint(`${part.label} 해제 완료`, COLORS.success);
     });
     game.events.on("failure", () => {
-      this.flashHint("Failed. Try again.", COLORS.danger);
+      this.flashHint("실패했습니다. 다시 시도해주세요.", COLORS.danger);
     });
     game.events.on(
       "part-locked",
       (payload: { part: (typeof PARTS)[number]; reason: string }) => {
-        this.flashHint(payload.reason || "Locked", COLORS.textHighlight);
+        this.flashHint(payload.reason || "잠금 상태입니다.", COLORS.textHighlight);
       }
     );
     game.events.on("economy-update", (state: EconomyState) => {
@@ -127,10 +120,31 @@ export class UIScene extends Phaser.Scene {
 
   private drawBottomPanel(width: number, height: number) {
     const panelH = u(190);
-    this.add.rectangle(width / 2, height - panelH / 2, width, panelH, COLORS.panelMid, 0.96);
-    this.add.rectangle(width / 2, height - panelH + u(22), width, u(44), COLORS.panelDeep, 0.45);
+    this.add.rectangle(
+      width / 2,
+      height - panelH / 2,
+      width,
+      panelH,
+      COLORS.panelMid,
+      0.96
+    );
+    this.add.rectangle(
+      width / 2,
+      height - panelH + u(22),
+      width,
+      u(44),
+      COLORS.panelDeep,
+      0.45
+    );
     this.add.rectangle(width / 2, height - panelH, width, u(1), COLORS.gild, 0.9);
-    this.add.rectangle(width / 2, height - panelH - u(4), width * 0.55, u(1), COLORS.gild, 0.35);
+    this.add.rectangle(
+      width / 2,
+      height - panelH - u(4),
+      width * 0.55,
+      u(1),
+      COLORS.gild,
+      0.35
+    );
 
     this.hintText = this.add
       .text(width / 2, height - panelH + u(16), this.defaultHint, {
@@ -144,7 +158,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     this.statText = this.add
-      .text(width / 2, height - panelH + u(54), "Coin 0  |  Affinity 0 / 100", {
+      .text(width / 2, height - panelH + u(54), "코인 0  |  호감도 0 / 100", {
         fontFamily: "serif",
         fontSize: px(13),
         color: COLORS.textHighlight,
@@ -155,7 +169,7 @@ export class UIScene extends Phaser.Scene {
 
   private drawActLabel(width: number) {
     this.actLabel = this.add
-      .text(width / 2, u(12), "ELVE UNWRAP", {
+      .text(width / 2, u(12), "◆  엘린  ◆", {
         fontFamily: "serif",
         fontSize: px(20),
         color: COLORS.textHighlight,
@@ -186,9 +200,15 @@ export class UIScene extends Phaser.Scene {
     PARTS.forEach((part, idx) => {
       const x = startX + idx * spacing;
       const container = this.add.container(x, pillY);
-      const glow = this.add.circle(0, 0, u(22), 0xffd572, 0).setStrokeStyle(u(1.5), COLORS.gildHot, 0.4);
-      const ring = this.add.circle(0, 0, u(18), 0x000000, 0).setStrokeStyle(u(1.2), COLORS.gild, 0.7);
-      const bg = this.add.circle(0, 0, u(14), COLORS.panelDeep).setStrokeStyle(u(1), COLORS.gild, 0.9);
+      const glow = this.add
+        .circle(0, 0, u(22), 0xffd572, 0)
+        .setStrokeStyle(u(1.5), COLORS.gildHot, 0.4);
+      const ring = this.add
+        .circle(0, 0, u(18), 0x000000, 0)
+        .setStrokeStyle(u(1.2), COLORS.gild, 0.7);
+      const bg = this.add
+        .circle(0, 0, u(14), COLORS.panelDeep)
+        .setStrokeStyle(u(1), COLORS.gild, 0.9);
       const label = this.add
         .text(0, 0, String(part.order), {
           fontFamily: "serif",
@@ -237,20 +257,32 @@ export class UIScene extends Phaser.Scene {
     this.bottomMenu = c;
 
     const labels = [
-      { text: "INTERACT", action: () => this.enterInteractionMode() },
-      { text: "FARM", action: () => gs.events.emit("farm-minigame") },
-      { text: "SHOP", action: () => this.toggleShopMenu() },
-      { text: "ALL CLEAR", action: () => gs.events.emit("force-clear") },
+      { text: "인터렉션", action: () => this.enterInteractionMode() },
+      { text: "미니게임", action: () => gs.events.emit("farm-minigame") },
+      { text: "상점", action: () => this.toggleShopMenu() },
+      { text: "전체 해제", action: () => gs.events.emit("force-clear") },
     ];
     const gap = u(10);
-    const btnW = Math.min(u(154), (width - u(52) - gap * (labels.length - 1)) / labels.length);
+    const btnW = Math.min(
+      u(154),
+      (width - u(52) - gap * (labels.length - 1)) / labels.length
+    );
     const btnH = u(42);
     const totalW = labels.length * btnW + (labels.length - 1) * gap;
     const startX = width / 2 - totalW / 2 + btnW / 2;
     const y = height - u(88);
 
     labels.forEach((item, idx) => {
-      this.makeButton(c, startX + idx * (btnW + gap), y, btnW, btnH, item.text, item.action, px(10));
+      this.makeButton(
+        c,
+        startX + idx * (btnW + gap),
+        y,
+        btnW,
+        btnH,
+        item.text,
+        item.action,
+        px(10)
+      );
     });
   }
 
@@ -258,7 +290,12 @@ export class UIScene extends Phaser.Scene {
     if (this.shopMenu) {
       const old = this.shopMenu;
       this.shopMenu = null;
-      this.tweens.add({ targets: old, alpha: 0, duration: 160, onComplete: () => old.destroy() });
+      this.tweens.add({
+        targets: old,
+        alpha: 0,
+        duration: 160,
+        onComplete: () => old.destroy(),
+      });
       return;
     }
     this.drawShopMenu();
@@ -279,9 +316,11 @@ export class UIScene extends Phaser.Scene {
     c.add(bg);
 
     const state = this.lastEconomy;
-    const inv = state ? `F${state.inventory.flower} C${state.inventory.choco} P${state.inventory.perfume}` : "F0 C0 P0";
+    const inv = state
+      ? `꽃 ${state.inventory.flower} · 초콜릿 ${state.inventory.choco} · 향수 ${state.inventory.perfume}`
+      : "꽃 0 · 초콜릿 0 · 향수 0";
     const title = this.add
-      .text(width / 2, panelY - panelH / 2 + u(10), `SHOP  |  Inventory ${inv}`, {
+      .text(width / 2, panelY - panelH / 2 + u(10), `상점  |  보유 ${inv}`, {
         fontFamily: "serif",
         fontSize: px(11),
         color: COLORS.textHighlight,
@@ -291,16 +330,16 @@ export class UIScene extends Phaser.Scene {
     c.add(title);
 
     const items = [
-      { id: "flower", name: "Flower", cost: 18 },
-      { id: "choco", name: "Choco", cost: 30 },
-      { id: "perfume", name: "Perfume", cost: 44 },
+      { id: "flower", name: "꽃", cost: 18 },
+      { id: "choco", name: "초콜릿", cost: 30 },
+      { id: "perfume", name: "향수", cost: 44 },
     ] as const;
 
     const colW = panelW / 3;
     items.forEach((item, idx) => {
       const x = width / 2 - panelW / 2 + colW * idx + colW / 2;
       const label = this.add
-        .text(x, panelY - u(12), `${item.name} ${item.cost}c`, {
+        .text(x, panelY - u(12), `${item.name} ${item.cost}코인`, {
           fontFamily: "serif",
           fontSize: px(9),
           color: COLORS.text,
@@ -308,8 +347,26 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       c.add(label);
-      this.makeButton(c, x - u(42), panelY + u(28), u(76), u(30), "BUY", () => gs.events.emit("buy-item", item.id), px(8));
-      this.makeButton(c, x + u(42), panelY + u(28), u(76), u(30), "GIFT", () => gs.events.emit("gift-item", item.id), px(8));
+      this.makeButton(
+        c,
+        x - u(42),
+        panelY + u(28),
+        u(76),
+        u(30),
+        "구입",
+        () => gs.events.emit("buy-item", item.id),
+        px(8)
+      );
+      this.makeButton(
+        c,
+        x + u(42),
+        panelY + u(28),
+        u(76),
+        u(30),
+        "선물",
+        () => gs.events.emit("gift-item", item.id),
+        px(8)
+      );
     });
 
     c.setAlpha(0);
@@ -357,7 +414,7 @@ export class UIScene extends Phaser.Scene {
 
   private updateEconomy(state: EconomyState) {
     this.statText.setText(
-      `Coin ${state.currency}  |  Affinity ${state.affinity} / ${state.affinityMax}  |  Stage ${state.stageSet}`
+      `코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`
     );
     if (this.shopMenu) {
       const old = this.shopMenu;
@@ -379,9 +436,20 @@ export class UIScene extends Phaser.Scene {
     pill.ring.setStrokeStyle(u(1.5), COLORS.gildHot, 0.9);
     pill.tip.setColor(COLORS.text);
     this.tweens.killTweensOf(pill.glow);
-    this.tweens.add({ targets: pill.container, scale: { from: 1, to: 1.5 }, yoyo: true, duration: 340 });
+    this.tweens.add({
+      targets: pill.container,
+      scale: { from: 1, to: 1.5 },
+      yoyo: true,
+      duration: 340,
+    });
     pill.glow.setAlpha(0.9).setScale(1);
-    this.tweens.add({ targets: pill.glow, scaleX: 2.3, scaleY: 2.3, alpha: 0, duration: 650 });
+    this.tweens.add({
+      targets: pill.glow,
+      scaleX: 2.3,
+      scaleY: 2.3,
+      alpha: 0,
+      duration: 650,
+    });
   }
 
   private startIdlePillPulse() {
@@ -423,7 +491,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private onFinale() {
-    this.hintText.setText("Clear complete.");
+    this.hintText.setText("클리어 완료");
     this.hintText.setColor(COLORS.textHighlight);
     this.finaleTweens.push(
       this.tweens.add({
@@ -458,7 +526,7 @@ export class UIScene extends Phaser.Scene {
     c.add(panel);
 
     const title = this.add
-      .text(width / 2, panelY - panelH / 2 + u(10), "CLEAR", {
+      .text(width / 2, panelY - panelH / 2 + u(10), "클리어", {
         fontFamily: "serif",
         fontSize: px(20),
         color: COLORS.textHighlight,
@@ -468,7 +536,7 @@ export class UIScene extends Phaser.Scene {
     c.add(title);
 
     const sub = this.add
-      .text(width / 2, panelY - panelH / 2 + u(42), "Choose your next action.", {
+      .text(width / 2, panelY - panelH / 2 + u(42), "다음 동작을 선택하세요.", {
         fontFamily: "serif",
         fontSize: px(10),
         color: COLORS.text,
@@ -483,12 +551,13 @@ export class UIScene extends Phaser.Scene {
     const rightX = width / 2 + panelW * 0.23;
     const row1 = panelY + u(12);
     const row2 = panelY + u(54);
-    this.makeButton(c, leftX, row1, bw, bh, "NEXT STAGE", () => {
+
+    this.makeButton(c, leftX, row1, bw, bh, "다음 스테이지", () => {
       gs.events.emit("next-stage");
     }, px(11));
-    this.makeButton(c, rightX, row1, bw, bh, "CONTINUE", () => this.closeClearMenu(), px(11));
-    this.makeButton(c, leftX, row2, bw, bh, "INTERACTION", () => this.enterInteractionMode(), px(11));
-    this.makeButton(c, rightX, row2, bw, bh, "RESTART", () => this.restartGame(), px(11));
+    this.makeButton(c, rightX, row1, bw, bh, "계속 보기", () => this.closeClearMenu(), px(11));
+    this.makeButton(c, leftX, row2, bw, bh, "인터렉션", () => this.enterInteractionMode(), px(11));
+    this.makeButton(c, rightX, row2, bw, bh, "다시 시작", () => this.restartGame(), px(11));
 
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 260 });
@@ -499,7 +568,12 @@ export class UIScene extends Phaser.Scene {
     const c = this.clearMenu;
     this.clearMenu = null;
     this.bottomMenu?.setVisible(true);
-    this.tweens.add({ targets: c, alpha: 0, duration: 220, onComplete: () => c.destroy() });
+    this.tweens.add({
+      targets: c,
+      alpha: 0,
+      duration: 220,
+      onComplete: () => c.destroy(),
+    });
     this.drawZoomControls(this.scale.width, this.scale.height);
   }
 
@@ -515,7 +589,7 @@ export class UIScene extends Phaser.Scene {
     }
     this.scene.get("GameScene").events.emit("enter-interaction");
     this.drawInteractionControls();
-    this.flashHint("Tap the character for reactions.", COLORS.textHighlight);
+    this.flashHint("캐릭터를 터치해 반응을 확인하세요.", COLORS.textHighlight);
   }
 
   private drawInteractionControls() {
@@ -524,8 +598,8 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(1800);
     this.interactionControls = c;
     const y = height - u(34);
-    this.makeButton(c, width / 2 - u(88), y, u(150), u(38), "BACK", () => this.exitInteractionModeUi(), px(11));
-    this.makeButton(c, width / 2 + u(88), y, u(150), u(38), "RESTART", () => this.restartGame(), px(11));
+    this.makeButton(c, width / 2 - u(88), y, u(150), u(38), "돌아가기", () => this.exitInteractionModeUi(), px(11));
+    this.makeButton(c, width / 2 + u(88), y, u(150), u(38), "다시 시작", () => this.restartGame(), px(11));
   }
 
   private exitInteractionModeUi() {
@@ -534,7 +608,7 @@ export class UIScene extends Phaser.Scene {
       this.interactionControls = null;
     }
     this.scene.get("GameScene").events.emit("exit-interaction");
-    this.flashHint("Back to game mode.", COLORS.textHighlight);
+    this.flashHint("게임 모드로 돌아왔습니다.", COLORS.textHighlight);
   }
 
   private drawZoomControls(width: number, height: number) {
@@ -545,8 +619,8 @@ export class UIScene extends Phaser.Scene {
     const y = height - u(34);
     this.makeButton(c, width / 2 - u(132), y, u(76), u(38), "+", () => gs.events.emit("zoom-in"), px(15));
     this.makeButton(c, width / 2 - u(44), y, u(76), u(38), "-", () => gs.events.emit("zoom-out"), px(15));
-    this.makeButton(c, width / 2 + u(44), y, u(76), u(38), "RESET", () => gs.events.emit("zoom-reset"), px(9));
-    this.makeButton(c, width / 2 + u(132), y, u(76), u(38), "RESTART", () => this.restartGame(), px(8));
+    this.makeButton(c, width / 2 + u(44), y, u(76), u(38), "원위치", () => gs.events.emit("zoom-reset"), px(9));
+    this.makeButton(c, width / 2 + u(132), y, u(76), u(38), "재시작", () => this.restartGame(), px(8));
   }
 
   private restartGame() {

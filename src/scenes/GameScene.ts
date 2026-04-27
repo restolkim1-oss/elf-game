@@ -14,9 +14,9 @@ import {
 } from "../data/parts";
 
 const SHOP = {
-  flower: { label: "Flower", cost: 18, affinity: 10 },
-  choco: { label: "Chocolate", cost: 30, affinity: 10 },
-  perfume: { label: "Perfume", cost: 44, affinity: 10 },
+  flower: { label: "꽃", cost: 18, affinity: 10 },
+  choco: { label: "초콜릿", cost: 30, affinity: 10 },
+  perfume: { label: "향수", cost: 44, affinity: 10 },
 } as const;
 type ShopItemId = keyof typeof SHOP;
 
@@ -40,6 +40,8 @@ export class GameScene extends Phaser.Scene {
   private puzzleBusy = false;
 
   private stageSet: StageSet = 1;
+  private stage2StoryUnlocked = false;
+  private stage3StoryUnlocked = false;
   private currency = 0;
   private affinity = 0;
   private inventory: Record<ShopItemId, number> = {
@@ -138,7 +140,7 @@ export class GameScene extends Phaser.Scene {
         this.puzzleBusy = false;
         this.partSystem.setPuzzleActive(false);
         if (success) {
-          this.grantCoins(8 + part.difficulty * 4, `Cleared ${part.label}`);
+          this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
           this.partSystem.removePart(part.id);
           this.progressSystem.advance();
           this.removed.add(part.id);
@@ -389,11 +391,11 @@ export class GameScene extends Phaser.Scene {
 
   private switchStageSet(next: StageSet) {
     if (next === 2 && !this.canUseStage2()) {
-      this.feedback(`Stage2 unlocks at affinity ${STAGE2_UNLOCK_AFFINITY}.`);
+      this.feedback(`2단계는 호감도 ${STAGE2_UNLOCK_AFFINITY}부터 열립니다.`);
       return;
     }
     if (next === 3 && !this.canUseStage3()) {
-      this.feedback("Back pose unlocks at affinity 100.");
+      this.feedback("뒷모습 스테이지는 호감도 100에서 열립니다.");
       return;
     }
     if (next === this.stageSet) return;
@@ -404,10 +406,14 @@ export class GameScene extends Phaser.Scene {
 
   private goToNextStage() {
     if (this.stageSet === 1) {
-      this.registry.set("stage-set", 2);
-      this.scene.restart();
-      this.scene.get("UIScene").scene.restart();
+      this.stage2StoryUnlocked = true;
+      this.persistMetaState();
+      this.switchStageSet(2);
       return;
+    }
+    if (this.stageSet === 2) {
+      this.stage3StoryUnlocked = true;
+      this.persistMetaState();
     }
     const next = this.stageSet === 2 ? 3 : 1;
     this.switchStageSet(next);
@@ -426,21 +432,21 @@ export class GameScene extends Phaser.Scene {
 
   private startFarmMinigame() {
     if (this.puzzleBusy || this.interactionActive) {
-      this.feedback("Cannot start mini-game right now.");
+      this.feedback("지금은 미니게임을 시작할 수 없습니다.");
       return;
     }
 
     this.puzzleBusy = true;
     this.partSystem.setPuzzleActive(true);
     const farmPart = this.createFarmPart();
-    this.feedback("Mini-game started.");
+    this.feedback("미니게임을 시작합니다.");
     this.puzzleSystem.start(farmPart, (success) => {
       this.puzzleBusy = false;
       this.partSystem.setPuzzleActive(false);
       if (success) {
-        this.grantCoins(10 + farmPart.difficulty * 4, "Mini-game cleared");
+        this.grantCoins(10 + farmPart.difficulty * 4, "미니게임 클리어");
       } else {
-        this.feedback("Mini-game failed.");
+        this.feedback("미니게임 실패");
       }
     });
   }
@@ -451,7 +457,7 @@ export class GameScene extends Phaser.Scene {
     const difficulty = Phaser.Math.Between(1, 4) as 1 | 2 | 3 | 4 | 5;
     return {
       id: `farm_${Date.now()}`,
-      label: "Training",
+      label: "훈련",
       act: PARTS[0].act,
       puzzle,
       difficulty,
@@ -466,24 +472,24 @@ export class GameScene extends Phaser.Scene {
   private buyItem(id: ShopItemId) {
     const entry = SHOP[id];
     if (this.currency < entry.cost) {
-      this.feedback(`Need ${entry.cost} coins for ${entry.label}.`);
+      this.feedback(`${entry.label} 구입에 코인 ${entry.cost}개가 필요합니다.`);
       return;
     }
     this.currency -= entry.cost;
     this.inventory[id] += 1;
     this.persistMetaState();
     this.emitEconomyState();
-    this.feedback(`Bought ${entry.label}.`);
+    this.feedback(`${entry.label} 구입 완료`);
   }
 
   private giftItem(id: ShopItemId) {
     const entry = SHOP[id];
     if (this.inventory[id] <= 0) {
-      this.feedback(`No ${entry.label} in inventory.`);
+      this.feedback(`${entry.label} 보유 수량이 없습니다.`);
       return;
     }
     if (this.affinity >= AFFINITY_MAX) {
-      this.feedback("Affinity is already max (100).");
+      this.feedback("호감도는 이미 최대치(100)입니다.");
       return;
     }
 
@@ -498,14 +504,14 @@ export class GameScene extends Phaser.Scene {
     this.persistMetaState();
     this.emitEconomyState();
     this.feedback(
-      `${entry.label} gifted. Affinity +${this.affinity - before} (${this.affinity}/100).`
+      `${entry.label} 선물 완료 · 호감도 +${this.affinity - before} (${this.affinity}/100)`
     );
 
     if (before < STAGE2_UNLOCK_AFFINITY && this.affinity >= STAGE2_UNLOCK_AFFINITY) {
-      this.feedback("Stage2 pose unlocked.");
+      this.feedback("2단계 포즈가 열렸습니다.");
     }
     if (before < STAGE3_UNLOCK_AFFINITY && this.affinity >= STAGE3_UNLOCK_AFFINITY) {
-      this.feedback("Back pose unlocked.");
+      this.feedback("뒷모습 스테이지가 열렸습니다.");
     }
   }
 
@@ -514,15 +520,15 @@ export class GameScene extends Phaser.Scene {
     this.currency += amount;
     this.persistMetaState();
     this.emitEconomyState();
-    if (reason) this.feedback(`${reason}: +${amount} coins.`);
+    if (reason) this.feedback(`${reason} · 코인 +${amount}`);
   }
 
   private canUseStage2() {
-    return this.affinity >= STAGE2_UNLOCK_AFFINITY;
+    return this.affinity >= STAGE2_UNLOCK_AFFINITY || this.stage2StoryUnlocked;
   }
 
   private canUseStage3() {
-    return this.affinity >= STAGE3_UNLOCK_AFFINITY;
+    return this.affinity >= STAGE3_UNLOCK_AFFINITY || this.stage3StoryUnlocked;
   }
 
   private normalizeStageSet(raw: StageSet): StageSet {
@@ -558,6 +564,8 @@ export class GameScene extends Phaser.Scene {
     const c = this.registry.get("meta-currency");
     const a = this.registry.get("meta-affinity");
     const inv = this.registry.get("meta-inventory");
+    const stage2Unlocked = this.registry.get("meta-stage2-unlocked");
+    const stage3Unlocked = this.registry.get("meta-stage3-unlocked");
     this.currency = Number.isFinite(c) ? Number(c) : 0;
     this.affinity = Phaser.Math.Clamp(
       Number.isFinite(a) ? Number(a) : 0,
@@ -571,11 +579,15 @@ export class GameScene extends Phaser.Scene {
         perfume: Number((inv as Record<string, unknown>).perfume) || 0,
       };
     }
+    this.stage2StoryUnlocked = Boolean(stage2Unlocked);
+    this.stage3StoryUnlocked = Boolean(stage3Unlocked);
   }
 
   private persistMetaState() {
     this.registry.set("meta-currency", this.currency);
     this.registry.set("meta-affinity", this.affinity);
     this.registry.set("meta-inventory", { ...this.inventory });
+    this.registry.set("meta-stage2-unlocked", this.stage2StoryUnlocked);
+    this.registry.set("meta-stage3-unlocked", this.stage3StoryUnlocked);
   }
 }
