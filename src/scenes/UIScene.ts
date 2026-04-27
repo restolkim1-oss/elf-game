@@ -48,7 +48,7 @@ export class UIScene extends Phaser.Scene {
   private progressCount!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private statText!: Phaser.GameObjects.Text;
-  private defaultHint =
+  private readonly defaultHint =
     "파츠를 선택하고 미니게임을 클리어해 코인과 호감도를 올려보세요.";
 
   private clearMenu: Phaser.GameObjects.Container | null = null;
@@ -70,6 +70,7 @@ export class UIScene extends Phaser.Scene {
     this.parts =
       (game.registry.get("current-parts") as PartDef[] | undefined) ??
       getPartsForStage(1);
+
     this.pills = [];
     this.clearMenu = null;
     this.shopMenu = null;
@@ -161,7 +162,7 @@ export class UIScene extends Phaser.Scene {
 
   private drawActLabel(width: number) {
     this.actLabel = this.add
-      .text(width / 2, u(8), "◆  엘린  ◆", {
+      .text(width / 2, u(8), "◆ 엘린 ◆", {
         fontFamily: "serif",
         fontSize: px(24),
         color: COLORS.textHighlight,
@@ -175,7 +176,7 @@ export class UIScene extends Phaser.Scene {
     this.progressCount = this.add
       .text(width / 2, u(46), `0 / ${this.parts.length}`, {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: px(15),
         color: COLORS.textDim,
         fontStyle: "bold",
       })
@@ -183,9 +184,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   private drawProgressPills(width: number) {
-    const pillY = u(92);
+    const pillY = u(90);
     const total = this.parts.length;
-    const spacing = Math.min((width * 0.78) / total, u(64));
+    const spacing = Math.min((width * 0.82) / Math.max(1, total), u(78));
     const startX = width / 2 - (spacing * (total - 1)) / 2;
     this.add.rectangle(width / 2, pillY, spacing * (total - 1), u(1), COLORS.gildSoft, 0.45);
 
@@ -193,27 +194,27 @@ export class UIScene extends Phaser.Scene {
       const x = startX + idx * spacing;
       const container = this.add.container(x, pillY);
       const glow = this.add
-        .circle(0, 0, u(24), 0xffd572, 0)
+        .circle(0, 0, u(28), 0xffd572, 0)
         .setStrokeStyle(u(1.5), COLORS.gildHot, 0.4);
       const ring = this.add
-        .circle(0, 0, u(18), 0x000000, 0)
+        .circle(0, 0, u(21), 0x000000, 0)
         .setStrokeStyle(u(1.2), COLORS.gild, 0.7);
       const bg = this.add
-        .circle(0, 0, u(15), COLORS.panelDeep)
+        .circle(0, 0, u(17), COLORS.panelDeep)
         .setStrokeStyle(u(1), COLORS.gild, 0.9);
       const label = this.add
         .text(0, 0, String(part.order), {
           fontFamily: "serif",
-          fontSize: px(13),
+          fontSize: px(15),
           color: COLORS.text,
           fontStyle: "bold",
         })
         .setOrigin(0.5);
       const tip = this.add
-        .text(x, pillY + u(24), part.label, {
+        .text(x, pillY + u(32), part.label, {
           fontFamily: "serif",
-          fontSize: px(10),
-          color: "#6a5540",
+          fontSize: px(12),
+          color: COLORS.textHighlight,
           fontStyle: "bold",
         })
         .setOrigin(0.5, 0);
@@ -230,13 +231,13 @@ export class UIScene extends Phaser.Scene {
       .map((p) => `${p.order}.${p.label}`)
       .join("  >  ");
 
+    this.add.rectangle(width / 2, u(128), width * 0.82, u(22), COLORS.panelDeep, 0.55).setDepth(0);
     this.add
-      .text(width / 2, u(62), orderText, {
+      .text(width / 2, u(118), orderText, {
         fontFamily: "serif",
-        fontSize: px(10),
-        color: COLORS.textDim,
+        fontSize: px(13),
+        color: COLORS.textHighlight,
         fontStyle: "bold",
-        align: "center",
       })
       .setOrigin(0.5, 0);
   }
@@ -280,26 +281,14 @@ export class UIScene extends Phaser.Scene {
       { text: "전체 해제", action: () => gs.events.emit("force-clear") },
     ];
     const gap = u(8);
-    const btnW = Math.min(
-      u(132),
-      (width - u(46) - gap * (labels.length - 1)) / labels.length
-    );
+    const btnW = Math.min(u(132), (width - u(46) - gap * (labels.length - 1)) / labels.length);
     const btnH = u(46);
     const totalW = labels.length * btnW + (labels.length - 1) * gap;
     const startX = width / 2 - totalW / 2 + btnW / 2;
     const y = height - u(92);
 
     labels.forEach((item, idx) => {
-      this.makeButton(
-        c,
-        startX + idx * (btnW + gap),
-        y,
-        btnW,
-        btnH,
-        item.text,
-        item.action,
-        px(11)
-      );
+      this.makeButton(c, startX + idx * (btnW + gap), y, btnW, btnH, item.text, item.action, px(11));
     });
   }
 
@@ -375,6 +364,7 @@ export class UIScene extends Phaser.Scene {
     if (!this.shopMenu) return;
     const old = this.shopMenu;
     this.shopMenu = null;
+    this.bottomMenu?.setVisible(true);
     this.tweens.add({
       targets: old,
       alpha: 0,
@@ -388,65 +378,144 @@ export class UIScene extends Phaser.Scene {
     const gs = this.scene.get("GameScene");
     const c = this.add.container(0, 0).setDepth(1900);
     this.shopMenu = c;
-
-    const panelW = width * 0.94;
-    const panelH = u(152);
-    const panelY = height - u(210) - panelH / 2;
-    const bg = this.add
-      .rectangle(width / 2, panelY, panelW, panelH, COLORS.panelMid, 0.98)
-      .setStrokeStyle(u(1.8), COLORS.gildHot, 0.95);
-    c.add(bg);
+    this.bottomMenu?.setVisible(false);
 
     const state = this.lastEconomy;
-    const title = this.add
-      .text(width / 2, panelY - panelH / 2 + u(12), "상점", {
-        fontFamily: "serif",
-        fontSize: px(16),
-        color: COLORS.textHighlight,
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5, 0);
-    c.add(title);
+    c.add(this.add.rectangle(width / 2, height / 2, width, height, 0x0b0612, 0.96).setInteractive());
 
-    const items = [
-      { id: "flower", name: "꽃", cost: 18, own: state?.inventory.flower ?? 0 },
-      { id: "choco", name: "초콜릿", cost: 30, own: state?.inventory.choco ?? 0 },
-      { id: "perfume", name: "향수", cost: 44, own: state?.inventory.perfume ?? 0 },
-    ] as const;
-
-    const rowW = panelW * 0.3;
-    items.forEach((item, idx) => {
-      const x = width / 2 - panelW / 2 + rowW * idx + rowW / 2 + u(8);
-      const card = this.add
-        .rectangle(x, panelY + u(18), rowW - u(10), u(90), COLORS.panelSoft, 0.95)
-        .setStrokeStyle(u(1.2), COLORS.gild, 0.8);
-      const name = this.add
-        .text(x, panelY - u(8), `${item.name}  ${item.cost}코인`, {
+    const topH = u(214);
+    c.add(this.add.rectangle(width / 2, topH / 2, width, topH, 0x2d1f1a, 0.98).setStrokeStyle(u(2), COLORS.gild, 0.8));
+    c.add(this.add.circle(width / 2, u(116), u(50), 0x6f4c35, 0.9).setStrokeStyle(u(2), COLORS.gildHot, 0.85));
+    c.add(
+      this.add
+        .text(width / 2, u(116), "상인", {
           fontFamily: "serif",
-          fontSize: px(10),
+          fontSize: px(16),
           color: COLORS.text,
           fontStyle: "bold",
         })
-        .setOrigin(0.5);
-      const own = this.add
-        .text(x, panelY + u(10), `보유 ${item.own}`, {
+        .setOrigin(0.5)
+    );
+    c.add(
+      this.add
+        .text(width / 2, u(24), "상점", {
           fontFamily: "serif",
-          fontSize: px(9),
-          color: COLORS.textDim,
+          fontSize: px(22),
+          color: COLORS.textHighlight,
           fontStyle: "bold",
         })
-        .setOrigin(0.5);
-      c.add(card);
-      c.add(name);
-      c.add(own);
+        .setOrigin(0.5, 0)
+    );
+    c.add(
+      this.add
+        .text(width / 2, u(176), `코인 ${state?.currency ?? 0}  |  호감도 ${state?.affinity ?? 0}/${state?.affinityMax ?? 100}`, {
+          fontFamily: "serif",
+          fontSize: px(13),
+          color: COLORS.text,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0.5)
+    );
 
-      this.makeButton(c, x - u(42), panelY + u(40), u(80), u(32), "구입", () => {
+    this.makeButton(c, u(88), u(36), u(146), u(44), "뒤로 가기", () => this.hideShopMenu(), px(11));
+
+    const items = [
+      { id: "flower", name: "꽃다발", icon: "🌸", cost: 18, own: state?.inventory.flower ?? 0, badge: "기본" },
+      { id: "choco", name: "초콜릿", icon: "🍫", cost: 30, own: state?.inventory.choco ?? 0, badge: "인기" },
+      { id: "perfume", name: "향수", icon: "🧴", cost: 44, own: state?.inventory.perfume ?? 0, badge: "고급" },
+      { id: "flower", name: "꽃다발 묶음", icon: "🌺", cost: 36, own: state?.inventory.flower ?? 0, badge: "20% 할인" },
+      { id: "choco", name: "초코 세트", icon: "🍬", cost: 60, own: state?.inventory.choco ?? 0, badge: "세트" },
+      { id: "perfume", name: "향수 샘플", icon: "✨", cost: 24, own: state?.inventory.perfume ?? 0, badge: "한정" },
+    ] as const;
+
+    const cols = 3;
+    const cardGap = u(10);
+    const sidePad = u(18);
+    const cardW = (width - sidePad * 2 - cardGap * (cols - 1)) / cols;
+    const cardH = u(220);
+    const startX = sidePad + cardW / 2;
+    const startY = topH + u(20) + cardH / 2;
+
+    items.forEach((item, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const x = startX + col * (cardW + cardGap);
+      const y = startY + row * (cardH + u(12));
+
+      c.add(this.add.rectangle(x, y, cardW, cardH, 0xefe1c4, 0.99).setStrokeStyle(u(2), 0x4d3a2f, 0.95));
+      c.add(
+        this.add
+          .text(x, y - cardH / 2 + u(10), item.badge, {
+            fontFamily: "serif",
+            fontSize: px(9.5),
+            color: "#8a2f2f",
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5, 0)
+      );
+      c.add(
+        this.add
+          .text(x, y - cardH / 2 + u(30), item.name, {
+            fontFamily: "serif",
+            fontSize: px(11),
+            color: "#2f2520",
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5, 0)
+      );
+      c.add(
+        this.add
+          .text(x, y - u(20), item.icon, {
+            fontFamily: "serif",
+            fontSize: px(30),
+          })
+          .setOrigin(0.5)
+      );
+      c.add(
+        this.add
+          .text(x, y + u(16), `보유 ${item.own}`, {
+            fontFamily: "serif",
+            fontSize: px(9.5),
+            color: "#4a3f34",
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5, 0.5)
+      );
+      c.add(
+        this.add
+          .text(x, y + u(38), `${item.cost} 코인`, {
+            fontFamily: "serif",
+            fontSize: px(11),
+            color: "#2f2520",
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5, 0.5)
+      );
+
+      this.makeButton(c, x, y + u(74), cardW - u(18), u(30), "구입", () => {
         gs.events.emit("buy-item", item.id);
-      }, px(9));
-      this.makeButton(c, x + u(42), panelY + u(40), u(80), u(32), "선물", () => {
-        gs.events.emit("gift-item", item.id);
-      }, px(9));
+      }, px(9.5));
     });
+
+    c.add(
+      this.add
+        .text(width / 2, height - u(104), "빠른 선물", {
+          fontFamily: "serif",
+          fontSize: px(10.5),
+          color: COLORS.textHighlight,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0.5)
+    );
+    this.makeButton(c, width / 2 - u(110), height - u(68), u(96), u(34), "꽃 선물", () => {
+      gs.events.emit("gift-item", "flower");
+    }, px(9));
+    this.makeButton(c, width / 2, height - u(68), u(96), u(34), "초코 선물", () => {
+      gs.events.emit("gift-item", "choco");
+    }, px(9));
+    this.makeButton(c, width / 2 + u(110), height - u(68), u(96), u(34), "향수 선물", () => {
+      gs.events.emit("gift-item", "perfume");
+    }, px(9));
 
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 180 });
@@ -492,9 +561,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateEconomy(state: EconomyState) {
-    this.statText.setText(
-      `코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`
-    );
+    this.statText.setText(`코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`);
     if (this.shopMenu) {
       const old = this.shopMenu;
       old.destroy();
