@@ -6,7 +6,6 @@ import { StageManager } from "../systems/StageManager";
 import { InteractionSystem } from "../systems/InteractionSystem";
 import {
   FINALE_STAGE,
-  STAGE_TIER,
   type PuzzleType,
   type StageKey,
   type StageSet,
@@ -157,11 +156,9 @@ export class GameScene extends Phaser.Scene {
             const targetKey = stageForRemoved(this.removed, this.stageSet);
             const currentKey = this.stageManager.getCurrentKey();
             if (targetKey !== currentKey) {
-              const targetTier = STAGE_TIER[targetKey];
-              const currentTier = STAGE_TIER[currentKey];
-              if (targetTier > currentTier) {
-                this.stageManager.transitionTo(targetKey);
-              }
+              // Stage variants can share the same tier (e.g. stage5/6/7 in set2),
+              // so key-difference itself should trigger a visual transition.
+              this.stageManager.transitionTo(targetKey);
             }
           }
         } else {
