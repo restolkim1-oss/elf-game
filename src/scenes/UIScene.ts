@@ -111,6 +111,7 @@ export class UIScene extends Phaser.Scene {
     game.events.on("finale", () => this.onFinale());
     game.events.on("puzzle-busy", (busy: boolean) => {
       this.puzzleBusy = busy;
+      if (busy) this.hideShopMenu();
     });
 
     this.startIdlePillPulse();
@@ -245,9 +246,14 @@ export class UIScene extends Phaser.Scene {
 
     const labels = [
       { text: "인터렉션", action: () => this.requestInteraction() },
-      { text: "미니게임", action: () => gs.events.emit("farm-minigame") },
+      {
+        text: "미니게임",
+        action: () => {
+          this.hideShopMenu();
+          gs.events.emit("farm-minigame");
+        },
+      },
       { text: "상점", action: () => this.toggleShopMenu() },
-      { text: "처음으로", action: () => gs.events.emit("switch-stage-set", 1) },
       { text: "전체 해제", action: () => gs.events.emit("force-clear") },
     ];
     const gap = u(8);
@@ -331,18 +337,27 @@ export class UIScene extends Phaser.Scene {
   }
 
   private toggleShopMenu() {
+    if (this.puzzleBusy) {
+      this.flashHint("미니게임 중에는 상점을 열 수 없습니다.", COLORS.textHighlight);
+      return;
+    }
     if (this.shopMenu) {
-      const old = this.shopMenu;
-      this.shopMenu = null;
-      this.tweens.add({
-        targets: old,
-        alpha: 0,
-        duration: 160,
-        onComplete: () => old.destroy(),
-      });
+      this.hideShopMenu();
       return;
     }
     this.drawShopMenu();
+  }
+
+  private hideShopMenu() {
+    if (!this.shopMenu) return;
+    const old = this.shopMenu;
+    this.shopMenu = null;
+    this.tweens.add({
+      targets: old,
+      alpha: 0,
+      duration: 160,
+      onComplete: () => old.destroy(),
+    });
   }
 
   private drawShopMenu() {
@@ -553,8 +568,7 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(2000);
     this.clearMenu = c;
     this.bottomMenu?.setVisible(false);
-    this.shopMenu?.destroy();
-    this.shopMenu = null;
+    this.hideShopMenu();
     this.zoomControls?.destroy();
     this.zoomControls = null;
 
@@ -587,7 +601,10 @@ export class UIScene extends Phaser.Scene {
     }, px(11));
     this.makeButton(c, rightX, row1, bw, bh, "계속 보기", () => this.closeClearMenu(), px(11));
     this.makeButton(c, leftX, row2, bw, bh, "인터렉션", () => this.requestInteraction(), px(11));
-    this.makeButton(c, rightX, row2, bw, bh, "처음으로", () => gs.events.emit("switch-stage-set", 1), px(11));
+    this.makeButton(c, rightX, row2, bw, bh, "처음으로", () => {
+      this.closeClearMenu();
+      gs.events.emit("switch-stage-set", 1);
+    }, px(11));
 
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 260 });
@@ -608,10 +625,7 @@ export class UIScene extends Phaser.Scene {
       this.zoomControls.destroy();
       this.zoomControls = null;
     }
-    if (this.shopMenu) {
-      this.shopMenu.destroy();
-      this.shopMenu = null;
-    }
+    this.hideShopMenu();
     this.scene.get("GameScene").events.emit("enter-interaction");
     this.drawInteractionControls();
     this.flashHint("캐릭터를 터치해 반응을 확인하세요.", COLORS.textHighlight);

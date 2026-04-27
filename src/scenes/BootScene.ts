@@ -9,13 +9,14 @@ import {
 export class BootScene extends Phaser.Scene {
   private readonly stage2PathByKey: Record<StageKey, string> = {
     E1: "/assets/E2.png",
+    // Stage2 art set uses fewer authored variants. Map tier-1 branches
+    // to the same conservative frame to prevent sudden multi-step jumps.
     E1_stage2: "/assets/E2_stage2.png",
-    E1_stage3: "/assets/E2_stage3.png",
-    E1_stage4: "/assets/E2_stage4.png",
-    E1_stage5: "/assets/E2_stage5.png",
-    E1_stage6: "/assets/E2_stage6.png",
-    // Fallbacks when dedicated files are not authored yet.
-    E1_stage7: "/assets/E2_stage6.png",
+    E1_stage5: "/assets/E2_stage2.png",
+    E1_stage6: "/assets/E2_stage2.png",
+    E1_stage7: "/assets/E2_stage2.png",
+    E1_stage4: "/assets/E2_stage3.png",
+    E1_stage3: "/assets/E2_stage4.png",
     E1_swim: "/assets/E2_stage6.png",
   };
   private readonly stage3PathByKey: Record<StageKey, string> = {
