@@ -57,15 +57,16 @@ export class BootScene extends Phaser.Scene {
         this.stripCheckerBackground(key);
       }
     });
-    this.alignStageSetToReference("S2_", "S2_E1");
+    this.normalizeStageSetToReference("", "E1");
+    this.normalizeStageSetToReference("S2_", "S2_E1");
     this.scene.start("GameScene");
     this.scene.launch("UIScene");
   }
 
-  // Stage2 frames were authored with slightly different trims/canvas
-  // offsets. Re-pack every S2_* texture into the same canvas and align
-  // opaque centers to the base frame so transitions never "jump".
-  private alignStageSetToReference(prefix: string, referenceKey: string) {
+  // Re-pack every stage texture into the same canvas as the reference
+  // and normalize both center + silhouette size, so transitions keep
+  // a stable character scale without visual "jumping".
+  private normalizeStageSetToReference(prefix: string, referenceKey: string) {
     if (!this.textures.exists(referenceKey)) return;
     const refSrc = this.textures.get(referenceKey).getSourceImage() as
       | (CanvasImageSource & { width: number; height: number })
@@ -87,8 +88,19 @@ export class BootScene extends Phaser.Scene {
       if (!src?.width || !src?.height) return;
 
       const bounds = this.getOpaqueBounds(src);
-      const dx = refCenterX - bounds.centerX;
-      const dy = refCenterY - bounds.centerY;
+      const hasOpaque = bounds.width > 0 && bounds.height > 0;
+      const uniformScale =
+        hasOpaque && refBounds.width > 0 && refBounds.height > 0
+          ? Math.min(refBounds.width / bounds.width, refBounds.height / bounds.height)
+          : 1;
+      const safeScale = Number.isFinite(uniformScale) && uniformScale > 0 ? uniformScale : 1;
+
+      const scaledW = src.width * safeScale;
+      const scaledH = src.height * safeScale;
+      const scaledCenterX = bounds.centerX * safeScale;
+      const scaledCenterY = bounds.centerY * safeScale;
+      const dx = refCenterX - scaledCenterX;
+      const dy = refCenterY - scaledCenterY;
 
       const canvas = document.createElement("canvas");
       canvas.width = targetW;
@@ -96,7 +108,7 @@ export class BootScene extends Phaser.Scene {
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) return;
       ctx.clearRect(0, 0, targetW, targetH);
-      ctx.drawImage(src, dx, dy);
+      ctx.drawImage(src, dx, dy, scaledW, scaledH);
 
       this.textures.remove(key);
       this.textures.addCanvas(key, canvas);
@@ -110,7 +122,7 @@ export class BootScene extends Phaser.Scene {
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return { centerX: w / 2, centerY: h / 2 };
+    if (!ctx) return { centerX: w / 2, centerY: h / 2, width: 0, height: 0 };
     ctx.drawImage(src, 0, 0);
     const data = ctx.getImageData(0, 0, w, h).data;
 
@@ -130,10 +142,14 @@ export class BootScene extends Phaser.Scene {
       }
     }
 
-    if (maxX < minX || maxY < minY) return { centerX: w / 2, centerY: h / 2 };
+    if (maxX < minX || maxY < minY) {
+      return { centerX: w / 2, centerY: h / 2, width: 0, height: 0 };
+    }
     return {
       centerX: minX + (maxX - minX + 1) / 2,
       centerY: minY + (maxY - minY + 1) / 2,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1,
     };
   }
 
