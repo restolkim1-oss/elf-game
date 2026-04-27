@@ -53,10 +53,8 @@ export class UIScene extends Phaser.Scene {
 
   private clearMenu: Phaser.GameObjects.Container | null = null;
   private shopMenu: Phaser.GameObjects.Container | null = null;
-  private interactionControls: Phaser.GameObjects.Container | null = null;
   private zoomControls: Phaser.GameObjects.Container | null = null;
   private bottomMenu: Phaser.GameObjects.Container | null = null;
-  private confirmMenu: Phaser.GameObjects.Container | null = null;
   private finaleTweens: Phaser.Tweens.Tween[] = [];
   private lastEconomy: EconomyState | null = null;
   private puzzleBusy = false;
@@ -74,10 +72,8 @@ export class UIScene extends Phaser.Scene {
     this.pills = [];
     this.clearMenu = null;
     this.shopMenu = null;
-    this.interactionControls = null;
     this.zoomControls = null;
     this.bottomMenu = null;
-    this.confirmMenu = null;
     this.finaleTweens = [];
     this.puzzleBusy = false;
 
@@ -134,10 +130,31 @@ export class UIScene extends Phaser.Scene {
 
   private drawBottomPanel(width: number, height: number) {
     const panelH = u(210);
-    this.add.rectangle(width / 2, height - panelH / 2, width, panelH, COLORS.panelMid, 0.96);
-    this.add.rectangle(width / 2, height - panelH + u(22), width, u(46), COLORS.panelDeep, 0.45);
+    this.add.rectangle(
+      width / 2,
+      height - panelH / 2,
+      width,
+      panelH,
+      COLORS.panelMid,
+      0.96
+    );
+    this.add.rectangle(
+      width / 2,
+      height - panelH + u(22),
+      width,
+      u(46),
+      COLORS.panelDeep,
+      0.45
+    );
     this.add.rectangle(width / 2, height - panelH, width, u(1), COLORS.gild, 0.9);
-    this.add.rectangle(width / 2, height - panelH - u(4), width * 0.55, u(1), COLORS.gild, 0.35);
+    this.add.rectangle(
+      width / 2,
+      height - panelH - u(4),
+      width * 0.55,
+      u(1),
+      COLORS.gild,
+      0.35
+    );
 
     this.hintText = this.add
       .text(width / 2, height - panelH + u(14), this.defaultHint, {
@@ -188,7 +205,8 @@ export class UIScene extends Phaser.Scene {
     const total = this.parts.length;
     const spacing = Math.min((width * 0.82) / Math.max(1, total), u(78));
     const startX = width / 2 - (spacing * (total - 1)) / 2;
-    this.add.rectangle(width / 2, pillY, spacing * (total - 1), u(1), COLORS.gildSoft, 0.45);
+    this.add
+      .rectangle(width / 2, pillY, spacing * (total - 1), u(1), COLORS.gildSoft, 0.45);
 
     this.parts.forEach((part, idx) => {
       const x = startX + idx * spacing;
@@ -231,7 +249,9 @@ export class UIScene extends Phaser.Scene {
       .map((p) => `${p.order}.${p.label}`)
       .join("  >  ");
 
-    this.add.rectangle(width / 2, u(128), width * 0.82, u(22), COLORS.panelDeep, 0.55).setDepth(0);
+    this.add
+      .rectangle(width / 2, u(128), width * 0.82, u(22), COLORS.panelDeep, 0.55)
+      .setDepth(0);
     this.add
       .text(width / 2, u(118), orderText, {
         fontFamily: "serif",
@@ -269,7 +289,6 @@ export class UIScene extends Phaser.Scene {
     this.bottomMenu = c;
 
     const labels = [
-      { text: "인터렉션", action: () => this.requestInteraction() },
       {
         text: "미니게임",
         action: () => {
@@ -278,74 +297,30 @@ export class UIScene extends Phaser.Scene {
         },
       },
       { text: "상점", action: () => this.toggleShopMenu() },
-      { text: "전체 해제", action: () => gs.events.emit("force-clear") },
+      { text: "올 클리어", action: () => gs.events.emit("force-clear") },
     ];
-    const gap = u(8);
-    const btnW = Math.min(u(132), (width - u(46) - gap * (labels.length - 1)) / labels.length);
+    const gap = u(10);
+    const btnW = Math.min(
+      u(170),
+      (width - u(42) - gap * (labels.length - 1)) / labels.length
+    );
     const btnH = u(46);
     const totalW = labels.length * btnW + (labels.length - 1) * gap;
     const startX = width / 2 - totalW / 2 + btnW / 2;
     const y = height - u(92);
 
     labels.forEach((item, idx) => {
-      this.makeButton(c, startX + idx * (btnW + gap), y, btnW, btnH, item.text, item.action, px(11));
+      this.makeButton(
+        c,
+        startX + idx * (btnW + gap),
+        y,
+        btnW,
+        btnH,
+        item.text,
+        item.action,
+        px(11)
+      );
     });
-  }
-
-  private requestInteraction() {
-    if (!this.puzzleBusy) {
-      this.enterInteractionMode();
-      return;
-    }
-    this.showConfirmMenu(
-      "미니게임이 진행 중입니다.\n인터렉션으로 이동할까요?",
-      () => {
-        this.scene.get("GameScene").events.emit("abort-current-puzzle");
-        this.time.delayedCall(120, () => this.enterInteractionMode());
-      }
-    );
-  }
-
-  private showConfirmMenu(message: string, onYes: () => void) {
-    if (this.confirmMenu) return;
-    const { width, height } = this.scale;
-    const c = this.add.container(0, 0).setDepth(2100);
-    this.confirmMenu = c;
-
-    const panelW = width * 0.86;
-    const panelH = u(154);
-    const panelY = height / 2;
-    const dim = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.55).setInteractive();
-    const panel = this.add
-      .rectangle(width / 2, panelY, panelW, panelH, COLORS.panelMid, 0.98)
-      .setStrokeStyle(u(2), COLORS.gildHot, 0.9);
-    const text = this.add
-      .text(width / 2, panelY - u(44), message, {
-        fontFamily: "serif",
-        fontSize: px(14),
-        color: COLORS.text,
-        fontStyle: "bold",
-        align: "center",
-      })
-      .setOrigin(0.5, 0.5);
-    c.add(dim);
-    c.add(panel);
-    c.add(text);
-
-    this.makeButton(c, width / 2 - u(86), panelY + u(44), u(140), u(40), "이동", () => {
-      this.closeConfirmMenu();
-      onYes();
-    }, px(12));
-    this.makeButton(c, width / 2 + u(86), panelY + u(44), u(140), u(40), "취소", () => {
-      this.closeConfirmMenu();
-    }, px(12));
-  }
-
-  private closeConfirmMenu() {
-    if (!this.confirmMenu) return;
-    const c = this.confirmMenu;
-    this.confirmMenu = null;
-    c.destroy();
   }
 
   private toggleShopMenu() {
@@ -381,11 +356,23 @@ export class UIScene extends Phaser.Scene {
     this.bottomMenu?.setVisible(false);
 
     const state = this.lastEconomy;
-    c.add(this.add.rectangle(width / 2, height / 2, width, height, 0x0b0612, 0.96).setInteractive());
+    c.add(
+      this.add
+        .rectangle(width / 2, height / 2, width, height, 0x0b0612, 0.96)
+        .setInteractive()
+    );
 
     const topH = u(214);
-    c.add(this.add.rectangle(width / 2, topH / 2, width, topH, 0x2d1f1a, 0.98).setStrokeStyle(u(2), COLORS.gild, 0.8));
-    c.add(this.add.circle(width / 2, u(116), u(50), 0x6f4c35, 0.9).setStrokeStyle(u(2), COLORS.gildHot, 0.85));
+    c.add(
+      this.add
+        .rectangle(width / 2, topH / 2, width, topH, 0x2d1f1a, 0.98)
+        .setStrokeStyle(u(2), COLORS.gild, 0.8)
+    );
+    c.add(
+      this.add
+        .circle(width / 2, u(116), u(50), 0x6f4c35, 0.9)
+        .setStrokeStyle(u(2), COLORS.gildHot, 0.85)
+    );
     c.add(
       this.add
         .text(width / 2, u(116), "상인", {
@@ -408,24 +395,80 @@ export class UIScene extends Phaser.Scene {
     );
     c.add(
       this.add
-        .text(width / 2, u(176), `코인 ${state?.currency ?? 0}  |  호감도 ${state?.affinity ?? 0}/${state?.affinityMax ?? 100}`, {
-          fontFamily: "serif",
-          fontSize: px(13),
-          color: COLORS.text,
-          fontStyle: "bold",
-        })
+        .text(
+          width / 2,
+          u(176),
+          `코인 ${state?.currency ?? 0}  |  호감도 ${state?.affinity ?? 0}/${state?.affinityMax ?? 100}`,
+          {
+            fontFamily: "serif",
+            fontSize: px(13),
+            color: COLORS.text,
+            fontStyle: "bold",
+          }
+        )
         .setOrigin(0.5, 0.5)
     );
 
-    this.makeButton(c, u(88), u(36), u(146), u(44), "뒤로 가기", () => this.hideShopMenu(), px(11));
+    this.makeButton(
+      c,
+      u(88),
+      u(36),
+      u(146),
+      u(44),
+      "뒤로 가기",
+      () => this.hideShopMenu(),
+      px(11)
+    );
 
     const items = [
-      { id: "flower", name: "꽃다발", icon: "🌸", cost: 18, own: state?.inventory.flower ?? 0, badge: "기본" },
-      { id: "choco", name: "초콜릿", icon: "🍫", cost: 30, own: state?.inventory.choco ?? 0, badge: "인기" },
-      { id: "perfume", name: "향수", icon: "🧴", cost: 44, own: state?.inventory.perfume ?? 0, badge: "고급" },
-      { id: "flower", name: "꽃다발 묶음", icon: "🌺", cost: 36, own: state?.inventory.flower ?? 0, badge: "20% 할인" },
-      { id: "choco", name: "초코 세트", icon: "🍬", cost: 60, own: state?.inventory.choco ?? 0, badge: "세트" },
-      { id: "perfume", name: "향수 샘플", icon: "✨", cost: 24, own: state?.inventory.perfume ?? 0, badge: "한정" },
+      {
+        id: "flower",
+        name: "꽃다발",
+        icon: "🌸",
+        cost: 18,
+        own: state?.inventory.flower ?? 0,
+        badge: "기본",
+      },
+      {
+        id: "choco",
+        name: "초콜릿",
+        icon: "🍫",
+        cost: 30,
+        own: state?.inventory.choco ?? 0,
+        badge: "인기",
+      },
+      {
+        id: "perfume",
+        name: "향수",
+        icon: "🧴",
+        cost: 44,
+        own: state?.inventory.perfume ?? 0,
+        badge: "고급",
+      },
+      {
+        id: "flower",
+        name: "꽃다발 묶음",
+        icon: "🌺",
+        cost: 36,
+        own: state?.inventory.flower ?? 0,
+        badge: "20% 할인",
+      },
+      {
+        id: "choco",
+        name: "초코 세트",
+        icon: "🍬",
+        cost: 60,
+        own: state?.inventory.choco ?? 0,
+        badge: "세트",
+      },
+      {
+        id: "perfume",
+        name: "향수 샘플",
+        icon: "✨",
+        cost: 24,
+        own: state?.inventory.perfume ?? 0,
+        badge: "한정",
+      },
     ] as const;
 
     const cols = 3;
@@ -442,7 +485,11 @@ export class UIScene extends Phaser.Scene {
       const x = startX + col * (cardW + cardGap);
       const y = startY + row * (cardH + u(12));
 
-      c.add(this.add.rectangle(x, y, cardW, cardH, 0xefe1c4, 0.99).setStrokeStyle(u(2), 0x4d3a2f, 0.95));
+      c.add(
+        this.add
+          .rectangle(x, y, cardW, cardH, 0xefe1c4, 0.99)
+          .setStrokeStyle(u(2), 0x4d3a2f, 0.95)
+      );
       c.add(
         this.add
           .text(x, y - cardH / 2 + u(10), item.badge, {
@@ -492,9 +539,18 @@ export class UIScene extends Phaser.Scene {
           .setOrigin(0.5, 0.5)
       );
 
-      this.makeButton(c, x, y + u(74), cardW - u(18), u(30), "구입", () => {
-        gs.events.emit("buy-item", item.id);
-      }, px(9.5));
+      this.makeButton(
+        c,
+        x,
+        y + u(74),
+        cardW - u(18),
+        u(30),
+        "구입",
+        () => {
+          gs.events.emit("buy-item", item.id);
+        },
+        px(9.5)
+      );
     });
 
     c.add(
@@ -507,15 +563,42 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 0.5)
     );
-    this.makeButton(c, width / 2 - u(110), height - u(68), u(96), u(34), "꽃 선물", () => {
-      gs.events.emit("gift-item", "flower");
-    }, px(9));
-    this.makeButton(c, width / 2, height - u(68), u(96), u(34), "초코 선물", () => {
-      gs.events.emit("gift-item", "choco");
-    }, px(9));
-    this.makeButton(c, width / 2 + u(110), height - u(68), u(96), u(34), "향수 선물", () => {
-      gs.events.emit("gift-item", "perfume");
-    }, px(9));
+    this.makeButton(
+      c,
+      width / 2 - u(110),
+      height - u(68),
+      u(96),
+      u(34),
+      "꽃 선물",
+      () => {
+        gs.events.emit("gift-item", "flower");
+      },
+      px(9)
+    );
+    this.makeButton(
+      c,
+      width / 2,
+      height - u(68),
+      u(96),
+      u(34),
+      "초코 선물",
+      () => {
+        gs.events.emit("gift-item", "choco");
+      },
+      px(9)
+    );
+    this.makeButton(
+      c,
+      width / 2 + u(110),
+      height - u(68),
+      u(96),
+      u(34),
+      "향수 선물",
+      () => {
+        gs.events.emit("gift-item", "perfume");
+      },
+      px(9)
+    );
 
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 180 });
@@ -561,7 +644,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateEconomy(state: EconomyState) {
-    this.statText.setText(`코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`);
+    this.statText.setText(
+      `코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`
+    );
     if (this.shopMenu) {
       const old = this.shopMenu;
       old.destroy();
@@ -686,15 +771,54 @@ export class UIScene extends Phaser.Scene {
     const rightX = width / 2 + panelW * 0.23;
     const row1 = panelY + u(8);
     const row2 = panelY + u(54);
-    this.makeButton(c, leftX, row1, bw, bh, "다음 스테이지", () => {
-      gs.events.emit("next-stage");
-    }, px(11));
-    this.makeButton(c, rightX, row1, bw, bh, "계속 보기", () => this.closeClearMenu(), px(11));
-    this.makeButton(c, leftX, row2, bw, bh, "인터렉션", () => this.requestInteraction(), px(11));
-    this.makeButton(c, rightX, row2, bw, bh, "처음으로", () => {
-      this.closeClearMenu();
-      gs.events.emit("switch-stage-set", 1);
-    }, px(11));
+    this.makeButton(
+      c,
+      leftX,
+      row1,
+      bw,
+      bh,
+      "다음 스테이지",
+      () => {
+        gs.events.emit("next-stage");
+      },
+      px(11)
+    );
+    this.makeButton(
+      c,
+      rightX,
+      row1,
+      bw,
+      bh,
+      "계속 보기",
+      () => this.closeClearMenu(),
+      px(11)
+    );
+    this.makeButton(
+      c,
+      leftX,
+      row2,
+      bw,
+      bh,
+      "올 클리어",
+      () => {
+        this.closeClearMenu();
+        gs.events.emit("force-clear");
+      },
+      px(11)
+    );
+    this.makeButton(
+      c,
+      rightX,
+      row2,
+      bw,
+      bh,
+      "처음으로",
+      () => {
+        this.closeClearMenu();
+        gs.events.emit("switch-stage-set", 1);
+      },
+      px(11)
+    );
 
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 260 });
@@ -705,39 +829,13 @@ export class UIScene extends Phaser.Scene {
     const c = this.clearMenu;
     this.clearMenu = null;
     this.bottomMenu?.setVisible(true);
-    this.tweens.add({ targets: c, alpha: 0, duration: 220, onComplete: () => c.destroy() });
+    this.tweens.add({
+      targets: c,
+      alpha: 0,
+      duration: 220,
+      onComplete: () => c.destroy(),
+    });
     this.drawZoomControls(this.scale.width, this.scale.height);
-  }
-
-  private enterInteractionMode() {
-    this.closeClearMenu();
-    if (this.zoomControls) {
-      this.zoomControls.destroy();
-      this.zoomControls = null;
-    }
-    this.hideShopMenu();
-    this.scene.get("GameScene").events.emit("enter-interaction");
-    this.drawInteractionControls();
-    this.flashHint("캐릭터를 터치해 반응을 확인하세요.", COLORS.textHighlight);
-  }
-
-  private drawInteractionControls() {
-    if (this.interactionControls) return;
-    const { width, height } = this.scale;
-    const c = this.add.container(0, 0).setDepth(1800);
-    this.interactionControls = c;
-    const y = height - u(36);
-    this.makeButton(c, width / 2 - u(88), y, u(150), u(40), "돌아가기", () => this.exitInteractionModeUi(), px(12));
-    this.makeButton(c, width / 2 + u(88), y, u(150), u(40), "다시 시작", () => this.restartGame(), px(12));
-  }
-
-  private exitInteractionModeUi() {
-    if (this.interactionControls) {
-      this.interactionControls.destroy();
-      this.interactionControls = null;
-    }
-    this.scene.get("GameScene").events.emit("exit-interaction");
-    this.flashHint("게임 모드로 돌아왔습니다.", COLORS.textHighlight);
   }
 
   private drawZoomControls(width: number, height: number) {
@@ -746,10 +844,46 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(1800);
     this.zoomControls = c;
     const y = height - u(36);
-    this.makeButton(c, width / 2 - u(132), y, u(76), u(40), "+", () => gs.events.emit("zoom-in"), px(16));
-    this.makeButton(c, width / 2 - u(44), y, u(76), u(40), "-", () => gs.events.emit("zoom-out"), px(16));
-    this.makeButton(c, width / 2 + u(44), y, u(76), u(40), "원위치", () => gs.events.emit("zoom-reset"), px(10));
-    this.makeButton(c, width / 2 + u(132), y, u(76), u(40), "재시작", () => this.restartGame(), px(10));
+    this.makeButton(
+      c,
+      width / 2 - u(132),
+      y,
+      u(76),
+      u(40),
+      "+",
+      () => gs.events.emit("zoom-in"),
+      px(16)
+    );
+    this.makeButton(
+      c,
+      width / 2 - u(44),
+      y,
+      u(76),
+      u(40),
+      "-",
+      () => gs.events.emit("zoom-out"),
+      px(16)
+    );
+    this.makeButton(
+      c,
+      width / 2 + u(44),
+      y,
+      u(76),
+      u(40),
+      "원위치",
+      () => gs.events.emit("zoom-reset"),
+      px(10)
+    );
+    this.makeButton(
+      c,
+      width / 2 + u(132),
+      y,
+      u(76),
+      u(40),
+      "재시작",
+      () => this.restartGame(),
+      px(10)
+    );
   }
 
   private restartGame() {

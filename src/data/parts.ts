@@ -140,8 +140,8 @@ const PARTS_STAGE2: PartDef[] = [
     hitbox: { x: 0.16, y: 0.13, w: 0.66, h: 0.39 },
     tint: 0x5a606f,
     order: 2,
-    stageAfter: "E1_stage2",
-    prerequisites: [],
+    stageAfter: "E1_stage6",
+    prerequisites: ["heels"],
   },
   {
     id: "stockings",
@@ -153,7 +153,7 @@ const PARTS_STAGE2: PartDef[] = [
     tint: 0x4f3f41,
     order: 3,
     stageAfter: "E1_stage4",
-    prerequisites: ["heels", "jacket"],
+    prerequisites: ["jacket"],
   },
   {
     id: "blouse",
@@ -222,7 +222,6 @@ const STAGE2_REQUIREMENTS: [StageKey, string[]][] = [
   ["E1_stage4", ["heels", "jacket", "stockings"]],
   ["E1_stage6", ["heels", "jacket"]],
   ["E1_stage5", ["heels"]],
-  ["E1_stage2", ["jacket"]],
   ["E1", []],
 ];
 
