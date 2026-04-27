@@ -95,7 +95,7 @@ export class GameScene extends Phaser.Scene {
     const origW = baseTex.width;
     const origH = baseTex.height;
     const topUi = 2 * 124 + 30;
-    const botUi = 2 * 108 + 30;
+    const botUi = 2 * 190 + 30;
     const availableH = height - topUi - botUi;
     const scale = Math.min(availableH / origH, (width * 0.78) / origW);
 
@@ -174,6 +174,7 @@ export class GameScene extends Phaser.Scene {
     this.events.on("switch-stage-set", (next: StageSet) =>
       this.switchStageSet(next)
     );
+    this.events.on("next-stage", () => this.goToNextStage());
     this.events.on("farm-minigame", () => this.startFarmMinigame());
     this.events.on("buy-item", (id: ShopItemId) => this.buyItem(id));
     this.events.on("gift-item", (id: ShopItemId) => this.giftItem(id));
@@ -399,6 +400,17 @@ export class GameScene extends Phaser.Scene {
     this.registry.set("stage-set", next);
     this.scene.restart();
     this.scene.get("UIScene").scene.restart();
+  }
+
+  private goToNextStage() {
+    if (this.stageSet === 1) {
+      this.registry.set("stage-set", 2);
+      this.scene.restart();
+      this.scene.get("UIScene").scene.restart();
+      return;
+    }
+    const next = this.stageSet === 2 ? 3 : 1;
+    this.switchStageSet(next);
   }
 
   private resetView() {
