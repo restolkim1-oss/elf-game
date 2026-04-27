@@ -744,7 +744,7 @@ export class UIScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const stageSet = this.lastEconomy?.stageSet ?? 1;
     const imageKey = stageSet === 2 ? "E2_clear" : "E1_clear";
-    const c = this.add.container(width / 2, height * 0.34).setDepth(1980);
+    const c = this.add.container(width / 2, height * 0.42).setDepth(1980);
     this.clearCelebration = c;
 
     const burst = this.add.graphics();
@@ -773,14 +773,14 @@ export class UIScene extends Phaser.Scene {
     c.add(glow);
 
     if (this.textures.exists(imageKey)) {
-      const img = this.add.image(0, u(8), imageKey).setOrigin(0.5);
-      const scale = Math.min((width * 0.48) / img.width, u(170) / img.height, 1);
+      const img = this.add.image(0, u(12), imageKey).setOrigin(0.5);
+      const scale = Math.min((width * 0.78) / img.width, (height * 0.72) / img.height);
       img.setScale(scale).setAlpha(0.96);
       c.add(img);
     }
 
     const title = this.add
-      .text(0, -u(78), "CLEAR!", {
+      .text(0, -height * 0.29, "CLEAR!", {
         fontFamily: "serif",
         fontSize: px(42),
         color: COLORS.textHighlight,
@@ -794,11 +794,11 @@ export class UIScene extends Phaser.Scene {
 
     const bubbleW = Math.min(width * 0.82, u(430));
     const bubble = this.add
-      .rectangle(0, u(88), bubbleW, u(64), 0xfff1cf, 0.94)
+      .rectangle(0, height * 0.27, bubbleW, u(64), 0xfff1cf, 0.94)
       .setStrokeStyle(u(2), COLORS.gildHot, 0.95);
     const bubbleTip = this.add.triangle(
       -bubbleW * 0.22,
-      u(125),
+      height * 0.27 + u(37),
       0,
       0,
       u(22),
@@ -809,7 +809,7 @@ export class UIScene extends Phaser.Scene {
       0.94
     );
     const message = this.add
-      .text(0, u(88), "축하해! 클리어했구나!", {
+      .text(0, height * 0.27, "축하해! 클리어했구나!", {
         fontFamily: "serif",
         fontSize: px(18),
         color: "#2e2118",
@@ -893,7 +893,7 @@ export class UIScene extends Phaser.Scene {
     this.zoomControls = null;
 
     const panelW = width * 0.94;
-    const panelH = u(170);
+    const panelH = u(190);
     const panelY = height - panelH / 2 - u(20);
     const panel = this.add
       .rectangle(width / 2, panelY, panelW, panelH, COLORS.panelMid, 0.98)
@@ -910,15 +910,15 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
     c.add(title);
 
-    const bw = panelW * 0.42;
-    const bh = u(38);
-    const leftX = width / 2 - panelW * 0.23;
-    const rightX = width / 2 + panelW * 0.23;
-    const row1 = panelY + u(8);
-    const row2 = panelY + u(54);
+    const bw = panelW * 0.7;
+    const bh = u(40);
+    const buttonX = width / 2;
+    const row1 = panelY - u(22);
+    const row2 = panelY + u(26);
+    const row3 = panelY + u(74);
     this.makeButton(
       c,
-      leftX,
+      buttonX,
       row1,
       bw,
       bh,
@@ -930,31 +930,20 @@ export class UIScene extends Phaser.Scene {
     );
     this.makeButton(
       c,
-      rightX,
-      row1,
-      bw,
-      bh,
-      "계속 보기",
-      () => this.closeClearMenu(),
-      px(11)
-    );
-    this.makeButton(
-      c,
-      leftX,
+      buttonX,
       row2,
       bw,
       bh,
-      "올 클리어",
+      "감상하기",
       () => {
-        this.closeClearMenu();
-        gs.events.emit("force-clear");
+        this.closeClearMenu(true);
       },
       px(11)
     );
     this.makeButton(
       c,
-      rightX,
-      row2,
+      buttonX,
+      row3,
       bw,
       bh,
       "처음으로",
@@ -969,24 +958,26 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: c, alpha: 1, duration: 260 });
   }
 
-  private closeClearMenu() {
+  private closeClearMenu(showViewingControls = false) {
     if (!this.clearMenu) return;
     const c = this.clearMenu;
     this.clearMenu = null;
-    this.bottomMenu?.setVisible(true);
+    this.bottomMenu?.setVisible(false);
     this.tweens.add({
       targets: c,
       alpha: 0,
       duration: 220,
       onComplete: () => c.destroy(),
     });
-    this.drawZoomControls(this.scale.width, this.scale.height);
+    if (showViewingControls) {
+      this.drawZoomControls(this.scale.width, this.scale.height);
+    }
   }
 
   private drawZoomControls(width: number, height: number) {
     if (this.zoomControls) return;
     const gs = this.scene.get("GameScene");
-    const c = this.add.container(0, 0).setDepth(1800);
+    const c = this.add.container(0, 0).setDepth(2100);
     this.zoomControls = c;
     const panelW = u(88);
     const panelH = u(292);
