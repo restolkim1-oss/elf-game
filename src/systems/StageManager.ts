@@ -10,14 +10,16 @@ export class StageManager {
     scene: Phaser.Scene,
     centerX: number,
     centerY: number,
-    scale: number
+    scale: number,
+    textureForKey?: (key: StageKey) => string
   ) {
     this.scene = scene;
     this.currentKey = STAGE_ORDER[0];
 
     STAGE_ORDER.forEach((key) => {
+      const textureKey = textureForKey ? textureForKey(key) : key;
       const img = scene.add
-        .image(centerX, centerY, key)
+        .image(centerX, centerY, textureKey)
         .setOrigin(0.5, 0.5)
         .setScale(scale)
         .setAlpha(key === this.currentKey ? 1 : 0)

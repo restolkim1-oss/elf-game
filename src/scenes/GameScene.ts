@@ -8,9 +8,23 @@ import {
   PARTS,
   FINALE_STAGE,
   STAGE_TIER,
+  type PuzzleType,
   type StageKey,
   stageForRemoved,
 } from "../data/parts";
+
+const SHOP = {
+  flower: { label: "Flower", cost: 18, affinity: 10 },
+  choco: { label: "Chocolate", cost: 30, affinity: 10 },
+  perfume: { label: "Perfume", cost: 44, affinity: 10 },
+} as const;
+type ShopItemId = keyof typeof SHOP;
+
+const AFFINITY_MAX = 100;
+const STAGE2_UNLOCK_AFFINITY = 40;
+const STAGE3_UNLOCK_AFFINITY = 100;
+
+type StageSet = 1 | 2 | 3;
 
 export class GameScene extends Phaser.Scene {
   private partSystem!: PartSystem;
@@ -18,14 +32,22 @@ export class GameScene extends Phaser.Scene {
   private progressSystem!: ProgressSystem;
   private stageManager!: StageManager;
   private interactionSystem!: InteractionSystem;
+
   private interactionActive = false;
   private interactionReturnKey: StageKey = "E1";
   private removed = new Set<string>();
   private finaleTriggered = false;
+  private puzzleBusy = false;
 
-  // Viewing mode: after the finale fades in, the player can pinch/wheel-
-  // zoom and drag-pan the main character view. Disabled during gameplay
-  // so clicks fire on parts, not the camera.
+  private stageSet: StageSet = 1;
+  private currency = 0;
+  private affinity = 0;
+  private inventory: Record<ShopItemId, number> = {
+    flower: 0,
+    choco: 0,
+    perfume: 0,
+  };
+
   private viewingMode = false;
   private activePointers: Phaser.Input.Pointer[] = [];
   private pinchStartDist = 0;
@@ -41,13 +63,15 @@ export class GameScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
 
-    // Reset per-restart state
     this.viewingMode = false;
     this.activePointers = [];
     this.isPanning = false;
     this.finaleTriggered = false;
     this.removed = new Set<string>();
     this.interactionReturnKey = "E1";
+    this.loadMetaState();
+    this.stageSet = this.normalizeStageSet(this.getConfiguredStageSet());
+    this.registry.set("stage-set", this.stageSet);
     this.cameras.main.setZoom(1);
     this.cameras.main.setScroll(0, 0);
 
@@ -65,30 +89,27 @@ export class GameScene extends Phaser.Scene {
     geomMask.invertAlpha = true;
     vignette.setMask(geomMask);
 
-    const baseTex = this.textures.get("E1").getSourceImage() as HTMLImageElement;
+    const baseTex = this.textures
+      .get(this.resolveTextureKey("E1"))
+      .getSourceImage() as HTMLImageElement;
     const origW = baseTex.width;
     const origH = baseTex.height;
-    // Account for the top UI panel (~u(124)=248px) and bottom UI panel
-    // (~u(108)=216px). The character must fit entirely BETWEEN them so
-    // the boots never overlap the bottom panel on tall mobile viewports.
-    // Leave ~60px breathing room on each side.
-    const TOP_UI = 2 * 124 + 30;    // top panel + breathing room
-    const BOT_UI = 2 * 108 + 30;    // bottom panel + breathing room
-    const availableH = height - TOP_UI - BOT_UI;
-    const scale = Math.min(
-      availableH / origH,
-      (width * 0.78) / origW
-    );
+    const topUi = 2 * 124 + 30;
+    const botUi = 2 * 108 + 30;
+    const availableH = height - topUi - botUi;
+    const scale = Math.min(availableH / origH, (width * 0.78) / origW);
 
     const characterX = width / 2;
-    // Vertically center the character inside the available band so there
-    // isn't a big empty gap above the head on tall portrait screens.
-    const characterY = TOP_UI + availableH / 2;
+    const characterY = topUi + availableH / 2;
 
-    this.stageManager = new StageManager(this, characterX, characterY, scale);
+    this.stageManager = new StageManager(
+      this,
+      characterX,
+      characterY,
+      scale,
+      (key) => this.resolveTextureKey(key)
+    );
 
-    // Pre-build the interaction layer now (dormant, alpha 0) so there's
-    // zero load delay when the player taps "인터랙션 체험" after clearing.
     this.interactionSystem = new InteractionSystem(
       this,
       characterX,
@@ -103,25 +124,21 @@ export class GameScene extends Phaser.Scene {
     );
     this.puzzleSystem = new PuzzleSystem(this);
 
-    // Track removed IDs. The current stage is derived from this set via
-    // stageForRemoved(). Tier 1 branches: stage5 (boots first) vs stage6
-    // (cape first). All other tiers are count-driven. The monotonic guard
-    // (compare TIERS not raw keys) prevents the crossfade from ever
-    // running backwards even though stage5/stage6 share a tier.
     this.partSystem.setRemovedSet(this.removed);
 
     this.partSystem.onPartLocked((part, reason) => {
-      // Forward to UIScene so the hint bar can flash the ordering rule
       this.events.emit("part-locked", { part, reason });
     });
 
     this.partSystem.onPartTargeted((part) => {
-      // Block other parts from being clicked while puzzle is active
+      if (this.puzzleBusy) return;
+      this.puzzleBusy = true;
       this.partSystem.setPuzzleActive(true);
       this.puzzleSystem.start(part, (success) => {
-        // Re-enable part clicking when puzzle ends
+        this.puzzleBusy = false;
         this.partSystem.setPuzzleActive(false);
         if (success) {
+          this.grantCoins(8 + part.difficulty * 4, `Cleared ${part.label}`);
           this.partSystem.removePart(part.id);
           this.progressSystem.advance();
           this.removed.add(part.id);
@@ -129,19 +146,14 @@ export class GameScene extends Phaser.Scene {
           if (this.progressSystem.isFinished()) {
             this.triggerFinale();
           } else {
-            // Re-evaluate on EVERY removal (not just when the part has a
-            // dedicated stageAfter image). With free order, a later
-            // removal can complete a combination that matches a richer
-            // authored image (e.g., removing skirt after boots+cape+sweater
-            // advances directly to E1_stage2). We never regress — the
-            // tier guard keeps the visual monotonic.
             const targetKey = stageForRemoved(this.removed);
             const currentKey = this.stageManager.getCurrentKey();
-            if (targetKey === currentKey) return;
-            const targetTier = STAGE_TIER[targetKey];
-            const currentTier = STAGE_TIER[currentKey];
-            if (targetTier > currentTier) {
-              this.stageManager.transitionTo(targetKey);
+            if (targetKey !== currentKey) {
+              const targetTier = STAGE_TIER[targetKey];
+              const currentTier = STAGE_TIER[currentKey];
+              if (targetTier > currentTier) {
+                this.stageManager.transitionTo(targetKey);
+              }
             }
           }
         } else {
@@ -152,36 +164,33 @@ export class GameScene extends Phaser.Scene {
 
     this.partSystem.start();
     this.events.emit("progress", this.progressSystem.getProgress());
+    this.emitEconomyState();
+    this.events.emit("stage-set", this.stageSet);
 
-    // Cross-scene request to re-center / reset zoom (fired from UIScene
-    // when the user picks "다시 하기" etc.)
     this.events.on("viewing-reset", () => this.resetView());
-
-    // Interaction-mode switches (fired from the clear menu in UIScene)
     this.events.on("enter-interaction", () => this.enterInteractionMode());
-    this.events.on("exit-interaction",  () => this.exitInteractionMode());
+    this.events.on("exit-interaction", () => this.exitInteractionMode());
     this.events.on("force-clear", () => this.forceClearAll());
+    this.events.on("switch-stage-set", (next: StageSet) =>
+      this.switchStageSet(next)
+    );
+    this.events.on("farm-minigame", () => this.startFarmMinigame());
+    this.events.on("buy-item", (id: ShopItemId) => this.buyItem(id));
+    this.events.on("gift-item", (id: ShopItemId) => this.giftItem(id));
+    this.events.on("request-economy-sync", () => this.emitEconomyState());
   }
 
-  // ---------- Interaction mode (dressed character, tap for reactions) ---
-
   private enterInteractionMode() {
-    if (this.interactionActive) return;
+    if (this.interactionActive || this.puzzleBusy) return;
     this.interactionActive = true;
     this.interactionReturnKey = this.stageManager.getCurrentKey();
     this.partSystem.setPuzzleActive(true);
     this.partSystem.setInputEnabled(false);
 
-    // Disable zoom/pan gestures and reset the camera so the reaction
-    // frames render at their designed position/scale.
     this.disableViewingMode();
     this.resetView();
-
-    // Fade out every stage image (the finale/E1_swim included) so only
-    // the interaction layer is visible.
     this.stageManager.fadeOutAll(420);
 
-    // Activate the interaction system (fade in idle1, enable tap)
     const { width, height } = this.scale;
     this.interactionSystem.enable(width, height);
   }
@@ -198,11 +207,11 @@ export class GameScene extends Phaser.Scene {
   private disableViewingMode() {
     if (!this.viewingMode) return;
     this.viewingMode = false;
-    this.input.off("wheel",           this.onWheel,       this);
-    this.input.off("pointerdown",     this.onPointerDown, this);
-    this.input.off("pointermove",     this.onPointerMove, this);
-    this.input.off("pointerup",       this.onPointerUp,   this);
-    this.input.off("pointerupoutside",this.onPointerUp,   this);
+    this.input.off("wheel", this.onWheel, this);
+    this.input.off("pointerdown", this.onPointerDown, this);
+    this.input.off("pointermove", this.onPointerMove, this);
+    this.input.off("pointerup", this.onPointerUp, this);
+    this.input.off("pointerupoutside", this.onPointerUp, this);
     this.events.off("zoom-in");
     this.events.off("zoom-out");
     this.events.off("zoom-reset");
@@ -210,14 +219,10 @@ export class GameScene extends Phaser.Scene {
     this.isPanning = false;
   }
 
-  // ---------- Viewing mode (zoom/pan after finale) ----------
-
   private enableViewingMode() {
     if (this.viewingMode) return;
     this.viewingMode = true;
-    // Two-pointer support for pinch gestures on touch devices
     this.input.addPointer(2);
-    // Tell UIScene so it can draw on-screen zoom controls
     this.events.emit("viewing-mode");
 
     this.input.on("wheel", this.onWheel, this);
@@ -226,9 +231,8 @@ export class GameScene extends Phaser.Scene {
     this.input.on("pointerup", this.onPointerUp, this);
     this.input.on("pointerupoutside", this.onPointerUp, this);
 
-    // React to UIScene zoom-button events (+ / − / ⟲ buttons)
-    this.events.on("zoom-in",    () => this.adjustZoomAt(1.25));
-    this.events.on("zoom-out",   () => this.adjustZoomAt(0.8));
+    this.events.on("zoom-in", () => this.adjustZoomAt(1.25));
+    this.events.on("zoom-out", () => this.adjustZoomAt(0.8));
     this.events.on("zoom-reset", () => this.resetView());
   }
 
@@ -239,7 +243,6 @@ export class GameScene extends Phaser.Scene {
     dy: number
   ) => {
     if (!this.viewingMode) return;
-    // Zoom toward the cursor position so the hovered area stays fixed
     const factor = dy > 0 ? 0.9 : 1.1;
     this.applyZoom(
       Phaser.Math.Clamp(this.cameras.main.zoom * factor, 1, 3.5),
@@ -258,7 +261,6 @@ export class GameScene extends Phaser.Scene {
       this.panLastX = pointer.x;
       this.panLastY = pointer.y;
     } else if (this.activePointers.length === 2) {
-      // Begin pinch — record the current gap and zoom level
       this.isPanning = false;
       const [a, b] = this.activePointers;
       this.pinchStartDist = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
@@ -275,7 +277,6 @@ export class GameScene extends Phaser.Scene {
       if (this.pinchStartDist > 0) {
         const ratio = d / this.pinchStartDist;
         const newZoom = Phaser.Math.Clamp(this.pinchStartZoom * ratio, 1, 3.5);
-        // Zoom toward the midpoint between both fingers
         const midX = (a.x + b.x) / 2;
         const midY = (a.y + b.y) / 2;
         this.applyZoom(newZoom, midX, midY);
@@ -285,10 +286,6 @@ export class GameScene extends Phaser.Scene {
       if (!p.isDown) return;
       const cam = this.cameras.main;
       if (cam.zoom <= 1.001) return;
-      // Map screen-space drag delta to world-space scroll delta.
-      // scrollX/Y define the top-left corner in world coords, so moving
-      // the pointer right (dx>0) means the world should scroll left
-      // (scrollX decreases) — the content follows the finger.
       const dx = p.x - this.panLastX;
       const dy = p.y - this.panLastY;
       cam.scrollX -= dx / cam.zoom;
@@ -305,7 +302,6 @@ export class GameScene extends Phaser.Scene {
     if (this.activePointers.length === 0) {
       this.isPanning = false;
     } else if (this.activePointers.length === 1) {
-      // Transitioning pinch → single-finger pan: reseed the anchor
       const p = this.activePointers[0];
       this.isPanning = true;
       this.panLastX = p.x;
@@ -314,7 +310,6 @@ export class GameScene extends Phaser.Scene {
     }
   };
 
-  // Zoom toward the center of the viewport (used by + / − buttons)
   private adjustZoomAt(factor: number) {
     const { width, height } = this.scale;
     this.applyZoom(
@@ -324,27 +319,18 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  // Core zoom helper: set an exact zoom level while keeping the world
-  // point under (screenX, screenY) visually anchored.
   private applyZoom(newZoom: number, screenX: number, screenY: number) {
     const cam = this.cameras.main;
     const oldZoom = cam.zoom;
     if (newZoom === oldZoom) return;
-    // World point currently under the anchor screen position
     const worldX = cam.scrollX + screenX / oldZoom;
     const worldY = cam.scrollY + screenY / oldZoom;
     cam.setZoom(newZoom);
-    // Adjust scroll so that same world point is still under the anchor
     cam.scrollX = worldX - screenX / newZoom;
     cam.scrollY = worldY - screenY / newZoom;
     this.clampScroll();
   }
 
-  // Keep the scroll within reachable bounds. At zoom=1 snap to origin.
-  // At higher zoom we allow the scroll to go slightly negative so the
-  // character's head (which sits near the top of the canvas) is reachable
-  // even after deep zoom. The extra vertical headroom is one half-viewport
-  // worth of canvas height; horizontally we add a quarter-viewport margin.
   private clampScroll() {
     const cam = this.cameras.main;
     const { width, height } = this.scale;
@@ -352,26 +338,23 @@ export class GameScene extends Phaser.Scene {
       cam.setScroll(0, 0);
       return;
     }
-    const visW = width  / cam.zoom;
+    const visW = width / cam.zoom;
     const visH = height / cam.zoom;
-    // Allow scrolling up to half a viewport ABOVE the canvas top so the
-    // head (at ~15% of canvas height) is always reachable at any zoom.
     const padV = visH * 0.5;
     const padH = visW * 0.25;
-    cam.scrollX = Phaser.Math.Clamp(cam.scrollX, -padH, width  - visW + padH);
+    cam.scrollX = Phaser.Math.Clamp(cam.scrollX, -padH, width - visW + padH);
     cam.scrollY = Phaser.Math.Clamp(cam.scrollY, -padV, height - visH + padV);
   }
 
   private forceClearAll() {
-    if (this.interactionActive) {
-      this.exitInteractionMode();
-    }
+    if (this.interactionActive) this.exitInteractionMode();
 
     for (const part of PARTS) {
       if (this.removed.has(part.id)) continue;
       this.partSystem.removePart(part.id);
       this.removed.add(part.id);
       this.progressSystem.advance();
+      this.grantCoins(5 + part.difficulty * 2);
     }
 
     this.events.emit("progress", this.progressSystem.getProgress());
@@ -392,6 +375,32 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private getConfiguredStageSet(): StageSet {
+    const raw = this.registry.get("stage-set");
+    return raw === 2 || raw === 3 ? raw : 1;
+  }
+
+  private resolveTextureKey(stageKey: StageKey): string {
+    if (this.stageSet === 2) return `S2_${stageKey}`;
+    if (this.stageSet === 3) return `S3_${stageKey}`;
+    return stageKey;
+  }
+
+  private switchStageSet(next: StageSet) {
+    if (next === 2 && !this.canUseStage2()) {
+      this.feedback(`Stage2 unlocks at affinity ${STAGE2_UNLOCK_AFFINITY}.`);
+      return;
+    }
+    if (next === 3 && !this.canUseStage3()) {
+      this.feedback("Back pose unlocks at affinity 100.");
+      return;
+    }
+    if (next === this.stageSet) return;
+    this.registry.set("stage-set", next);
+    this.scene.restart();
+    this.scene.get("UIScene").scene.restart();
+  }
+
   private resetView() {
     this.tweens.add({
       targets: this.cameras.main,
@@ -401,5 +410,160 @@ export class GameScene extends Phaser.Scene {
       duration: 280,
       ease: "Quad.easeOut",
     });
+  }
+
+  private startFarmMinigame() {
+    if (this.puzzleBusy || this.interactionActive) {
+      this.feedback("Cannot start mini-game right now.");
+      return;
+    }
+
+    this.puzzleBusy = true;
+    this.partSystem.setPuzzleActive(true);
+    const farmPart = this.createFarmPart();
+    this.feedback("Mini-game started.");
+    this.puzzleSystem.start(farmPart, (success) => {
+      this.puzzleBusy = false;
+      this.partSystem.setPuzzleActive(false);
+      if (success) {
+        this.grantCoins(10 + farmPart.difficulty * 4, "Mini-game cleared");
+      } else {
+        this.feedback("Mini-game failed.");
+      }
+    });
+  }
+
+  private createFarmPart() {
+    const pool: PuzzleType[] = ["pattern", "memory", "tetris"];
+    const puzzle = Phaser.Utils.Array.GetRandom(pool);
+    const difficulty = Phaser.Math.Between(1, 4) as 1 | 2 | 3 | 4 | 5;
+    return {
+      id: `farm_${Date.now()}`,
+      label: "Training",
+      act: PARTS[0].act,
+      puzzle,
+      difficulty,
+      hitbox: { x: 0, y: 0, w: 0, h: 0 },
+      tint: 0xffffff,
+      order: 0,
+      stageAfter: null,
+      prerequisites: [],
+    };
+  }
+
+  private buyItem(id: ShopItemId) {
+    const entry = SHOP[id];
+    if (this.currency < entry.cost) {
+      this.feedback(`Need ${entry.cost} coins for ${entry.label}.`);
+      return;
+    }
+    this.currency -= entry.cost;
+    this.inventory[id] += 1;
+    this.persistMetaState();
+    this.emitEconomyState();
+    this.feedback(`Bought ${entry.label}.`);
+  }
+
+  private giftItem(id: ShopItemId) {
+    const entry = SHOP[id];
+    if (this.inventory[id] <= 0) {
+      this.feedback(`No ${entry.label} in inventory.`);
+      return;
+    }
+    if (this.affinity >= AFFINITY_MAX) {
+      this.feedback("Affinity is already max (100).");
+      return;
+    }
+
+    const before = this.affinity;
+    this.inventory[id] -= 1;
+    this.affinity = Phaser.Math.Clamp(
+      this.affinity + entry.affinity,
+      0,
+      AFFINITY_MAX
+    );
+
+    this.persistMetaState();
+    this.emitEconomyState();
+    this.feedback(
+      `${entry.label} gifted. Affinity +${this.affinity - before} (${this.affinity}/100).`
+    );
+
+    if (before < STAGE2_UNLOCK_AFFINITY && this.affinity >= STAGE2_UNLOCK_AFFINITY) {
+      this.feedback("Stage2 pose unlocked.");
+    }
+    if (before < STAGE3_UNLOCK_AFFINITY && this.affinity >= STAGE3_UNLOCK_AFFINITY) {
+      this.feedback("Back pose unlocked.");
+    }
+  }
+
+  private grantCoins(amount: number, reason?: string) {
+    if (amount <= 0) return;
+    this.currency += amount;
+    this.persistMetaState();
+    this.emitEconomyState();
+    if (reason) this.feedback(`${reason}: +${amount} coins.`);
+  }
+
+  private canUseStage2() {
+    return this.affinity >= STAGE2_UNLOCK_AFFINITY;
+  }
+
+  private canUseStage3() {
+    return this.affinity >= STAGE3_UNLOCK_AFFINITY;
+  }
+
+  private normalizeStageSet(raw: StageSet): StageSet {
+    if (raw === 3 && !this.canUseStage3()) return this.canUseStage2() ? 2 : 1;
+    if (raw === 2 && !this.canUseStage2()) return 1;
+    return raw;
+  }
+
+  private emitEconomyState() {
+    this.events.emit("economy-update", {
+      currency: this.currency,
+      affinity: this.affinity,
+      affinityMax: AFFINITY_MAX,
+      inventory: { ...this.inventory },
+      stageSet: this.stageSet,
+      stageUnlocks: {
+        stage2: this.canUseStage2(),
+        stage3: this.canUseStage3(),
+      },
+      stageUnlockThresholds: {
+        stage2: STAGE2_UNLOCK_AFFINITY,
+        stage3: STAGE3_UNLOCK_AFFINITY,
+      },
+      shop: SHOP,
+    });
+  }
+
+  private feedback(text: string, color = "#ffd572") {
+    this.events.emit("shop-feedback", { text, color });
+  }
+
+  private loadMetaState() {
+    const c = this.registry.get("meta-currency");
+    const a = this.registry.get("meta-affinity");
+    const inv = this.registry.get("meta-inventory");
+    this.currency = Number.isFinite(c) ? Number(c) : 0;
+    this.affinity = Phaser.Math.Clamp(
+      Number.isFinite(a) ? Number(a) : 0,
+      0,
+      AFFINITY_MAX
+    );
+    if (inv && typeof inv === "object") {
+      this.inventory = {
+        flower: Number((inv as Record<string, unknown>).flower) || 0,
+        choco: Number((inv as Record<string, unknown>).choco) || 0,
+        perfume: Number((inv as Record<string, unknown>).perfume) || 0,
+      };
+    }
+  }
+
+  private persistMetaState() {
+    this.registry.set("meta-currency", this.currency);
+    this.registry.set("meta-affinity", this.affinity);
+    this.registry.set("meta-inventory", { ...this.inventory });
   }
 }

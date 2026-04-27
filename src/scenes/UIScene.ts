@@ -31,6 +31,26 @@ interface Pill {
   cleared: boolean;
 }
 
+interface EconomyState {
+  currency: number;
+  affinity: number;
+  affinityMax: number;
+  inventory: {
+    flower: number;
+    choco: number;
+    perfume: number;
+  };
+  stageSet: 1 | 2 | 3;
+  stageUnlocks: {
+    stage2: boolean;
+    stage3: boolean;
+  };
+  stageUnlockThresholds: {
+    stage2: number;
+    stage3: number;
+  };
+}
+
 export class UIScene extends Phaser.Scene {
   private pills: Pill[] = [];
   private actLabel!: Phaser.GameObjects.Text;
@@ -42,6 +62,11 @@ export class UIScene extends Phaser.Scene {
   private zoomControls: Phaser.GameObjects.Container | null = null;
   private interactionControls: Phaser.GameObjects.Container | null = null;
   private quickActions: Phaser.GameObjects.Container | null = null;
+  private economyPanel: Phaser.GameObjects.Container | null = null;
+  private coinText!: Phaser.GameObjects.Text;
+  private affinityText!: Phaser.GameObjects.Text;
+  private inventoryText!: Phaser.GameObjects.Text;
+  private stageText!: Phaser.GameObjects.Text;
 
   constructor() {
     super("UIScene");
@@ -54,6 +79,7 @@ export class UIScene extends Phaser.Scene {
     this.zoomControls = null;
     this.interactionControls = null;
     this.quickActions = null;
+    this.economyPanel = null;
     const { width, height } = this.scale;
 
     this.drawTopPanel(width);
@@ -62,6 +88,7 @@ export class UIScene extends Phaser.Scene {
     this.drawProgressPills(width);
     this.drawCornerOrnaments(width, height);
     this.drawQuickActions(width, height);
+    this.drawEconomyPanel(width);
 
     const game = this.scene.get("GameScene");
 
@@ -94,6 +121,13 @@ export class UIScene extends Phaser.Scene {
       this.drawZoomControls();
     });
 
+    game.events.on("economy-update", (state: EconomyState) => {
+      this.updateEconomyPanel(state);
+    });
+    game.events.on("shop-feedback", (payload: { text: string; color?: string }) => {
+      this.flashHint(payload.text, payload.color ?? COLORS.textHighlight);
+    });
+
     game.events.on("finale", () => {
       this.hintText.setText("◆   모든 봉인 해제   ◆");
       this.hintText.setColor(COLORS.textHighlight);
@@ -121,6 +155,7 @@ export class UIScene extends Phaser.Scene {
     });
 
     this.startIdlePillPulse();
+    game.events.emit("request-economy-sync");
   }
 
   // ---------- Decorative panels ----------
@@ -476,6 +511,138 @@ export class UIScene extends Phaser.Scene {
       gs.events.emit("force-clear");
       this.flashHint("All clear mode", COLORS.textHighlight);
     });
+    makeBtn(x, topY + u(96), btnW, btnH, "STAGE 2", () => {
+      gs.events.emit("switch-stage-set", 2);
+    });
+    makeBtn(x, topY + u(144), btnW, btnH, "STAGE 1", () => {
+      gs.events.emit("switch-stage-set", 1);
+    });
+    makeBtn(x, topY + u(192), btnW, btnH, "STAGE 3", () => {
+      gs.events.emit("switch-stage-set", 3);
+    });
+    makeBtn(x, topY + u(240), btnW, btnH, "FARM", () => {
+      gs.events.emit("farm-minigame");
+    });
+  }
+
+  private drawEconomyPanel(_width: number) {
+    if (this.economyPanel) return;
+    const gs = this.scene.get("GameScene");
+    const c = this.add.container(0, 0).setDepth(1760);
+    this.economyPanel = c;
+
+    const panelW = u(214);
+    const panelH = u(298);
+    const x = panelW / 2 + u(16);
+    const y = u(302);
+
+    const bg = this.add
+      .rectangle(x, y, panelW, panelH, COLORS.panelMid, 0.94)
+      .setStrokeStyle(u(1.5), COLORS.gild, 0.88);
+    c.add(bg);
+
+    this.coinText = this.add
+      .text(x - panelW / 2 + u(12), y - panelH / 2 + u(10), "COIN: 0", {
+        fontFamily: "serif",
+        fontSize: px(11),
+        color: COLORS.text,
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0);
+    c.add(this.coinText);
+
+    this.affinityText = this.add
+      .text(x - panelW / 2 + u(12), y - panelH / 2 + u(36), "AFF: 0 / 100", {
+        fontFamily: "serif",
+        fontSize: px(11),
+        color: COLORS.text,
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0);
+    c.add(this.affinityText);
+
+    this.stageText = this.add
+      .text(x - panelW / 2 + u(12), y - panelH / 2 + u(62), "Pose unlock: S2/S3", {
+        fontFamily: "serif",
+        fontSize: px(9),
+        color: COLORS.textDim,
+      })
+      .setOrigin(0, 0);
+    c.add(this.stageText);
+
+    this.inventoryText = this.add
+      .text(
+        x - panelW / 2 + u(12),
+        y - panelH / 2 + u(82),
+        "Inv F0 C0 P0",
+        {
+          fontFamily: "serif",
+          fontSize: px(9),
+          color: COLORS.textDim,
+        }
+      )
+      .setOrigin(0, 0);
+    c.add(this.inventoryText);
+
+    const makeBtn = (
+      bx: number,
+      by: number,
+      bw: number,
+      bh: number,
+      label: string,
+      onClick: () => void
+    ) => {
+      const btnBg = this.add
+        .rectangle(bx, by, bw, bh, COLORS.panelSoft, 0.95)
+        .setStrokeStyle(u(1.2), COLORS.gild, 0.8)
+        .setInteractive({ useHandCursor: true });
+      const btnText = this.add
+        .text(bx, by, label, {
+          fontFamily: "serif",
+          fontSize: px(8),
+          color: COLORS.text,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
+      btnBg.on("pointerdown", () => {
+        this.tweens.add({
+          targets: [btnBg, btnText],
+          scaleX: 0.94,
+          scaleY: 0.94,
+          yoyo: true,
+          duration: 90,
+          onComplete: onClick,
+        });
+      });
+      c.add(btnBg);
+      c.add(btnText);
+    };
+
+    const colL = x - panelW / 4;
+    const colR = x + panelW / 4;
+    const row0 = y - panelH / 2 + u(132);
+    const rowGap = u(42);
+    const bw = u(90);
+    const bh = u(28);
+
+    makeBtn(colL, row0, bw, bh, "BUY FLOWER", () => gs.events.emit("buy-item", "flower"));
+    makeBtn(colR, row0, bw, bh, "GIFT FLOWER", () => gs.events.emit("gift-item", "flower"));
+    makeBtn(colL, row0 + rowGap, bw, bh, "BUY CHOCO", () => gs.events.emit("buy-item", "choco"));
+    makeBtn(colR, row0 + rowGap, bw, bh, "GIFT CHOCO", () => gs.events.emit("gift-item", "choco"));
+    makeBtn(colL, row0 + rowGap * 2, bw, bh, "BUY PERFUME", () => gs.events.emit("buy-item", "perfume"));
+    makeBtn(colR, row0 + rowGap * 2, bw, bh, "GIFT PERFUME", () => gs.events.emit("gift-item", "perfume"));
+  }
+
+  private updateEconomyPanel(state: EconomyState) {
+    if (!this.economyPanel) return;
+    this.coinText.setText(`COIN: ${state.currency}`);
+    this.affinityText.setText(`AFF: ${state.affinity} / ${state.affinityMax}`);
+    this.inventoryText.setText(
+      `Inv F${state.inventory.flower} C${state.inventory.choco} P${state.inventory.perfume}`
+    );
+    const s2 = state.stageUnlocks.stage2 ? "OPEN" : `@${state.stageUnlockThresholds.stage2}`;
+    const s3 = state.stageUnlocks.stage3 ? "OPEN" : `@${state.stageUnlockThresholds.stage3}`;
+    this.stageText.setText(`Pose unlock: S2 ${s2} / S3 ${s3}`);
   }
 
   // ---------- State updates ----------

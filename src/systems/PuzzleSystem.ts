@@ -3,7 +3,7 @@ import type { PartDef } from "../data/parts";
 import { UI_SCALE } from "../main";
 
 const u = (n: number) => n * UI_SCALE;
-const px = (n: number) => `${n * UI_SCALE}px`;
+const gpx = (n: number) => `${Math.round(n * UI_SCALE * 2.2)}px`;
 
 type PuzzleResult = (success: boolean) => void;
 
@@ -74,7 +74,7 @@ export class PuzzleSystem {
     const gildedDia = this.scene.add
       .text(width / 2, height / 2 - h / 2 + u(50), "◆", {
         fontFamily: "serif",
-        fontSize: px(10),
+        fontSize: gpx(10),
         color: "#ffd572",
       })
       .setOrigin(0.5);
@@ -82,7 +82,7 @@ export class PuzzleSystem {
     const titleText = this.scene.add
       .text(width / 2, height / 2 - h / 2 + u(20), title, {
         fontFamily: "serif",
-        fontSize: px(22),
+        fontSize: gpx(22),
         color: "#f3e6c9",
         fontStyle: "bold",
       })
@@ -91,7 +91,7 @@ export class PuzzleSystem {
     const subText = this.scene.add
       .text(width / 2, height / 2 - h / 2 + u(62), subtitle, {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: gpx(13),
         color: "#d4a656",
         fontStyle: "italic",
       })
@@ -141,7 +141,7 @@ export class PuzzleSystem {
     const statusText = this.scene.add
       .text(width / 2, height / 2 - u(14), "관찰하세요...", {
         fontFamily: "serif",
-        fontSize: px(17),
+        fontSize: gpx(17),
         color: "#f3e6c9",
         fontStyle: "italic",
       })
@@ -313,7 +313,7 @@ export class PuzzleSystem {
     const status = this.scene.add
       .text(width / 2, panel.top + u(82), "지운 줄: 0 / 3", {
         fontFamily: "serif",
-        fontSize: px(14),
+        fontSize: gpx(14),
         color: "#f3e6c9",
       })
       .setOrigin(0.5, 0);
@@ -485,7 +485,7 @@ export class PuzzleSystem {
       const lbl = this.scene.add
         .text(bx, btnY, d.label, {
           fontFamily: "serif",
-          fontSize: px(20),
+          fontSize: gpx(20),
           color: "#f3e6c9",
         })
         .setOrigin(0.5);
@@ -511,7 +511,7 @@ export class PuzzleSystem {
     const dropAllBtn = this.scene.add
       .text(width / 2, btnY + u(40), "⟱  한번에 내리기", {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: gpx(13),
         color: "#d4a656",
       })
       .setOrigin(0.5, 0)
@@ -525,7 +525,7 @@ export class PuzzleSystem {
     const giveUpBtn = this.scene.add
       .text(width / 2, btnY + u(64), "포기 (실패)", {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: gpx(11),
         color: "#6a4a5a",
       })
       .setOrigin(0.5, 0)
@@ -640,7 +640,7 @@ export class PuzzleSystem {
       const backMark = this.scene.add
         .text(cx, cy, "◈", {
           fontFamily: "serif",
-          fontSize: px(Math.round(cellSize / UI_SCALE / 2.4)),
+          fontSize: gpx(Math.round(cellSize / UI_SCALE / 2.4)),
           color: "#d4a656",
         })
         .setOrigin(0.5)
@@ -650,7 +650,7 @@ export class PuzzleSystem {
       const front = this.scene.add
         .text(cx, cy, tok.symbol, {
           fontFamily: "serif",
-          fontSize: px(Math.round(cellSize / UI_SCALE / 1.8)),
+          fontSize: gpx(Math.round(cellSize / UI_SCALE / 1.8)),
           color: colorHex(tok.color),
           fontStyle: "bold",
         })
@@ -705,7 +705,7 @@ export class PuzzleSystem {
         `짝: 0 / ${pairs}   ·   기회: ${attemptBudget}`,
         {
           fontFamily: "serif",
-          fontSize: px(13),
+          fontSize: gpx(13),
           color: "#f3e6c9",
         }
       )
@@ -828,7 +828,7 @@ export class PuzzleSystem {
     const giveUpBtn = this.scene.add
       .text(width / 2, panel.bottom - u(36), "포기 (실패)", {
         fontFamily: "serif",
-        fontSize: px(12),
+        fontSize: gpx(12),
         color: "#6a4a5a",
       })
       .setOrigin(0.5)

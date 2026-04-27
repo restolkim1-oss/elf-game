@@ -3,9 +3,32 @@ import {
   STAGE_ORDER,
   INTERACTION_ORDER,
   INTERACTION_ASSET_PATHS,
+  type StageKey,
 } from "../data/parts";
 
 export class BootScene extends Phaser.Scene {
+  private readonly stage2PathByKey: Record<StageKey, string> = {
+    E1: "/assets/E2.png",
+    E1_stage2: "/assets/E2_stage2.png",
+    E1_stage3: "/assets/E2_stage3.png",
+    E1_stage4: "/assets/E2_stage4.png",
+    E1_stage5: "/assets/E2_stage5.png",
+    E1_stage6: "/assets/E2_stage6.png",
+    // Fallbacks when dedicated files are not authored yet.
+    E1_stage7: "/assets/E2_stage6.png",
+    E1_swim: "/assets/E2_stage6.png",
+  };
+  private readonly stage3PathByKey: Record<StageKey, string> = {
+    E1: "/assets/E3.png",
+    E1_stage2: "/assets/E3.png",
+    E1_stage3: "/assets/E3.png",
+    E1_stage4: "/assets/E3.png",
+    E1_stage5: "/assets/E3.png",
+    E1_stage6: "/assets/E3.png",
+    E1_stage7: "/assets/E3.png",
+    E1_swim: "/assets/E3.png",
+  };
+
   constructor() {
     super("BootScene");
   }
@@ -13,6 +36,8 @@ export class BootScene extends Phaser.Scene {
   preload() {
     STAGE_ORDER.forEach((key) => {
       this.load.image(key, `/assets/${key}.png`);
+      this.load.image(`S2_${key}`, this.stage2PathByKey[key]);
+      this.load.image(`S3_${key}`, this.stage3PathByKey[key]);
     });
     INTERACTION_ORDER.forEach((key) => {
       this.load.image(key, INTERACTION_ASSET_PATHS[key]);
