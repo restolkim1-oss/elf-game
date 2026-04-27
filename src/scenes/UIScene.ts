@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { PARTS } from "../data/parts";
+import { type PartDef, getPartsForStage } from "../data/parts";
 import { UI_SCALE } from "../main";
 
 const COLORS = {
@@ -42,6 +42,7 @@ interface EconomyState {
 }
 
 export class UIScene extends Phaser.Scene {
+  private parts: PartDef[] = [];
   private pills: Pill[] = [];
   private actLabel!: Phaser.GameObjects.Text;
   private progressCount!: Phaser.GameObjects.Text;
@@ -65,6 +66,10 @@ export class UIScene extends Phaser.Scene {
   }
 
   create() {
+    const game = this.scene.get("GameScene");
+    this.parts =
+      (game.registry.get("current-parts") as PartDef[] | undefined) ??
+      getPartsForStage(1);
     this.pills = [];
     this.clearMenu = null;
     this.shopMenu = null;
@@ -84,11 +89,10 @@ export class UIScene extends Phaser.Scene {
     this.drawCornerOrnaments(width, height);
     this.drawBottomMenu(width, height);
 
-    const game = this.scene.get("GameScene");
     game.events.on("progress", (progress: { current: number; total: number }) => {
       this.updateAct(progress.current, progress.total);
     });
-    game.events.on("part-removed", (part: (typeof PARTS)[number]) => {
+    game.events.on("part-removed", (part: PartDef) => {
       this.markCleared(part.id);
       this.flashHint(`${part.label} 해제 완료`, COLORS.success);
     });
@@ -97,7 +101,7 @@ export class UIScene extends Phaser.Scene {
     });
     game.events.on(
       "part-locked",
-      (payload: { part: (typeof PARTS)[number]; reason: string }) => {
+      (payload: { part: PartDef; reason: string }) => {
         this.flashHint(payload.reason || "잠금 상태입니다.", COLORS.textHighlight);
       }
     );
@@ -169,7 +173,7 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(width / 2 + u(96), u(28), u(60), u(1), COLORS.gildSoft, 0.55);
 
     this.progressCount = this.add
-      .text(width / 2, u(46), `0 / ${PARTS.length}`, {
+      .text(width / 2, u(46), `0 / ${this.parts.length}`, {
         fontFamily: "serif",
         fontSize: px(13),
         color: COLORS.textDim,
@@ -180,12 +184,12 @@ export class UIScene extends Phaser.Scene {
 
   private drawProgressPills(width: number) {
     const pillY = u(92);
-    const total = PARTS.length;
+    const total = this.parts.length;
     const spacing = Math.min((width * 0.78) / total, u(64));
     const startX = width / 2 - (spacing * (total - 1)) / 2;
     this.add.rectangle(width / 2, pillY, spacing * (total - 1), u(1), COLORS.gildSoft, 0.45);
 
-    PARTS.forEach((part, idx) => {
+    this.parts.forEach((part, idx) => {
       const x = startX + idx * spacing;
       const container = this.add.container(x, pillY);
       const glow = this.add
@@ -220,7 +224,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private drawRemovalOrder(width: number) {
-    const orderText = PARTS
+    const orderText = this.parts
       .slice()
       .sort((a, b) => a.order - b.order)
       .map((p) => `${p.order}.${p.label}`)
@@ -500,7 +504,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private markCleared(partId: string) {
-    const idx = PARTS.findIndex((p) => p.id === partId);
+    const idx = this.parts.findIndex((p) => p.id === partId);
     if (idx < 0) return;
     const pill = this.pills[idx];
     if (pill.cleared) return;

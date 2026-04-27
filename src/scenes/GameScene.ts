@@ -5,11 +5,13 @@ import { ProgressSystem } from "../systems/ProgressSystem";
 import { StageManager } from "../systems/StageManager";
 import { InteractionSystem } from "../systems/InteractionSystem";
 import {
-  PARTS,
   FINALE_STAGE,
   STAGE_TIER,
   type PuzzleType,
   type StageKey,
+  type StageSet,
+  type PartDef,
+  getPartsForStage,
   stageForRemoved,
 } from "../data/parts";
 
@@ -24,14 +26,13 @@ const AFFINITY_MAX = 100;
 const STAGE2_UNLOCK_AFFINITY = 40;
 const STAGE3_UNLOCK_AFFINITY = 100;
 
-type StageSet = 1 | 2 | 3;
-
 export class GameScene extends Phaser.Scene {
   private partSystem!: PartSystem;
   private puzzleSystem!: PuzzleSystem;
   private progressSystem!: ProgressSystem;
   private stageManager!: StageManager;
   private interactionSystem!: InteractionSystem;
+  private parts: PartDef[] = [];
 
   private interactionActive = false;
   private interactionReturnKey: StageKey = "E1";
@@ -74,7 +75,9 @@ export class GameScene extends Phaser.Scene {
     this.interactionReturnKey = "E1";
     this.loadMetaState();
     this.stageSet = this.normalizeStageSet(this.getConfiguredStageSet());
+    this.parts = getPartsForStage(this.stageSet);
     this.registry.set("stage-set", this.stageSet);
+    this.registry.set("current-parts", this.parts);
     this.cameras.main.setZoom(1);
     this.cameras.main.setScroll(0, 0);
 
@@ -121,8 +124,8 @@ export class GameScene extends Phaser.Scene {
     );
     this.interactionActive = false;
 
-    this.progressSystem = new ProgressSystem(PARTS.length);
-    this.partSystem = new PartSystem(this, PARTS, () =>
+    this.progressSystem = new ProgressSystem(this.parts.length);
+    this.partSystem = new PartSystem(this, this.parts, () =>
       this.stageManager.getDisplayBounds()
     );
     this.puzzleSystem = new PuzzleSystem(this);
@@ -151,7 +154,7 @@ export class GameScene extends Phaser.Scene {
           if (this.progressSystem.isFinished()) {
             this.triggerFinale();
           } else {
-            const targetKey = stageForRemoved(this.removed);
+            const targetKey = stageForRemoved(this.removed, this.stageSet);
             const currentKey = this.stageManager.getCurrentKey();
             if (targetKey !== currentKey) {
               const targetTier = STAGE_TIER[targetKey];
@@ -362,7 +365,7 @@ export class GameScene extends Phaser.Scene {
   private forceClearAll() {
     if (this.interactionActive) this.exitInteractionMode();
 
-    for (const part of PARTS) {
+    for (const part of this.parts) {
       if (this.removed.has(part.id)) continue;
       this.partSystem.removePart(part.id);
       this.removed.add(part.id);
@@ -486,7 +489,7 @@ export class GameScene extends Phaser.Scene {
     return {
       id: `farm_${Date.now()}`,
       label: "훈련",
-      act: PARTS[0].act,
+      act: this.parts[0]?.act ?? "기",
       puzzle,
       difficulty,
       hitbox: { x: 0, y: 0, w: 0, h: 0 },

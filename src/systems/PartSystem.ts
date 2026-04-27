@@ -1,6 +1,5 @@
 import Phaser from "phaser";
 import type { PartDef } from "../data/parts";
-import { isPartUnlocked, lockReason } from "../data/parts";
 import { UI_SCALE } from "../main";
 
 const u = (n: number) => n * UI_SCALE;
@@ -169,7 +168,7 @@ export class PartSystem {
             repeat: 2,
             onComplete: () => v.lockIcon.setX(cx),
           });
-          this.lockedCb?.(part, lockReason(part.id, this.removed));
+          this.lockedCb?.(part, this.lockReason(part.id));
           return;
         }
         this.targetedCb?.(part);
@@ -199,7 +198,7 @@ export class PartSystem {
       if (this.removed.has(part.id)) return;
       const v = this.visuals.get(part.id);
       if (!v) return;
-      const unlocked = isPartUnlocked(part.id, this.removed);
+      const unlocked = this.isPartUnlocked(part.id);
       v.locked = !unlocked;
       this.applyRestingStyle(part.id);
     });
@@ -207,6 +206,26 @@ export class PartSystem {
 
   setRemovedSet(removed: Set<string>) {
     this.removed = removed;
+  }
+
+  private getPart(partId: string): PartDef | undefined {
+    return this.parts.find((p) => p.id === partId);
+  }
+
+  private isPartUnlocked(partId: string): boolean {
+    const part = this.getPart(partId);
+    if (!part) return false;
+    if (this.removed.has(partId)) return false;
+    return part.prerequisites.every((id) => this.removed.has(id));
+  }
+
+  private lockReason(partId: string): string {
+    const part = this.getPart(partId);
+    if (!part) return "";
+    const missing = part.prerequisites.filter((id) => !this.removed.has(id));
+    if (missing.length === 0) return "";
+    const labels = missing.map((id) => this.getPart(id)?.label ?? id);
+    return `먼저 ${labels.join(" > ")} 해제가 필요합니다.`;
   }
 
   private applyRestingStyle(id: string) {

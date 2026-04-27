@@ -15,8 +15,8 @@ export class BootScene extends Phaser.Scene {
     // - stage6: outer jacket off
     // - stage7: top off
     E1_stage2: "/assets/E2_stage2.png",
-    E1_stage5: "/assets/E2_stage3.png",
-    E1_stage6: "/assets/E2_stage2.png",
+    E1_stage5: "/assets/E2_stage_boots.png",
+    E1_stage6: "/assets/E2_stage3.png",
     E1_stage7: "/assets/E2_stage5.png",
     E1_stage4: "/assets/E2_stage4.png",
     E1_stage3: "/assets/E2_stage5.png",

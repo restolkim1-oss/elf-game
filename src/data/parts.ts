@@ -1,4 +1,6 @@
 export type PuzzleType = "instant" | "pattern" | "tetris" | "memory";
+export type StoryAct = "기" | "승" | "전" | "결";
+export type StageSet = 1 | 2 | 3;
 
 export type StageKey =
   | "E1"
@@ -13,26 +15,16 @@ export type StageKey =
 export interface PartDef {
   id: string;
   label: string;
-  act: "기" | "승" | "전" | "결";
+  act: StoryAct;
   puzzle: PuzzleType;
   difficulty: 1 | 2 | 3 | 4 | 5;
   hitbox: { x: number; y: number; w: number; h: number };
   tint: number;
   order: number;
-  // Stage image to crossfade to when THIS specific part is cleared. Players
-  // can pick any part in any order; the visual always matches the part they
-  // just removed. `null` keeps the current visual (belt has no dedicated
-  // image).
   stageAfter: StageKey | null;
-  // Prerequisite part IDs. Currently empty on every part — players may
-  // remove parts in any order. Kept as an array so a future locking
-  // rule can be turned on per-part without refactoring.
   prerequisites: string[];
 }
 
-// All stage assets we preload. ORDER DOES NOT MATTER for picking the
-// active image — use STAGE_TIER below for that. This array is just a
-// convenient list for BootScene.preload().
 export const STAGE_ORDER: StageKey[] = [
   "E1",
   "E1_stage5",
@@ -44,9 +36,6 @@ export const STAGE_ORDER: StageKey[] = [
   "E1_swim",
 ];
 
-// Post-clear interaction mode: clicking the character cycles through
-// reaction frames (idle → surprise → heart loop → idle). These assets
-// share the same character pose/center so we can swap them via alpha.
 export const INTERACTION_ORDER = [
   "ani_idle0",
   "ani_idle1",
@@ -66,14 +55,6 @@ export const INTERACTION_ASSET_PATHS: Record<InteractionKey, string> = {
   ani_heart2: "/assets/ani/Heart2.png",
 };
 
-// Tier = how many "stage-advancing" parts have been removed at the time
-// this image is the correct one to show. Tier 1 has FOUR branching
-// images — one dedicated image per possible first-removal choice:
-//  - stage5 when the first removed part is boots
-//  - stage6 when the first removed part is cape
-//  - stage7 when the first removed part is sweater
-//  - stage2 when the first removed part is skirt (bottom-only swimsuit)
-// Tiers 2+ always converge regardless of which order the player chose.
 export const STAGE_TIER: Record<StageKey, number> = {
   E1: 0,
   E1_stage5: 1,
@@ -85,42 +66,187 @@ export const STAGE_TIER: Record<StageKey, number> = {
   E1_swim: 4,
 };
 
-// Each authored stage image maps to the exact SET of removed parts it
-// depicts. To pick the best image for any in-progress state, we match
-// the largest subset of the player's removed set against these
-// requirements. This lets the player remove parts in any order — when
-// the combination matches an authored image, the visual advances;
-// otherwise it stays on the last-best image (and the part still counts
-// as removed in the progress UI).
-// NOTE: E1_stage2 was re-authored to depict "skirt-off, everything else
-// on" — the bottom-only swimsuit state. It's now the tier-1 image for
-// a skirt-first removal, symmetric with stage5/6/7.
-const STAGE_REQUIREMENTS: [StageKey, string[]][] = [
-  ["E1_swim",   ["boots", "cape", "sweater", "skirt"]],
+const PARTS_STAGE1: PartDef[] = [
+  {
+    id: "boots",
+    label: "신발",
+    act: "기",
+    puzzle: "pattern",
+    difficulty: 1,
+    hitbox: { x: 0.22, y: 0.66, w: 0.56, h: 0.32 },
+    tint: 0x8b2f39,
+    order: 1,
+    stageAfter: "E1_stage5",
+    prerequisites: [],
+  },
+  {
+    id: "cape",
+    label: "자켓",
+    act: "승",
+    puzzle: "memory",
+    difficulty: 2,
+    hitbox: { x: 0.0, y: 0.1, w: 0.16, h: 0.78 },
+    tint: 0xd43a2f,
+    order: 2,
+    stageAfter: "E1_stage4",
+    prerequisites: [],
+  },
+  {
+    id: "sweater",
+    label: "상의",
+    act: "전",
+    puzzle: "pattern",
+    difficulty: 3,
+    hitbox: { x: 0.17, y: 0.09, w: 0.66, h: 0.33 },
+    tint: 0xe5b968,
+    order: 3,
+    stageAfter: "E1_stage3",
+    prerequisites: ["boots", "cape"],
+  },
+  {
+    id: "skirt",
+    label: "치마",
+    act: "결",
+    puzzle: "tetris",
+    difficulty: 4,
+    hitbox: { x: 0.22, y: 0.43, w: 0.56, h: 0.22 },
+    tint: 0x5c3d2e,
+    order: 4,
+    stageAfter: null,
+    prerequisites: ["boots", "cape", "sweater"],
+  },
+];
+
+// Stage 2 has more authored image steps, so we expand it to 5 parts.
+const PARTS_STAGE2: PartDef[] = [
+  {
+    id: "heels",
+    label: "신발",
+    act: "기",
+    puzzle: "pattern",
+    difficulty: 1,
+    hitbox: { x: 0.28, y: 0.79, w: 0.46, h: 0.18 },
+    tint: 0x845b3c,
+    order: 1,
+    stageAfter: "E1_stage5",
+    prerequisites: [],
+  },
+  {
+    id: "jacket",
+    label: "자켓",
+    act: "승",
+    puzzle: "memory",
+    difficulty: 2,
+    hitbox: { x: 0.16, y: 0.13, w: 0.66, h: 0.39 },
+    tint: 0x5a606f,
+    order: 2,
+    stageAfter: "E1_stage2",
+    prerequisites: [],
+  },
+  {
+    id: "stockings",
+    label: "스타킹",
+    act: "전",
+    puzzle: "pattern",
+    difficulty: 2,
+    hitbox: { x: 0.27, y: 0.54, w: 0.48, h: 0.36 },
+    tint: 0x4f3f41,
+    order: 3,
+    stageAfter: "E1_stage4",
+    prerequisites: ["heels", "jacket"],
+  },
+  {
+    id: "blouse",
+    label: "상의",
+    act: "전",
+    puzzle: "memory",
+    difficulty: 3,
+    hitbox: { x: 0.25, y: 0.18, w: 0.48, h: 0.27 },
+    tint: 0xc8c9ce,
+    order: 4,
+    stageAfter: "E1_stage3",
+    prerequisites: ["stockings"],
+  },
+  {
+    id: "skirt",
+    label: "치마",
+    act: "결",
+    puzzle: "tetris",
+    difficulty: 4,
+    hitbox: { x: 0.25, y: 0.43, w: 0.5, h: 0.23 },
+    tint: 0x5c3d2e,
+    order: 5,
+    stageAfter: "E1_swim",
+    prerequisites: ["blouse"],
+  },
+];
+
+// Stage 3 currently has one visual, so we keep stage-1 part layout.
+const PARTS_STAGE3: PartDef[] = PARTS_STAGE1;
+
+const PARTS_BY_STAGE: Record<StageSet, PartDef[]> = {
+  1: PARTS_STAGE1,
+  2: PARTS_STAGE2,
+  3: PARTS_STAGE3,
+};
+
+function cloneParts(parts: PartDef[]): PartDef[] {
+  return parts.map((p) => ({
+    ...p,
+    hitbox: { ...p.hitbox },
+    prerequisites: [...p.prerequisites],
+  }));
+}
+
+export function getPartsForStage(stageSet: StageSet): PartDef[] {
+  return cloneParts(PARTS_BY_STAGE[stageSet]);
+}
+
+// Kept for legacy imports; stage-specific flows should use getPartsForStage.
+export const PARTS: PartDef[] = getPartsForStage(1);
+
+const STAGE1_REQUIREMENTS: [StageKey, string[]][] = [
+  ["E1_swim", ["boots", "cape", "sweater", "skirt"]],
   ["E1_stage3", ["boots", "cape", "sweater"]],
   ["E1_stage4", ["boots", "cape"]],
   ["E1_stage5", ["boots"]],
   ["E1_stage6", ["cape"]],
   ["E1_stage7", ["sweater"]],
   ["E1_stage2", ["skirt"]],
-  ["E1",        []],
+  ["E1", []],
 ];
 
-// Pick the authored stage image whose requirement set is a subset of
-// the player's removed set and has the MOST matching elements. Ties
-// break by higher tier (never regress once we're deeper in the scene).
-export function stageForRemoved(removedIds: Set<string>): StageKey {
+const STAGE2_REQUIREMENTS: [StageKey, string[]][] = [
+  ["E1_swim", ["heels", "jacket", "stockings", "blouse", "skirt"]],
+  ["E1_stage3", ["heels", "jacket", "stockings", "blouse"]],
+  ["E1_stage4", ["heels", "jacket", "stockings"]],
+  ["E1_stage6", ["heels", "jacket"]],
+  ["E1_stage5", ["heels"]],
+  ["E1_stage2", ["jacket"]],
+  ["E1", []],
+];
+
+const STAGE3_REQUIREMENTS: [StageKey, string[]][] = STAGE1_REQUIREMENTS;
+
+const STAGE_REQUIREMENTS_BY_STAGE: Record<StageSet, [StageKey, string[]][]> = {
+  1: STAGE1_REQUIREMENTS,
+  2: STAGE2_REQUIREMENTS,
+  3: STAGE3_REQUIREMENTS,
+};
+
+export function stageForRemoved(
+  removedIds: Set<string>,
+  stageSet: StageSet = 1
+): StageKey {
+  const table = STAGE_REQUIREMENTS_BY_STAGE[stageSet];
   let best: StageKey = "E1";
   let bestCount = -1;
   let bestTier = -1;
 
-  for (const [key, reqs] of STAGE_REQUIREMENTS) {
+  for (const [key, reqs] of table) {
     if (!reqs.every((id) => removedIds.has(id))) continue;
     const tier = STAGE_TIER[key];
-    if (
-      reqs.length > bestCount ||
-      (reqs.length === bestCount && tier > bestTier)
-    ) {
+    if (reqs.length > bestCount || (reqs.length === bestCount && tier > bestTier)) {
       best = key;
       bestCount = reqs.length;
       bestTier = tier;
@@ -129,106 +255,4 @@ export function stageForRemoved(removedIds: Set<string>): StageKey {
   return best;
 }
 
-export const PARTS: PartDef[] = [
-  {
-    id: "boots",
-    label: "니하이 부츠",
-    act: "기",
-    puzzle: "pattern",
-    difficulty: 1,
-    // Knee-high boots span from the knee down to the feet — keep fully
-    // inside its vertical band so it doesn't steal skirt clicks.
-    hitbox: { x: 0.22, y: 0.66, w: 0.56, h: 0.32 },
-    // Bright burgundy/maroon for high contrast
-    tint: 0x8b2f39,
-    order: 1,
-    stageAfter: "E1_stage5",
-    // 부츠는 코트와 함께 1순위 — 자유 선택
-    prerequisites: [],
-  },
-  {
-    id: "cape",
-    label: "빨간 코트",
-    act: "승",
-    puzzle: "memory",
-    difficulty: 2,
-    // Red coat drapes on the LEFT side — narrow strip so it doesn't
-    // overlap the sweater/turtleneck click area in the shoulder region.
-    hitbox: { x: 0.0, y: 0.10, w: 0.16, h: 0.78 },
-    // Bright scarlet red (이미지와 구분되는 명확한 빨강)
-    tint: 0xd43a2f,
-    order: 2,
-    stageAfter: "E1_stage4",
-    // 코트는 부츠와 함께 1순위 — 자유 선택
-    prerequisites: [],
-  },
-  {
-    id: "sweater",
-    label: "터틀넥",
-    act: "승",
-    puzzle: "pattern",
-    difficulty: 3,
-    // Turtleneck covers the upper torso, starting AFTER the cape strip
-    // (x=0.16) and ending above the belt band (y=0.42). No overlaps.
-    hitbox: { x: 0.17, y: 0.09, w: 0.66, h: 0.33 },
-    // Golden ochre (더 밝고 구별되는 노란색)
-    tint: 0xe5b968,
-    order: 3,
-    stageAfter: "E1_stage3",
-    // 외투 2개가 먼저 벗겨져야 함 — E1_stage7(터틀넥 단독 이미지)은
-    // 현재 사용되지 않지만 나중에 자유 순서로 돌아갈 때를 대비해 유지.
-    prerequisites: ["boots", "cape"],
-  },
-  {
-    // Belt was merged into skirt — there's no dedicated belt image and
-    // asking the player to solve two separate minigames for the same
-    // waist region was redundant. One tetris puzzle now removes both at
-    // once; the hitbox spans from the belt band all the way to the skirt
-    // hem.
-    id: "skirt",
-    label: "벨트 & 스커트",
-    act: "결",
-    puzzle: "tetris",
-    difficulty: 4,
-    // Belt band (y≈0.43) through skirt hem (y≈0.65).
-    hitbox: { x: 0.22, y: 0.43, w: 0.56, h: 0.22 },
-    // Rich chocolate brown
-    tint: 0x5c3d2e,
-    order: 4,
-    // skirt는 마지막 단계 — 벗기면 finale(E1_swim)로 넘어감.
-    // E1_stage2(하의만 수영복)는 자유 순서일 때 쓰이지만 현재는 미사용.
-    stageAfter: null,
-    prerequisites: ["boots", "cape", "sweater"],
-  },
-];
-
 export const FINALE_STAGE: StageKey = "E1_swim";
-
-// A part is clickable iff every prerequisite has been removed AND it
-// hasn't been removed itself. GameScene uses this to block the puzzle
-// from starting on a locked part; PartSystem uses it to dim the marker.
-export function isPartUnlocked(
-  partId: string,
-  removedIds: Set<string>
-): boolean {
-  const part = PARTS.find((p) => p.id === partId);
-  if (!part) return false;
-  if (removedIds.has(partId)) return false;
-  return part.prerequisites.every((id) => removedIds.has(id));
-}
-
-// Human-readable list of what still needs to come off first. Empty string
-// means no prerequisites remaining — the part is ready.
-export function lockReason(
-  partId: string,
-  removedIds: Set<string>
-): string {
-  const part = PARTS.find((p) => p.id === partId);
-  if (!part) return "";
-  const missing = part.prerequisites.filter((id) => !removedIds.has(id));
-  if (missing.length === 0) return "";
-  const labels = missing.map(
-    (id) => PARTS.find((p) => p.id === id)?.label ?? id
-  );
-  return `먼저 ${labels.join(" · ")} 해제 필요`;
-}
