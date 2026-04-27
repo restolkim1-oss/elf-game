@@ -57,8 +57,84 @@ export class BootScene extends Phaser.Scene {
         this.stripCheckerBackground(key);
       }
     });
+    this.alignStageSetToReference("S2_", "S2_E1");
     this.scene.start("GameScene");
     this.scene.launch("UIScene");
+  }
+
+  // Stage2 frames were authored with slightly different trims/canvas
+  // offsets. Re-pack every S2_* texture into the same canvas and align
+  // opaque centers to the base frame so transitions never "jump".
+  private alignStageSetToReference(prefix: string, referenceKey: string) {
+    if (!this.textures.exists(referenceKey)) return;
+    const refSrc = this.textures.get(referenceKey).getSourceImage() as
+      | (CanvasImageSource & { width: number; height: number })
+      | undefined;
+    if (!refSrc?.width || !refSrc?.height) return;
+
+    const refBounds = this.getOpaqueBounds(refSrc);
+    const refCenterX = refBounds.centerX;
+    const refCenterY = refBounds.centerY;
+    const targetW = refSrc.width;
+    const targetH = refSrc.height;
+
+    STAGE_ORDER.forEach((stageKey) => {
+      const key = `${prefix}${stageKey}`;
+      if (!this.textures.exists(key)) return;
+      const src = this.textures.get(key).getSourceImage() as
+        | (CanvasImageSource & { width: number; height: number })
+        | undefined;
+      if (!src?.width || !src?.height) return;
+
+      const bounds = this.getOpaqueBounds(src);
+      const dx = refCenterX - bounds.centerX;
+      const dy = refCenterY - bounds.centerY;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.clearRect(0, 0, targetW, targetH);
+      ctx.drawImage(src, dx, dy);
+
+      this.textures.remove(key);
+      this.textures.addCanvas(key, canvas);
+    });
+  }
+
+  private getOpaqueBounds(src: CanvasImageSource & { width: number; height: number }) {
+    const w = src.width;
+    const h = src.height;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return { centerX: w / 2, centerY: h / 2 };
+    ctx.drawImage(src, 0, 0);
+    const data = ctx.getImageData(0, 0, w, h).data;
+
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const a = data[(y * w + x) * 4 + 3];
+        if (a <= 5) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (maxX < minX || maxY < minY) return { centerX: w / 2, centerY: h / 2 };
+    return {
+      centerX: minX + (maxX - minX + 1) / 2,
+      centerY: minY + (maxY - minY + 1) / 2,
+    };
   }
 
   // Peek the four corner pixels. If ANY corner is already fully

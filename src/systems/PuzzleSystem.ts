@@ -104,7 +104,8 @@ export class PuzzleSystem {
       .setOrigin(0.5, 0);
 
     this.overlay = this.scene.add.container(0, 0, [shadow, bg, inner, line, titleText, subtitleText]).setDepth(500);
-    return { w, h, top, bottom };
+    const contentTop = subtitleText.y + subtitleText.displayHeight + u(18);
+    return { w, h, top, bottom, contentTop };
   }
 
   private addCancelButton(y: number) {
@@ -422,7 +423,7 @@ export class PuzzleSystem {
     );
     const boardW = cell * cols + gap * (cols - 1);
     const boardLeft = width / 2 - boardW / 2;
-    const boardTop = panel.top + u(118);
+    const boardTop = panel.contentTop + u(34);
     const symbols = ["◆", "★", "♥", "✦", "❖", "☽"];
     const colors = [0xe74c3c, 0xf1c40f, 0x3498db, 0x2ecc71, 0xaf7ac5, 0xe67e22];
     const tokens = shuffleInPlace(
@@ -485,13 +486,13 @@ export class PuzzleSystem {
     const attemptBudget = pairs + Math.max(2, Math.floor(pairs * 0.75));
 
     const status = this.scene.add
-      .text(width / 2, panel.top + u(88), `짝 0 / ${pairs}  |  기회 ${attemptBudget}`, {
+      .text(width / 2, panel.contentTop, `짝 0 / ${pairs}  |  기회 ${attemptBudget}`, {
         fontFamily: "serif",
         fontSize: gpx(13),
         color: "#f3e6c9",
         fontStyle: "bold",
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5, 0);
     this.overlay?.add(status);
 
     const updateStatus = () => {
