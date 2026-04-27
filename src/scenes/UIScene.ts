@@ -821,33 +821,6 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5);
     c.add(title);
 
-    const bubbleW = Math.min(width * 0.82, u(430));
-    const bubble = this.add
-      .rectangle(0, height * 0.27, bubbleW, u(64), 0xfff1cf, 0.94)
-      .setStrokeStyle(u(2), COLORS.gildHot, 0.95);
-    const bubbleTip = this.add.triangle(
-      -bubbleW * 0.22,
-      height * 0.27 + u(37),
-      0,
-      0,
-      u(22),
-      0,
-      u(8),
-      u(22),
-      0xfff1cf,
-      0.94
-    );
-    const message = this.add
-      .text(0, height * 0.27, "축하해! 클리어했구나!", {
-        fontFamily: "serif",
-        fontSize: px(18),
-        color: "#2e2118",
-        fontStyle: "bold",
-        align: "center",
-      })
-      .setOrigin(0.5);
-    c.add([bubble, bubbleTip, message]);
-
     for (let i = 0; i < 18; i++) {
       const sparkle = this.add
         .star(
