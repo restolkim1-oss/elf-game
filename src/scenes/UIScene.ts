@@ -80,6 +80,7 @@ export class UIScene extends Phaser.Scene {
     this.drawBottomPanel(width, height);
     this.drawActLabel(width);
     this.drawProgressPills(width);
+    this.drawRemovalOrder(width);
     this.drawCornerOrnaments(width, height);
     this.drawBottomMenu(width, height);
 
@@ -216,6 +217,24 @@ export class UIScene extends Phaser.Scene {
       container.add([glow, ring, bg, label]);
       this.pills.push({ container, bg, label, ring, glow, tip, cleared: false });
     });
+  }
+
+  private drawRemovalOrder(width: number) {
+    const orderText = PARTS
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((p) => `${p.order}.${p.label}`)
+      .join("  >  ");
+
+    this.add
+      .text(width / 2, u(62), orderText, {
+        fontFamily: "serif",
+        fontSize: px(10),
+        color: COLORS.textDim,
+        fontStyle: "bold",
+        align: "center",
+      })
+      .setOrigin(0.5, 0);
   }
 
   private drawCornerOrnaments(width: number, height: number) {
