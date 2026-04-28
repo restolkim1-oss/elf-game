@@ -209,12 +209,12 @@ export class UIScene extends Phaser.Scene {
     const gaugeW = u(210);
     const gaugeH = u(22);
     const x = width - gaugeW / 2 - u(24);
-    const y = u(28);
+    const y = u(72);
     this.add
-      .rectangle(x, y, gaugeW + u(24), u(58), COLORS.panelDeep, 0.72)
+      .rectangle(x, y, gaugeW + u(28), u(72), COLORS.panelDeep, 0.72)
       .setStrokeStyle(u(1.5), COLORS.gildHot, 0.78);
     this.add
-      .text(x, y - u(22), "호감도", {
+      .text(x, y - u(24), "호감도", {
         fontFamily: "serif",
         fontSize: px(13),
         color: COLORS.textHighlight,
@@ -222,15 +222,15 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .rectangle(x, y + u(6), gaugeW, gaugeH, COLORS.panelSoft, 0.96)
+      .rectangle(x, y + u(12), gaugeW, gaugeH, COLORS.panelSoft, 0.96)
       .setStrokeStyle(u(1.2), COLORS.gild, 0.8);
     this.affinityGaugeFill = this.add
-      .rectangle(x - gaugeW / 2, y + u(6), 1, gaugeH - u(4), 0xff8fab, 0.95)
+      .rectangle(x - gaugeW / 2, y + u(12), 1, gaugeH - u(4), 0xff8fab, 0.95)
       .setOrigin(0, 0.5);
     this.affinityGaugeText = this.add
-      .text(x, y + u(6), "0 / 100", {
+      .text(x, y - u(1), "0 / 100", {
         fontFamily: "serif",
-        fontSize: px(12),
+        fontSize: px(12.5),
         color: "#ffffff",
         fontStyle: "bold",
       })
