@@ -221,6 +221,7 @@ export class CardBattleSystem {
   private deck: TarotCardState[] = [];
   private hand: TarotCardState[] = [];
   private discard: TarotCardState[] = [];
+  private selectedCards: TarotCardState[] = [];
   private intentPattern: Intent[] = [];
   private intentIdx = 0;
   private enemyStunned = false;
@@ -241,6 +242,7 @@ export class CardBattleSystem {
   private logText!: Phaser.GameObjects.Text;
   private handObjs: HandCard[] = [];
   private endTurnBg!: Phaser.GameObjects.Rectangle;
+  private useCardsBg!: Phaser.GameObjects.Rectangle;
 
   private handAreaY = 0;
   private handAreaWidth = 0;
@@ -294,6 +296,7 @@ export class CardBattleSystem {
     this.deck = [];
     this.hand = [];
     this.discard = [];
+    this.selectedCards = [];
   }
 
   private startBattle(part: PartDef) {
@@ -324,6 +327,7 @@ export class CardBattleSystem {
     this.deck = shuffle(STARTER_DECK.map((cardId) => this.createTarotCard(cardId)));
     this.hand = [];
     this.discard = [];
+    this.selectedCards = [];
     this.intentPattern = buildIntentPattern(part.difficulty);
     this.intentIdx = 0;
     this.enemyStunned = false;
@@ -521,6 +525,14 @@ export class CardBattleSystem {
       "턴 종료",
       () => this.endPlayerTurn()
     );
+    this.useCardsBg = this.makeButton(
+      width / 2,
+      btnY,
+      u(180),
+      u(46),
+      "카드 사용",
+      () => this.playSelectedCards()
+    );
     this.makeButton(u(110), btnY, u(160), u(46), "포기", () => {
       this.cancelled = true;
       this.finish(false);
@@ -537,6 +549,7 @@ export class CardBattleSystem {
     if (this.finished) return;
     this.player.block = 0;
     this.energy = ENERGY_MAX;
+    this.selectedCards = [];
     this.draw(DRAW_PER_TURN);
     this.refreshAll();
   }
@@ -626,12 +639,44 @@ export class CardBattleSystem {
     const card = this.hand[handIdx];
     if (!card) return;
     const def = CARDS[card.cardId];
-    if (this.energy < def.cost) {
-      this.flashLog(`기력 부족 (${def.cost} 필요)`);
+    const selected = this.selectedCards.includes(card);
+    if (selected) {
+      this.selectedCards = this.selectedCards.filter((c) => c !== card);
+      this.refreshAll();
       return;
     }
-    const comboCards = this.collectPlayableCombo(handIdx);
-    const comboCost = comboCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    if (this.selectedCards.length > 0) {
+      const role = CARDS[this.selectedCards[0].cardId].role;
+      if (def.role !== role) {
+        this.selectedCards = [card];
+        this.flashLog(`${def.roleLabel} 카드 선택`);
+        this.refreshAll();
+        return;
+      }
+    }
+    const nextCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0) + def.cost;
+    if (nextCost > this.energy) {
+      this.flashLog(`기력 부족 (${nextCost} / ${this.energy})`);
+      return;
+    }
+    this.selectedCards.push(card);
+    this.flashLog(`${def.roleLabel} ${this.selectedCards.length}장 선택`);
+    this.refreshAll();
+  }
+
+  private playSelectedCards() {
+    if (this.busy || this.finished) return;
+    if (this.selectedCards.length === 0) {
+      this.flashLog("사용할 카드를 선택하세요");
+      return;
+    }
+    const comboCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    if (comboCost > this.energy) {
+      this.flashLog(`기력 부족 (${comboCost} / ${this.energy})`);
+      return;
+    }
+    const comboCards = [...this.selectedCards];
+    this.selectedCards = [];
     this.energy -= comboCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
     this.discard.push(...comboCards);
@@ -642,6 +687,10 @@ export class CardBattleSystem {
       this.busy = true;
       this.scene.time.delayedCall(420, () => this.finish(true));
       return;
+    }
+    if (this.energy <= 0) {
+      this.flashLog("기력을 모두 사용해 턴 종료");
+      this.scene.time.delayedCall(360, () => this.endPlayerTurn());
     }
   }
 
@@ -699,23 +748,6 @@ export class CardBattleSystem {
     if (duel.didWin || !attemptedAttack) this.flashLog(`${def.roleLabel}${comboBonusText} 사용`);
   }
 
-  private collectPlayableCombo(handIdx: number) {
-    const first = this.hand[handIdx];
-    if (!first) return [];
-    const role = CARDS[first.cardId].role;
-    const combo = [first];
-    let cost = CARDS[first.cardId].cost;
-    for (const card of this.hand) {
-      if (card === first) continue;
-      const def = CARDS[card.cardId];
-      if (def.role !== role) continue;
-      if (cost + def.cost > this.energy) continue;
-      combo.push(card);
-      cost += def.cost;
-    }
-    return combo;
-  }
-
   private sumComboEffect(cards: TarotCardState[]) {
     return cards.reduce((sum, card) => {
       const effect = CARDS[card.cardId].effects[0];
@@ -764,15 +796,6 @@ export class CardBattleSystem {
       damage,
       risk: Math.max(1, Math.ceil(damage * 0.5)),
     };
-  }
-
-  private toggleCardReverse(uid: number) {
-    if (this.busy || this.finished) return;
-    const card = this.hand.find((c) => c.uid === uid);
-    if (!card) return;
-    card.isReversed = !card.isReversed;
-    this.flashLog(card.isReversed ? "카드 역방향 선택" : "카드 정방향 선택");
-    this.refreshHandRender();
   }
 
   private rollDiceAfterHit(baseDamage: number) {
@@ -860,7 +883,8 @@ export class CardBattleSystem {
     if (this.player.weaken) playerParts.push(`약화 -${this.player.weaken.amount}`);
     this.playerStatusText.setText(playerParts.join("  ·  "));
 
-    this.energyText.setText(`기력 ${this.energy} / ${ENERGY_MAX}`);
+    const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    this.energyText.setText(`기력 ${this.energy} / ${ENERGY_MAX}${selectedCost > 0 ? ` · 선택 ${selectedCost}` : ""}`);
     this.turnText.setText(`턴 ${this.turn} / ${MAX_TURNS}`);
     this.deckCountText.setText(`덱 ${this.deck.length} · 버림 ${this.discard.length}`);
   }
@@ -898,11 +922,17 @@ export class CardBattleSystem {
     cardH: number
   ): HandCard {
     const def = CARDS[card.cardId];
-    const playable = this.energy >= def.cost && !this.busy && !this.finished;
+    const selected = this.selectedCards.includes(card);
+    const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    const sameRole =
+      this.selectedCards.length === 0 ||
+      CARDS[this.selectedCards[0].cardId].role === def.role ||
+      selected;
+    const playable = sameRole && selectedCost + (selected ? 0 : def.cost) <= this.energy && !this.busy && !this.finished;
 
     const bg = this.scene.add
-      .rectangle(0, 0, cardW, cardH, playable ? 0xf3e6c9 : 0x6a5d4e, playable ? 1 : 0.85)
-      .setStrokeStyle(u(2), def.color, playable ? 1 : 0.6)
+      .rectangle(0, 0, cardW, cardH, selected ? 0xffedb2 : playable ? 0xf3e6c9 : 0x6a5d4e, playable ? 1 : 0.85)
+      .setStrokeStyle(u(selected ? 4 : 2), selected ? 0xffd572 : def.color, playable ? 1 : 0.6)
       .setInteractive({ useHandCursor: true });
     const accent = this.scene.add.rectangle(0, -cardH / 2 + u(10), cardW, u(20), def.color, 0.92);
     const costCircle = this.scene.add
@@ -917,9 +947,9 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const nameText = this.scene.add
-      .text(0, -cardH / 2 + u(10), `Lv.${card.level} ${def.characterName}`, {
+      .text(0, -cardH / 2 + u(10), def.roleLabel, {
         fontFamily: "serif",
-        fontSize: px(10),
+        fontSize: px(12),
         color: "#1a0f22",
         fontStyle: "bold",
       })
@@ -936,7 +966,7 @@ export class CardBattleSystem {
       .rectangle(0, -cardH / 2 + u(50), cardW - u(18), u(46), 0x24182f, 0.22)
       .setStrokeStyle(u(1), def.color, 0.65);
     const roleText = this.scene.add
-      .text(0, -cardH / 2 + u(42), def.roleLabel, {
+      .text(0, -cardH / 2 + u(42), def.name, {
         fontFamily: "serif",
         fontSize: px(11),
         color: "#4b3545",
@@ -952,7 +982,7 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const descText = this.scene.add
-      .text(0, u(32), `${def.description}\n같은 ${def.roleLabel} 카드 자동 합체`, {
+      .text(0, u(32), `${def.description}\n선택해서 같은 역할 합체`, {
         fontFamily: "serif",
         fontSize: px(9.2),
         color: playable ? "#2f2520" : "#cfc0b0",
@@ -976,7 +1006,7 @@ export class CardBattleSystem {
         descText,
       ])
       .setSize(cardW, cardH);
-    if (card.isReversed) container.setAngle(180);
+    if (selected) container.setY(y - u(16));
     this.overlay?.add(container);
 
     bg.on("pointerover", () => {
@@ -998,19 +1028,7 @@ export class CardBattleSystem {
         duration: 140,
       });
     });
-    let downX = 0;
-    let downY = 0;
-    bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      downX = pointer.x;
-      downY = pointer.y;
-    });
-    bg.on("pointerup", (pointer: Phaser.Input.Pointer, _localX: number, localY: number) => {
-      const dragged = Math.abs(pointer.x - downX) + Math.abs(pointer.y - downY) > u(28);
-      const clickedFlipZone = localY < -cardH / 2 + u(36);
-      if (dragged || clickedFlipZone) {
-        this.toggleCardReverse(card.uid);
-        return;
-      }
+    bg.on("pointerup", () => {
       const idx = this.handObjs.findIndex((o) => o === slot);
       if (idx >= 0) this.tryPlayCard(idx);
     });
@@ -1030,6 +1048,7 @@ export class CardBattleSystem {
   private refreshButtons() {
     const canEnd = !this.busy && !this.finished;
     this.endTurnBg.setFillStyle(0x2a1a34, canEnd ? 0.96 : 0.5);
+    this.useCardsBg.setFillStyle(0x2a1a34, canEnd && this.selectedCards.length > 0 ? 0.96 : 0.5);
   }
 
   private flashLog(text: string) {
