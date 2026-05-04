@@ -34,6 +34,8 @@ type CardEffect =
 
 interface CardDef {
   id: CardId;
+  characterName: string;
+  role: string;
   name: string;
   cost: number;
   description: string;
@@ -89,6 +91,8 @@ function calculateCardPower(card: Pick<CardDef, "level" | "attack" | "defense" |
 const CARDS: Record<CardId, CardDef> = {
   slash: {
     id: "slash",
+    characterName: "엘리",
+    role: "밸런스형 기사",
     name: "베기",
     cost: 1,
     description: "공격 4",
@@ -104,6 +108,8 @@ const CARDS: Record<CardId, CardDef> = {
   },
   smash: {
     id: "smash",
+    characterName: "나느사스",
+    role: "강공격형 기사",
     name: "강타",
     cost: 2,
     description: "공격 9",
@@ -119,6 +125,8 @@ const CARDS: Record<CardId, CardDef> = {
   },
   guard: {
     id: "guard",
+    characterName: "아리아",
+    role: "수호형 기사",
     name: "방패",
     cost: 1,
     description: "보호막 5",
@@ -134,6 +142,8 @@ const CARDS: Record<CardId, CardDef> = {
   },
   heal: {
     id: "heal",
+    characterName: "루미아",
+    role: "회복형 기사",
     name: "회복",
     cost: 2,
     description: "HP +5",
@@ -149,6 +159,8 @@ const CARDS: Record<CardId, CardDef> = {
   },
   shock: {
     id: "shock",
+    characterName: "세리아",
+    role: "번개형 기사",
     name: "번개",
     cost: 3,
     description: "공격 6 · 적 행동 무력화",
@@ -164,6 +176,8 @@ const CARDS: Record<CardId, CardDef> = {
   },
   burn: {
     id: "burn",
+    characterName: "이그니스",
+    role: "화염형 기사",
     name: "화염",
     cost: 2,
     description: "2턴 화상 (턴당 3)",
@@ -179,6 +193,8 @@ const CARDS: Record<CardId, CardDef> = {
   },
   freeze: {
     id: "freeze",
+    characterName: "프레이나",
+    role: "빙결형 기사",
     name: "빙결",
     cost: 2,
     description: "공격 3 · 적 공격 -3",
@@ -197,6 +213,8 @@ const CARDS: Record<CardId, CardDef> = {
   },
   focus: {
     id: "focus",
+    characterName: "미르",
+    role: "전략형 기사",
     name: "집중",
     cost: 1,
     description: "카드 2장 드로우",
@@ -926,7 +944,7 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const nameText = this.scene.add
-      .text(0, -cardH / 2 + u(10), `Lv.${card.level} ${def.name}`, {
+      .text(0, -cardH / 2 + u(10), `Lv.${card.level} ${def.characterName}`, {
         fontFamily: "serif",
         fontSize: px(10),
         color: "#1a0f22",
@@ -944,6 +962,14 @@ export class CardBattleSystem {
     const portrait = this.scene.add
       .rectangle(0, -cardH / 2 + u(50), cardW - u(18), u(46), 0x24182f, 0.22)
       .setStrokeStyle(u(1), def.color, 0.65);
+    const roleText = this.scene.add
+      .text(0, -cardH / 2 + u(42), def.role, {
+        fontFamily: "serif",
+        fontSize: px(8.5),
+        color: "#4b3545",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
     const powerText = this.scene.add
       .text(0, -cardH / 2 + u(50), `전투력 ${card.power}`, {
         fontFamily: "serif",
@@ -981,6 +1007,7 @@ export class CardBattleSystem {
         nameText,
         reverseBadge,
         portrait,
+        roleText,
         powerText,
         statsText,
         descText,

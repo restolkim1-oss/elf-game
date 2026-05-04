@@ -18,8 +18,6 @@ interface PartVisual {
   rect: Phaser.GameObjects.Rectangle;
   marker: Phaser.GameObjects.Arc;
   markerRing: Phaser.GameObjects.Arc;
-  labelBg: Phaser.GameObjects.Rectangle;
-  labelText: Phaser.GameObjects.Text;
   lockIcon: Phaser.GameObjects.Text;
   pulse: Phaser.Tweens.Tween | null;
   ringPulse: Phaser.Tweens.Tween | null;
@@ -76,13 +74,9 @@ export class PartSystem {
         this.scene.tweens.killTweensOf(v.rect);
         this.scene.tweens.killTweensOf(v.marker);
         this.scene.tweens.killTweensOf(v.markerRing);
-        this.scene.tweens.killTweensOf(v.labelBg);
-        this.scene.tweens.killTweensOf(v.labelText);
         v.rect.setAlpha(0);
         v.marker.setAlpha(0);
         v.markerRing.setAlpha(0);
-        v.labelBg.setAlpha(0);
-        v.labelText.setAlpha(0);
         v.lockIcon.setAlpha(0);
       }
     });
@@ -114,21 +108,6 @@ export class PartSystem {
       const marker = this.scene.add
         .circle(cx, cy, u(12), 0xffd572, 0.9)
         .setDepth(161 + idx);
-
-      const labelY = cy - touchH / 2 - u(18);
-      const labelBg = this.scene.add
-        .rectangle(cx, labelY, u(116), u(34), 0x14091a, 0.86)
-        .setStrokeStyle(u(1.5), 0xffd572, 0.85)
-        .setDepth(162 + idx);
-      const labelText = this.scene.add
-        .text(cx, labelY, `${part.order}. ${part.label}`, {
-          fontFamily: "serif",
-          fontSize: `${u(14)}px`,
-          color: "#ffd572",
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5)
-        .setDepth(163 + idx);
 
       const lockIcon = this.scene.add
         .text(cx, cy, "✕", {
@@ -201,8 +180,6 @@ export class PartSystem {
         rect,
         marker,
         markerRing,
-        labelBg,
-        labelText,
         lockIcon,
         pulse: null,
         ringPulse: null,
@@ -260,8 +237,6 @@ export class PartSystem {
     if (!this.inputEnabled) return;
     this.scene.tweens.killTweensOf(v.marker);
     this.scene.tweens.killTweensOf(v.markerRing);
-    this.scene.tweens.killTweensOf(v.labelBg);
-    this.scene.tweens.killTweensOf(v.labelText);
     this.scene.tweens.killTweensOf(v.lockIcon);
     if (v.pulse) {
       v.pulse.stop();
@@ -278,8 +253,6 @@ export class PartSystem {
       v.marker.setScale(0.85);
       v.markerRing.setStrokeStyle(u(2), 0x6a5540, 0.45);
       v.markerRing.setScale(1);
-      v.labelBg.setAlpha(0.58);
-      v.labelText.setAlpha(0.66);
       v.lockIcon.setAlpha(0.55);
     } else {
       // Available: bright gold, pulsing ring
@@ -287,8 +260,6 @@ export class PartSystem {
       v.marker.setScale(1);
       v.markerRing.setStrokeStyle(u(3), 0xffd572, 0.78);
       v.markerRing.setScale(1);
-      v.labelBg.setAlpha(0.9);
-      v.labelText.setAlpha(1);
       v.lockIcon.setAlpha(0);
       v.pulse = this.scene.tweens.add({
         targets: v.marker,
@@ -368,19 +339,15 @@ export class PartSystem {
       v.rect.disableInteractive();
       this.scene.tweens.killTweensOf(v.marker);
       this.scene.tweens.killTweensOf(v.markerRing);
-      this.scene.tweens.killTweensOf(v.labelBg);
-      this.scene.tweens.killTweensOf(v.labelText);
       this.scene.tweens.killTweensOf(v.lockIcon);
       this.scene.tweens.add({
-        targets: [v.rect, v.marker, v.markerRing, v.labelBg, v.labelText, v.lockIcon],
+        targets: [v.rect, v.marker, v.markerRing, v.lockIcon],
         alpha: 0,
         duration: 320,
         onComplete: () => {
           v.rect.destroy();
           v.marker.destroy();
           v.markerRing.destroy();
-          v.labelBg.destroy();
-          v.labelText.destroy();
           v.lockIcon.destroy();
           if (v.pulse) v.pulse.stop();
           if (v.ringPulse) v.ringPulse.stop();
