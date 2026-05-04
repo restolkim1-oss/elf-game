@@ -40,6 +40,10 @@ interface CardDef {
   effects: CardEffect[];
   color: number;
   isReversed: boolean;
+  level: number;
+  attack: number;
+  defense: number;
+  psyche: number;
   damage: number;
   risk: number;
 }
@@ -48,6 +52,11 @@ interface TarotCardState {
   uid: number;
   cardId: CardId;
   isReversed: boolean;
+  level: number;
+  attack: number;
+  defense: number;
+  psyche: number;
+  power: number;
   damage: number;
   risk: number;
 }
@@ -73,6 +82,10 @@ export function calculateDamage(playerCard: TarotBattleCard, enemyCard: TarotBat
   };
 }
 
+function calculateCardPower(card: Pick<CardDef, "level" | "attack" | "defense" | "psyche">) {
+  return card.level * 5 + card.attack * 2 + card.defense + card.psyche;
+}
+
 const CARDS: Record<CardId, CardDef> = {
   slash: {
     id: "slash",
@@ -82,6 +95,10 @@ const CARDS: Record<CardId, CardDef> = {
     effects: [{ kind: "attack", amount: 4 }],
     color: 0xc04040,
     isReversed: false,
+    level: 1,
+    attack: 8,
+    defense: 3,
+    psyche: 3,
     damage: 4,
     risk: 4,
   },
@@ -93,6 +110,10 @@ const CARDS: Record<CardId, CardDef> = {
     effects: [{ kind: "attack", amount: 9 }],
     color: 0xa02020,
     isReversed: false,
+    level: 2,
+    attack: 13,
+    defense: 4,
+    psyche: 4,
     damage: 9,
     risk: 6,
   },
@@ -104,6 +125,10 @@ const CARDS: Record<CardId, CardDef> = {
     effects: [{ kind: "block", amount: 5 }],
     color: 0x4060c0,
     isReversed: false,
+    level: 1,
+    attack: 3,
+    defense: 10,
+    psyche: 4,
     damage: 2,
     risk: 3,
   },
@@ -115,6 +140,10 @@ const CARDS: Record<CardId, CardDef> = {
     effects: [{ kind: "heal", amount: 5 }],
     color: 0x40c060,
     isReversed: false,
+    level: 1,
+    attack: 4,
+    defense: 5,
+    psyche: 8,
     damage: 1,
     risk: 3,
   },
@@ -126,6 +155,10 @@ const CARDS: Record<CardId, CardDef> = {
     effects: [{ kind: "attack", amount: 6 }, { kind: "stun" }],
     color: 0xf0d040,
     isReversed: false,
+    level: 3,
+    attack: 11,
+    defense: 4,
+    psyche: 10,
     damage: 6,
     risk: 8,
   },
@@ -137,6 +170,10 @@ const CARDS: Record<CardId, CardDef> = {
     effects: [{ kind: "burn", amount: 3, turns: 2 }],
     color: 0xe06030,
     isReversed: false,
+    level: 2,
+    attack: 9,
+    defense: 3,
+    psyche: 8,
     damage: 5,
     risk: 5,
   },
@@ -151,6 +188,10 @@ const CARDS: Record<CardId, CardDef> = {
     ],
     color: 0x70c0f0,
     isReversed: false,
+    level: 2,
+    attack: 7,
+    defense: 6,
+    psyche: 9,
     damage: 3,
     risk: 4,
   },
@@ -162,6 +203,10 @@ const CARDS: Record<CardId, CardDef> = {
     effects: [{ kind: "draw", amount: 2 }],
     color: 0xc0a060,
     isReversed: false,
+    level: 1,
+    attack: 4,
+    defense: 4,
+    psyche: 12,
     damage: 1,
     risk: 2,
   },
@@ -705,18 +750,24 @@ export class CardBattleSystem {
 
   private createTarotCard(cardId: CardId): TarotCardState {
     const def = CARDS[cardId];
+    const power = calculateCardPower(def);
     return {
       uid: this.nextCardUid++,
       cardId,
       isReversed: def.isReversed,
-      damage: def.damage,
-      risk: def.risk,
+      level: def.level,
+      attack: def.attack,
+      defense: def.defense,
+      psyche: def.psyche,
+      power,
+      damage: Math.max(1, Math.round(power / 5)),
+      risk: Math.max(def.risk, Math.round((power - def.defense) / 7)),
     };
   }
 
   private currentEnemyCard(): TarotBattleCard {
     const intent = this.intentPattern[this.intentIdx % this.intentPattern.length];
-    const damage = intent.kind === "attack" ? intent.amount : Math.max(1, Math.ceil(intent.amount * 0.6));
+    const damage = intent.kind === "attack" ? intent.amount * 3 : Math.max(1, Math.ceil(intent.amount * 1.8));
     return {
       isReversed: false,
       damage,
@@ -875,9 +926,9 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const nameText = this.scene.add
-      .text(0, -cardH / 2 + u(10), def.name, {
+      .text(0, -cardH / 2 + u(10), `Lv.${card.level} ${def.name}`, {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(10),
         color: "#1a0f22",
         fontStyle: "bold",
       })
@@ -890,10 +941,30 @@ export class CardBattleSystem {
         fontStyle: "bold",
       })
       .setOrigin(0.5);
-    const descText = this.scene.add
-      .text(0, u(8), `${def.description}\n${card.isReversed ? "역방향: 승리 x2.5 / 실패 리스크" : "상단 클릭 또는 드래그: 반전"}`, {
+    const portrait = this.scene.add
+      .rectangle(0, -cardH / 2 + u(50), cardW - u(18), u(46), 0x24182f, 0.22)
+      .setStrokeStyle(u(1), def.color, 0.65);
+    const powerText = this.scene.add
+      .text(0, -cardH / 2 + u(50), `전투력 ${card.power}`, {
         fontFamily: "serif",
-        fontSize: px(8.2),
+        fontSize: px(12),
+        color: "#2f2520",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    const statsText = this.scene.add
+      .text(0, u(4), `공 ${card.attack}  방 ${card.defense}  심 ${card.psyche}`, {
+        fontFamily: "serif",
+        fontSize: px(8.5),
+        color: playable ? "#2f2520" : "#cfc0b0",
+        fontStyle: "bold",
+        align: "center",
+      })
+      .setOrigin(0.5);
+    const descText = this.scene.add
+      .text(0, u(38), `${def.description}\n${card.isReversed ? "역방향: 승리 x2.5 / 실패 리스크" : "상단 클릭 또는 드래그: 반전"}`, {
+        fontFamily: "serif",
+        fontSize: px(8.4),
         color: playable ? "#2f2520" : "#cfc0b0",
         fontStyle: "bold",
         align: "center",
@@ -902,7 +973,18 @@ export class CardBattleSystem {
       .setOrigin(0.5);
 
     const container = this.scene.add
-      .container(x, y, [bg, accent, costCircle, costText, nameText, reverseBadge, descText])
+      .container(x, y, [
+        bg,
+        accent,
+        costCircle,
+        costText,
+        nameText,
+        reverseBadge,
+        portrait,
+        powerText,
+        statsText,
+        descText,
+      ])
       .setSize(cardW, cardH);
     if (card.isReversed) container.setAngle(180);
     this.overlay?.add(container);
