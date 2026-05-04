@@ -285,6 +285,7 @@ export class PartSystem {
 
     const v = this.visuals.get(id);
     if (v) {
+      this.scene.cameras.main.shake(180, 0.006);
       const flash = this.scene.add
         .circle(v.cx, v.cy, u(18), 0xffd572, 0.7)
         .setDepth(200);
@@ -295,6 +296,44 @@ export class PartSystem {
         duration: 600,
         onComplete: () => flash.destroy(),
       });
+      const shockwave = this.scene.add
+        .circle(v.cx, v.cy, u(26), 0xffffff, 0)
+        .setStrokeStyle(u(3), 0xfff1a6, 0.92)
+        .setDepth(201);
+      this.scene.tweens.add({
+        targets: shockwave,
+        alpha: 0,
+        scale: 4.2,
+        duration: 520,
+        ease: "Quad.easeOut",
+        onComplete: () => shockwave.destroy(),
+      });
+      for (let i = 0; i < 18; i++) {
+        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const dist = Phaser.Math.Between(u(42), u(120));
+        const shard = this.scene.add
+          .rectangle(
+            v.cx + Phaser.Math.Between(-u(14), u(14)),
+            v.cy + Phaser.Math.Between(-u(14), u(14)),
+            Phaser.Math.Between(u(5), u(14)),
+            Phaser.Math.Between(u(3), u(9)),
+            i % 3 === 0 ? 0xffffff : 0xffd572,
+            0.9
+          )
+          .setAngle(Phaser.Math.Between(0, 180))
+          .setDepth(202);
+        this.scene.tweens.add({
+          targets: shard,
+          x: v.cx + Math.cos(angle) * dist,
+          y: v.cy + Math.sin(angle) * dist * 0.75,
+          alpha: 0,
+          angle: shard.angle + Phaser.Math.Between(-220, 220),
+          scale: Phaser.Math.FloatBetween(0.25, 0.55),
+          duration: Phaser.Math.Between(460, 760),
+          ease: "Cubic.easeOut",
+          onComplete: () => shard.destroy(),
+        });
+      }
       v.rect.disableInteractive();
       this.scene.tweens.killTweensOf(v.marker);
       this.scene.tweens.killTweensOf(v.markerRing);
