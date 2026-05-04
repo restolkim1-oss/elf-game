@@ -144,7 +144,6 @@ export class GameScene extends Phaser.Scene {
         this.puzzleBusy = false;
         this.events.emit("puzzle-busy", false);
         this.partSystem.setPuzzleActive(false);
-        this.partSystem.setInputEnabled(true);
         if (success) {
           this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
           this.partSystem.removePart(part.id);
@@ -170,6 +169,9 @@ export class GameScene extends Phaser.Scene {
             this.events.emit("failure", part.id);
           }
         }
+        // Restore part interactivity AFTER removePart so the just-cleared
+        // part's marker doesn't briefly resurrect before it shatters.
+        this.partSystem.setInputEnabled(true);
       });
     });
 

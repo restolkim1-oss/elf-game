@@ -320,7 +320,7 @@ export class CardBattleEngine {
         maxStacks: 3,
         sourceId: `${this.enemyDefinition.id}_skill_pressure`,
       });
-      this.pushLog(`${this.enemy.name}: ${critical ? "移섎챸? " : ""}${damage} ?쇳빐 + 怨듦꺽 ?뺥솕`);
+      this.pushLog(`${this.enemy.name}: ${critical ? "치명타 " : ""}${damage} 피해 + 공격력 약화`);
     } else {
       const raw = Math.max(1, Math.round(attack * intent.power));
       const critical = this.rollCritical(this.enemy.criticalChance);
