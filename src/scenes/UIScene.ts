@@ -51,7 +51,7 @@ export class UIScene extends Phaser.Scene {
   private affinityGaugeText!: Phaser.GameObjects.Text;
   private affinityGaugeFill!: Phaser.GameObjects.Rectangle;
   private readonly defaultHint =
-    "파츠를 선택하고 미니게임을 클리어해 코인과 호감도를 올려보세요.";
+    "파츠를 선택하고 카드 배틀로 점수를 내 코인과 호감도를 올려보세요.";
 
   private clearMenu: Phaser.GameObjects.Container | null = null;
   private shopMenu: Phaser.GameObjects.Container | null = null;
@@ -327,7 +327,7 @@ export class UIScene extends Phaser.Scene {
 
     const labels = [
       {
-        text: "미니게임",
+        text: "카드 훈련",
         action: () => {
           this.hideShopMenu();
           gs.events.emit("farm-minigame");
@@ -362,7 +362,7 @@ export class UIScene extends Phaser.Scene {
 
   private toggleShopMenu() {
     if (this.puzzleBusy) {
-      this.flashHint("미니게임 중에는 상점을 열 수 없습니다.", COLORS.textHighlight);
+      this.flashHint("배틀 중에는 상점을 열 수 없습니다.", COLORS.textHighlight);
       return;
     }
     if (this.shopMenu) {

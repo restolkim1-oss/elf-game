@@ -1,4 +1,3 @@
-export type PuzzleType = "instant" | "pattern" | "tetris" | "memory";
 export type StoryAct = "기" | "승" | "전" | "결";
 export type StageSet = 1 | 2 | 3;
 
@@ -16,7 +15,6 @@ export interface PartDef {
   id: string;
   label: string;
   act: StoryAct;
-  puzzle: PuzzleType;
   difficulty: 1 | 2 | 3 | 4 | 5;
   hitbox: { x: number; y: number; w: number; h: number };
   tint: number;
@@ -71,7 +69,6 @@ const PARTS_STAGE1: PartDef[] = [
     id: "boots",
     label: "신발",
     act: "기",
-    puzzle: "pattern",
     difficulty: 1,
     hitbox: { x: 0.22, y: 0.66, w: 0.56, h: 0.32 },
     tint: 0x8b2f39,
@@ -83,7 +80,6 @@ const PARTS_STAGE1: PartDef[] = [
     id: "cape",
     label: "자켓",
     act: "승",
-    puzzle: "memory",
     difficulty: 2,
     hitbox: { x: 0.0, y: 0.1, w: 0.16, h: 0.78 },
     tint: 0xd43a2f,
@@ -95,7 +91,6 @@ const PARTS_STAGE1: PartDef[] = [
     id: "sweater",
     label: "상의",
     act: "전",
-    puzzle: "pattern",
     difficulty: 3,
     hitbox: { x: 0.17, y: 0.09, w: 0.66, h: 0.33 },
     tint: 0xe5b968,
@@ -107,7 +102,6 @@ const PARTS_STAGE1: PartDef[] = [
     id: "skirt",
     label: "치마",
     act: "결",
-    puzzle: "tetris",
     difficulty: 4,
     hitbox: { x: 0.22, y: 0.43, w: 0.56, h: 0.22 },
     tint: 0x5c3d2e,
@@ -123,7 +117,6 @@ const PARTS_STAGE2: PartDef[] = [
     id: "heels",
     label: "신발",
     act: "기",
-    puzzle: "pattern",
     difficulty: 1,
     hitbox: { x: 0.28, y: 0.79, w: 0.46, h: 0.18 },
     tint: 0x845b3c,
@@ -135,7 +128,6 @@ const PARTS_STAGE2: PartDef[] = [
     id: "jacket",
     label: "자켓",
     act: "승",
-    puzzle: "memory",
     difficulty: 2,
     hitbox: { x: 0.16, y: 0.13, w: 0.66, h: 0.39 },
     tint: 0x5a606f,
@@ -147,7 +139,6 @@ const PARTS_STAGE2: PartDef[] = [
     id: "stockings",
     label: "스타킹",
     act: "전",
-    puzzle: "pattern",
     difficulty: 2,
     hitbox: { x: 0.27, y: 0.54, w: 0.48, h: 0.36 },
     tint: 0x4f3f41,
@@ -159,7 +150,6 @@ const PARTS_STAGE2: PartDef[] = [
     id: "blouse",
     label: "상의",
     act: "전",
-    puzzle: "memory",
     difficulty: 3,
     hitbox: { x: 0.25, y: 0.18, w: 0.48, h: 0.27 },
     tint: 0xc8c9ce,
@@ -171,7 +161,6 @@ const PARTS_STAGE2: PartDef[] = [
     id: "skirt",
     label: "치마",
     act: "결",
-    puzzle: "tetris",
     difficulty: 4,
     hitbox: { x: 0.25, y: 0.43, w: 0.5, h: 0.23 },
     tint: 0x5c3d2e,

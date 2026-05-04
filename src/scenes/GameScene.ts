@@ -1,12 +1,11 @@
 import Phaser from "phaser";
 import { PartSystem } from "../systems/PartSystem";
-import { PuzzleSystem } from "../systems/PuzzleSystem";
+import { CardBattleSystem } from "../systems/CardBattleSystem";
 import { ProgressSystem } from "../systems/ProgressSystem";
 import { StageManager } from "../systems/StageManager";
 import { InteractionSystem } from "../systems/InteractionSystem";
 import {
   FINALE_STAGE,
-  type PuzzleType,
   type StageKey,
   type StageSet,
   type PartDef,
@@ -27,7 +26,7 @@ const STAGE3_UNLOCK_AFFINITY = 100;
 
 export class GameScene extends Phaser.Scene {
   private partSystem!: PartSystem;
-  private puzzleSystem!: PuzzleSystem;
+  private cardBattle!: CardBattleSystem;
   private progressSystem!: ProgressSystem;
   private stageManager!: StageManager;
   private interactionSystem!: InteractionSystem;
@@ -127,7 +126,7 @@ export class GameScene extends Phaser.Scene {
     this.partSystem = new PartSystem(this, this.parts, () =>
       this.stageManager.getDisplayBounds()
     );
-    this.puzzleSystem = new PuzzleSystem(this);
+    this.cardBattle = new CardBattleSystem(this);
 
     this.partSystem.setRemovedSet(this.removed);
 
@@ -140,7 +139,7 @@ export class GameScene extends Phaser.Scene {
       this.puzzleBusy = true;
       this.events.emit("puzzle-busy", true);
       this.partSystem.setPuzzleActive(true);
-      this.puzzleSystem.start(part, (success) => {
+      this.cardBattle.start(part, (success) => {
         this.puzzleBusy = false;
         this.events.emit("puzzle-busy", false);
         this.partSystem.setPuzzleActive(false);
@@ -162,7 +161,7 @@ export class GameScene extends Phaser.Scene {
             }
           }
         } else {
-          if (this.puzzleSystem.consumeLastCancelled() || this.abortingPuzzle) {
+          if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
             this.abortingPuzzle = false;
             this.feedback("미니게임을 포기했습니다.");
           } else {
@@ -467,19 +466,19 @@ export class GameScene extends Phaser.Scene {
     this.events.emit("puzzle-busy", true);
     this.partSystem.setPuzzleActive(true);
     const farmPart = this.createFarmPart();
-    this.feedback("미니게임을 시작합니다.");
-    this.puzzleSystem.start(farmPart, (success) => {
+    this.feedback("훈련 카드 배틀을 시작합니다.");
+    this.cardBattle.start(farmPart, (success) => {
       this.puzzleBusy = false;
       this.events.emit("puzzle-busy", false);
       this.partSystem.setPuzzleActive(false);
       if (success) {
-        this.grantCoins(10 + farmPart.difficulty * 4, "미니게임 클리어");
+        this.grantCoins(10 + farmPart.difficulty * 4, "카드 배틀 클리어");
       } else {
-        if (this.puzzleSystem.consumeLastCancelled() || this.abortingPuzzle) {
+        if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
           this.abortingPuzzle = false;
-          this.feedback("미니게임을 포기했습니다.");
+          this.feedback("카드 배틀을 포기했습니다.");
         } else {
-          this.feedback("미니게임 실패");
+          this.feedback("카드 배틀 실패");
         }
       }
     });
@@ -488,18 +487,15 @@ export class GameScene extends Phaser.Scene {
   private abortCurrentPuzzle() {
     if (!this.puzzleBusy) return;
     this.abortingPuzzle = true;
-    this.puzzleSystem.abortCurrent();
+    this.cardBattle.abortCurrent();
   }
 
-  private createFarmPart() {
-    const pool: PuzzleType[] = ["pattern", "memory", "tetris"];
-    const puzzle = Phaser.Utils.Array.GetRandom(pool);
+  private createFarmPart(): PartDef {
     const difficulty = Phaser.Math.Between(1, 4) as 1 | 2 | 3 | 4 | 5;
     return {
       id: `farm_${Date.now()}`,
       label: "훈련",
       act: this.parts[0]?.act ?? "기",
-      puzzle,
       difficulty,
       hitbox: { x: 0, y: 0, w: 0, h: 0 },
       tint: 0xffffff,
