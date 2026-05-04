@@ -57,6 +57,7 @@ export class UIScene extends Phaser.Scene {
   private shopMenu: Phaser.GameObjects.Container | null = null;
   private zoomControls: Phaser.GameObjects.Container | null = null;
   private bottomMenu: Phaser.GameObjects.Container | null = null;
+  private bottomPanelGroup: Phaser.GameObjects.Container | null = null;
   private clearCelebration: Phaser.GameObjects.Container | null = null;
   private finaleTweens: Phaser.Tweens.Tween[] = [];
   private lastEconomy: EconomyState | null = null;
@@ -77,6 +78,7 @@ export class UIScene extends Phaser.Scene {
     this.shopMenu = null;
     this.zoomControls = null;
     this.bottomMenu = null;
+    this.bottomPanelGroup = null;
     this.clearCelebration = null;
     this.finaleTweens = [];
     this.puzzleBusy = false;
@@ -118,7 +120,14 @@ export class UIScene extends Phaser.Scene {
     game.events.on("finale", () => this.onFinale());
     game.events.on("puzzle-busy", (busy: boolean) => {
       this.puzzleBusy = busy;
-      if (busy) this.hideShopMenu();
+      if (busy) {
+        this.hideShopMenu();
+        this.bottomPanelGroup?.setVisible(false);
+        this.bottomMenu?.setVisible(false);
+      } else {
+        this.bottomPanelGroup?.setVisible(true);
+        this.bottomMenu?.setVisible(true);
+      }
     });
 
     this.startIdlePillPulse();
@@ -135,7 +144,10 @@ export class UIScene extends Phaser.Scene {
 
   private drawBottomPanel(width: number, height: number) {
     const panelH = u(210);
-    this.add.rectangle(
+    const group = this.add.container(0, 0);
+    this.bottomPanelGroup = group;
+
+    const r1 = this.add.rectangle(
       width / 2,
       height - panelH / 2,
       width,
@@ -143,7 +155,7 @@ export class UIScene extends Phaser.Scene {
       COLORS.panelMid,
       0.96
     );
-    this.add.rectangle(
+    const r2 = this.add.rectangle(
       width / 2,
       height - panelH + u(22),
       width,
@@ -151,8 +163,8 @@ export class UIScene extends Phaser.Scene {
       COLORS.panelDeep,
       0.45
     );
-    this.add.rectangle(width / 2, height - panelH, width, u(1), COLORS.gild, 0.9);
-    this.add.rectangle(
+    const r3 = this.add.rectangle(width / 2, height - panelH, width, u(1), COLORS.gild, 0.9);
+    const r4 = this.add.rectangle(
       width / 2,
       height - panelH - u(4),
       width * 0.55,
@@ -180,6 +192,8 @@ export class UIScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5, 0);
+
+    group.add([r1, r2, r3, r4, this.hintText, this.statText]);
   }
 
   private drawActLabel(width: number) {

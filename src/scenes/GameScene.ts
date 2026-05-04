@@ -139,10 +139,12 @@ export class GameScene extends Phaser.Scene {
       this.puzzleBusy = true;
       this.events.emit("puzzle-busy", true);
       this.partSystem.setPuzzleActive(true);
+      this.partSystem.setInputEnabled(false);
       this.cardBattle.start(part, (success) => {
         this.puzzleBusy = false;
         this.events.emit("puzzle-busy", false);
         this.partSystem.setPuzzleActive(false);
+        this.partSystem.setInputEnabled(true);
         if (success) {
           this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
           this.partSystem.removePart(part.id);
@@ -465,12 +467,14 @@ export class GameScene extends Phaser.Scene {
     this.puzzleBusy = true;
     this.events.emit("puzzle-busy", true);
     this.partSystem.setPuzzleActive(true);
+    this.partSystem.setInputEnabled(false);
     const farmPart = this.createFarmPart();
     this.feedback("훈련 카드 배틀을 시작합니다.");
     this.cardBattle.start(farmPart, (success) => {
       this.puzzleBusy = false;
       this.events.emit("puzzle-busy", false);
       this.partSystem.setPuzzleActive(false);
+      this.partSystem.setInputEnabled(true);
       if (success) {
         this.grantCoins(10 + farmPart.difficulty * 4, "카드 배틀 클리어");
       } else {

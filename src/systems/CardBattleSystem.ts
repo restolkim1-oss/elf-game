@@ -237,38 +237,10 @@ export class CardBattleSystem {
 
   private startBattle(part: PartDef) {
     const { width, height } = this.scene.scale;
-    const w = width * 0.96;
-    const h = height * 0.86;
-    const top = height / 2 - h / 2;
-    const bottom = height / 2 + h / 2;
 
-    const shadow = this.scene.add.rectangle(
-      width / 2 + u(4),
-      height / 2 + u(6),
-      w,
-      h,
-      0x000000,
-      0.55
-    );
-    const bg = this.scene.add
-      .rectangle(width / 2, height / 2, w, h, 0x14091a, 0.97)
-      .setStrokeStyle(u(2), 0xd4a656, 0.95);
-    const inner = this.scene.add
-      .rectangle(width / 2, height / 2, w - u(10), h - u(10), 0x000000, 0)
-      .setStrokeStyle(u(1), 0xd4a656, 0.45);
-
-    const titleText = this.scene.add
-      .text(width / 2, top + u(16), `${part.label} 해제 - 카드 배틀`, {
-        fontFamily: "serif",
-        fontSize: px(18),
-        color: "#f3e6c9",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5, 0);
-
-    this.overlay = this.scene.add
-      .container(0, 0, [shadow, bg, inner, titleText])
-      .setDepth(500);
+    // Battle UI floats over the existing scene — no opaque backdrop so the
+    // character image and stage stay visible behind the strips and cards.
+    this.overlay = this.scene.add.container(0, 0).setDepth(500);
 
     // Initialize state
     const enemyHpMax = 30 + part.difficulty * 14;
@@ -295,43 +267,43 @@ export class CardBattleSystem {
     this.intentIdx = 0;
     this.enemyStunned = false;
 
-    // Layout: enemy banner
-    const enemyY = top + u(56);
-    this.enemyHpBarMaxWidth = w * 0.74;
-    this.enemyHpBarLeft = width / 2 - this.enemyHpBarMaxWidth / 2;
-    const enemyBanner = this.scene.add
-      .rectangle(width / 2, enemyY, w * 0.84, u(50), 0x3a1a26, 0.92)
-      .setStrokeStyle(u(1.5), 0xff8fab, 0.7);
+    const stripW = width * 0.96;
+
+    // -- Top: enemy strip (sits just below the progression pills) --
+    const enemyStripY = u(180);
+    const enemyStripBg = this.scene.add
+      .rectangle(width / 2, enemyStripY, stripW, u(72), 0x1a0814, 0.78)
+      .setStrokeStyle(u(1.2), 0xff8fab, 0.7);
     const enemyName = this.scene.add
-      .text(width / 2 - w * 0.4, enemyY, `적 · ${part.label}`, {
+      .text(width / 2 - stripW / 2 + u(14), enemyStripY - u(22), `적 · ${part.label}`, {
         fontFamily: "serif",
-        fontSize: px(14),
+        fontSize: px(13),
         color: "#ffd6df",
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
     this.enemyIntentText = this.scene.add
-      .text(width / 2 + w * 0.4, enemyY, "", {
+      .text(width / 2 + stripW / 2 - u(14), enemyStripY - u(22), "", {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: px(12),
         color: "#ffd572",
         fontStyle: "bold",
       })
       .setOrigin(1, 0.5);
-    this.overlay.add([enemyBanner, enemyName, this.enemyIntentText]);
 
-    // Enemy HP bar
-    const enemyHpY = top + u(96);
+    const enemyHpY = enemyStripY + u(2);
+    this.enemyHpBarMaxWidth = stripW * 0.84;
+    this.enemyHpBarLeft = width / 2 - this.enemyHpBarMaxWidth / 2;
     const enemyHpBg = this.scene.add
-      .rectangle(width / 2, enemyHpY, this.enemyHpBarMaxWidth, u(20), 0x2a1a34, 0.96)
-      .setStrokeStyle(u(1), 0xd4a656, 0.7);
+      .rectangle(width / 2, enemyHpY, this.enemyHpBarMaxWidth, u(16), 0x2a1a34, 0.92)
+      .setStrokeStyle(u(1), 0xd4a656, 0.6);
     this.enemyHpFill = this.scene.add
-      .rectangle(this.enemyHpBarLeft, enemyHpY, this.enemyHpBarMaxWidth, u(16), 0xff5e7a, 0.95)
+      .rectangle(this.enemyHpBarLeft, enemyHpY, this.enemyHpBarMaxWidth, u(13), 0xff5e7a, 0.95)
       .setOrigin(0, 0.5);
     this.enemyHpText = this.scene.add
       .text(width / 2, enemyHpY, `${this.enemy.hp} / ${this.enemy.hpMax}`, {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(10),
         color: "#ffffff",
         fontStyle: "bold",
       })
@@ -339,20 +311,24 @@ export class CardBattleSystem {
     this.enemyBlockText = this.scene.add
       .text(this.enemyHpBarLeft + this.enemyHpBarMaxWidth + u(6), enemyHpY, "", {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(10),
         color: "#9ad0ff",
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
     this.enemyStatusText = this.scene.add
-      .text(width / 2, enemyHpY + u(20), "", {
+      .text(width / 2, enemyStripY + u(22), "", {
         fontFamily: "serif",
-        fontSize: px(10),
+        fontSize: px(9),
         color: "#ffaa66",
         fontStyle: "bold",
       })
-      .setOrigin(0.5, 0);
+      .setOrigin(0.5);
+
     this.overlay.add([
+      enemyStripBg,
+      enemyName,
+      this.enemyIntentText,
       enemyHpBg,
       this.enemyHpFill,
       this.enemyHpText,
@@ -360,113 +336,131 @@ export class CardBattleSystem {
       this.enemyStatusText,
     ]);
 
-    // Player status
-    const playerY = top + u(180);
-    const playerBanner = this.scene.add
-      .rectangle(width / 2, playerY, w * 0.84, u(40), 0x1a2a3a, 0.92)
-      .setStrokeStyle(u(1.5), 0x9ad0ff, 0.7);
+    // -- Bottom: player strip (above the hand) --
+    const playerStripY = height - u(280);
+    const playerStripBg = this.scene.add
+      .rectangle(width / 2, playerStripY, stripW, u(60), 0x10141a, 0.78)
+      .setStrokeStyle(u(1.2), 0x9ad0ff, 0.7);
     const playerName = this.scene.add
-      .text(width / 2 - w * 0.4, playerY, "당신", {
+      .text(width / 2 - stripW / 2 + u(14), playerStripY - u(20), "당신", {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: px(12),
         color: "#cfe6ff",
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
     this.energyText = this.scene.add
-      .text(width / 2 + w * 0.4, playerY, "", {
+      .text(width / 2, playerStripY - u(20), "", {
         fontFamily: "serif",
         fontSize: px(13),
         color: "#ffd572",
         fontStyle: "bold",
       })
-      .setOrigin(1, 0.5);
-    this.overlay.add([playerBanner, playerName, this.energyText]);
-
-    const playerHpY = top + u(216);
-    this.playerHpBarMaxWidth = w * 0.74;
-    this.playerHpBarLeft = width / 2 - this.playerHpBarMaxWidth / 2;
-    const playerHpBg = this.scene.add
-      .rectangle(width / 2, playerHpY, this.playerHpBarMaxWidth, u(20), 0x2a1a34, 0.96)
-      .setStrokeStyle(u(1), 0xd4a656, 0.7);
-    this.playerHpFill = this.scene.add
-      .rectangle(this.playerHpBarLeft, playerHpY, this.playerHpBarMaxWidth, u(16), 0x86e08d, 0.95)
-      .setOrigin(0, 0.5);
-    this.playerHpText = this.scene.add
-      .text(width / 2, playerHpY, `${this.player.hp} / ${this.player.hpMax}`, {
+      .setOrigin(0.5);
+    this.turnText = this.scene.add
+      .text(width / 2 + stripW / 2 - u(14), playerStripY - u(20), "", {
         fontFamily: "serif",
         fontSize: px(11),
-        color: "#ffffff",
+        color: "#d4a656",
         fontStyle: "bold",
       })
+      .setOrigin(1, 0.5);
+
+    const playerHpY = playerStripY + u(2);
+    this.playerHpBarMaxWidth = stripW * 0.66;
+    this.playerHpBarLeft = width / 2 - stripW / 2 + u(20);
+    const playerHpBg = this.scene.add
+      .rectangle(
+        this.playerHpBarLeft + this.playerHpBarMaxWidth / 2,
+        playerHpY,
+        this.playerHpBarMaxWidth,
+        u(16),
+        0x2a1a34,
+        0.92
+      )
+      .setStrokeStyle(u(1), 0xd4a656, 0.6);
+    this.playerHpFill = this.scene.add
+      .rectangle(this.playerHpBarLeft, playerHpY, this.playerHpBarMaxWidth, u(13), 0x86e08d, 0.95)
+      .setOrigin(0, 0.5);
+    this.playerHpText = this.scene.add
+      .text(
+        this.playerHpBarLeft + this.playerHpBarMaxWidth / 2,
+        playerHpY,
+        `${this.player.hp} / ${this.player.hpMax}`,
+        {
+          fontFamily: "serif",
+          fontSize: px(10),
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
       .setOrigin(0.5);
     this.playerBlockText = this.scene.add
       .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(6), playerHpY, "", {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(10),
         color: "#9ad0ff",
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
     this.playerStatusText = this.scene.add
-      .text(width / 2, playerHpY + u(20), "", {
+      .text(width / 2 - stripW * 0.18, playerStripY + u(22), "", {
         fontFamily: "serif",
-        fontSize: px(10),
+        fontSize: px(9),
         color: "#ffaa66",
         fontStyle: "bold",
       })
-      .setOrigin(0.5, 0);
+      .setOrigin(0, 0.5);
+    this.deckCountText = this.scene.add
+      .text(width / 2 + stripW / 2 - u(14), playerStripY + u(22), "", {
+        fontFamily: "serif",
+        fontSize: px(9),
+        color: "#d4a656",
+        fontStyle: "bold",
+      })
+      .setOrigin(1, 0.5);
+
     this.overlay.add([
+      playerStripBg,
+      playerName,
+      this.energyText,
+      this.turnText,
       playerHpBg,
       this.playerHpFill,
       this.playerHpText,
       this.playerBlockText,
       this.playerStatusText,
+      this.deckCountText,
     ]);
 
-    // Turn / deck info row
-    const infoY = top + u(264);
-    this.turnText = this.scene.add
-      .text(width / 2 - w * 0.4, infoY, "", {
-        fontFamily: "serif",
-        fontSize: px(11),
-        color: "#d4a656",
-        fontStyle: "bold",
-      })
-      .setOrigin(0, 0.5);
-    this.deckCountText = this.scene.add
-      .text(width / 2 + w * 0.4, infoY, "", {
-        fontFamily: "serif",
-        fontSize: px(11),
-        color: "#d4a656",
-        fontStyle: "bold",
-      })
-      .setOrigin(1, 0.5);
+    // Floating log readout above the player strip
     this.logText = this.scene.add
-      .text(width / 2, infoY, "", {
+      .text(width / 2, playerStripY - u(56), "", {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(12),
         color: "#f3e6c9",
         fontStyle: "bold",
+        backgroundColor: "rgba(20, 9, 26, 0.7)",
+        padding: { x: 10, y: 4 },
       })
       .setOrigin(0.5);
-    this.overlay.add([this.turnText, this.deckCountText, this.logText]);
+    this.overlay.add(this.logText);
 
-    // Hand area
-    this.handAreaY = bottom - u(190);
-    this.handAreaWidth = w * 0.94;
+    // Hand area sits in the slot freed by the hidden bottom panel
+    this.handAreaY = height - u(150);
+    this.handAreaWidth = stripW * 0.98;
 
-    // Buttons
-    const btnY = bottom - u(46);
+    // Action buttons at the very bottom corners
+    const btnY = height - u(40);
     this.endTurnBg = this.makeButton(
-      width / 2 + u(140),
+      width - u(110),
       btnY,
-      u(132),
+      u(160),
       u(46),
       "턴 종료",
       () => this.endPlayerTurn()
     );
-    this.makeButton(width / 2 - u(140), btnY, u(132), u(46), "포기", () => {
+    this.makeButton(u(110), btnY, u(160), u(46), "포기", () => {
       this.cancelled = true;
       this.finish(false);
     });
