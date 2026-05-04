@@ -564,11 +564,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private canUseStage2() {
-    return this.affinity >= STAGE2_UNLOCK_AFFINITY || this.stage2StoryUnlocked;
+    return true;
   }
 
   private canUseStage3() {
-    return this.affinity >= STAGE3_UNLOCK_AFFINITY || this.stage3StoryUnlocked;
+    return true;
   }
 
   private normalizeStageSet(raw: StageSet): StageSet {

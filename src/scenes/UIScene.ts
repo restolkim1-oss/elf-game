@@ -48,8 +48,6 @@ export class UIScene extends Phaser.Scene {
   private progressCount!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private statText!: Phaser.GameObjects.Text;
-  private affinityGaugeText!: Phaser.GameObjects.Text;
-  private affinityGaugeFill!: Phaser.GameObjects.Rectangle;
   private readonly defaultHint =
     "파츠를 선택하고 카드 배틀로 점수를 내 코인과 호감도를 올려보세요.";
 
@@ -82,12 +80,12 @@ export class UIScene extends Phaser.Scene {
     this.clearCelebration = null;
     this.finaleTweens = [];
     this.puzzleBusy = false;
+    void this.updateEconomy;
 
     const { width, height } = this.scale;
     this.drawTopPanel(width);
     this.drawBottomPanel(width, height);
     this.drawActLabel(width);
-    this.drawAffinityGauge(width);
     this.drawProgressPills(width);
     this.drawRemovalOrder(width);
     this.drawCornerOrnaments(width, height);
@@ -109,10 +107,6 @@ export class UIScene extends Phaser.Scene {
         this.flashHint(payload.reason || "잠금 상태입니다.", COLORS.textHighlight);
       }
     );
-    game.events.on("economy-update", (state: EconomyState) => {
-      this.lastEconomy = state;
-      this.updateEconomy(state);
-    });
     game.events.on("shop-feedback", (payload: { text: string; color?: string }) => {
       this.flashHint(payload.text, payload.color ?? COLORS.textHighlight);
     });
@@ -121,7 +115,6 @@ export class UIScene extends Phaser.Scene {
     game.events.on("puzzle-busy", (busy: boolean) => {
       this.puzzleBusy = busy;
       if (busy) {
-        this.hideShopMenu();
         this.bottomPanelGroup?.setVisible(false);
         this.bottomMenu?.setVisible(false);
       } else {
@@ -131,7 +124,6 @@ export class UIScene extends Phaser.Scene {
     });
 
     this.startIdlePillPulse();
-    game.events.emit("request-economy-sync");
   }
 
   private drawTopPanel(width: number) {
@@ -174,7 +166,7 @@ export class UIScene extends Phaser.Scene {
     );
 
     this.hintText = this.add
-      .text(width / 2, height - panelH + u(14), this.defaultHint, {
+      .text(width / 2, height - panelH + u(14), "파츠를 선택하고 카드 배틀을 진행하세요.", {
         fontFamily: "serif",
         fontSize: px(17),
         color: COLORS.text,
@@ -185,7 +177,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     this.statText = this.add
-      .text(width / 2, height - panelH + u(60), "코인 0  |  호감도 0 / 100", {
+      .text(width / 2, height - panelH + u(60), "카드 배틀 시스템 집중 모드", {
         fontFamily: "serif",
         fontSize: px(15),
         color: COLORS.textHighlight,
@@ -217,38 +209,6 @@ export class UIScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5, 0);
-  }
-
-  private drawAffinityGauge(width: number) {
-    const gaugeW = u(210);
-    const gaugeH = u(22);
-    const x = width - gaugeW / 2 - u(24);
-    const y = u(72);
-    this.add
-      .rectangle(x, y, gaugeW + u(28), u(72), COLORS.panelDeep, 0.72)
-      .setStrokeStyle(u(1.5), COLORS.gildHot, 0.78);
-    this.add
-      .text(x, y - u(24), "호감도", {
-        fontFamily: "serif",
-        fontSize: px(13),
-        color: COLORS.textHighlight,
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
-    this.add
-      .rectangle(x, y + u(12), gaugeW, gaugeH, COLORS.panelSoft, 0.96)
-      .setStrokeStyle(u(1.2), COLORS.gild, 0.8);
-    this.affinityGaugeFill = this.add
-      .rectangle(x - gaugeW / 2, y + u(12), 1, gaugeH - u(4), 0xff8fab, 0.95)
-      .setOrigin(0, 0.5);
-    this.affinityGaugeText = this.add
-      .text(x, y - u(1), "0 / 100", {
-        fontFamily: "serif",
-        fontSize: px(12.5),
-        color: "#ffffff",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
   }
 
   private drawProgressPills(width: number) {
@@ -343,24 +303,26 @@ export class UIScene extends Phaser.Scene {
       {
         text: "카드 훈련",
         action: () => {
-          this.hideShopMenu();
           gs.events.emit("farm-minigame");
         },
       },
       { text: "상점", action: () => this.toggleShopMenu() },
       { text: "올 클리어", action: () => gs.events.emit("force-clear") },
     ];
+    const visibleLabels = labels.filter(
+      (item) => !item.action.toString().includes("toggleShopMenu")
+    );
     const gap = u(10);
     const btnW = Math.min(
       u(170),
-      (width - u(42) - gap * (labels.length - 1)) / labels.length
+      (width - u(42) - gap * (visibleLabels.length - 1)) / visibleLabels.length
     );
     const btnH = u(46);
-    const totalW = labels.length * btnW + (labels.length - 1) * gap;
+    const totalW = visibleLabels.length * btnW + (visibleLabels.length - 1) * gap;
     const startX = width / 2 - totalW / 2 + btnW / 2;
     const y = height - u(92);
 
-    labels.forEach((item, idx) => {
+    visibleLabels.forEach((item, idx) => {
       this.makeButton(
         c,
         startX + idx * (btnW + gap),
@@ -698,9 +660,6 @@ export class UIScene extends Phaser.Scene {
     this.statText.setText(
       `코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`
     );
-    const ratio = Phaser.Math.Clamp(state.affinity / state.affinityMax, 0, 1);
-    this.affinityGaugeFill.width = u(210) * ratio;
-    this.affinityGaugeText.setText(`${state.affinity} / ${state.affinityMax}`);
     if (this.shopMenu) {
       const old = this.shopMenu;
       old.destroy();
@@ -978,7 +937,7 @@ export class UIScene extends Phaser.Scene {
     if (!this.clearMenu) return;
     const c = this.clearMenu;
     this.clearMenu = null;
-    this.bottomMenu?.setVisible(false);
+    this.bottomMenu?.setVisible(!showViewingControls);
     this.tweens.add({
       targets: c,
       alpha: 0,
