@@ -56,14 +56,14 @@ export const STAGE_LAYERS: StageLayerDef[] = [
     id: "cape",
     textureKey: "E1_cape",
     path: "/assets/E1_cape.png",
-    depth: 14,
+    depth: 15,
     partId: "cape",
   },
   {
     id: "skirt",
     textureKey: "E1_skirt",
     path: "/assets/E1_skirt.png",
-    depth: 15,
+    depth: 14,
     partId: "skirt",
   },
   {

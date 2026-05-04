@@ -17,6 +17,7 @@ export class BootScene extends Phaser.Scene {
     });
     this.load.image("bg", "/assets/bg.png");
     this.load.image("bg2", "/assets/bg2.png");
+    this.load.image("bg3", "/assets/bg3.png");
     this.load.image("E1_clear", "/assets/E1_clear.png");
     INTERACTION_ORDER.forEach((key) => {
       this.load.image(key, INTERACTION_ASSET_PATHS[key]);

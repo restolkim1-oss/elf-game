@@ -412,6 +412,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveBackgroundKey(): string {
+    if (this.stageSet === 3 && this.textures.exists("bg3")) return "bg3";
     if (this.stageSet === 2 && this.textures.exists("bg2")) return "bg2";
     return "bg";
   }

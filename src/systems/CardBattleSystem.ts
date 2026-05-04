@@ -934,7 +934,10 @@ export class CardBattleSystem {
       .rectangle(0, 0, cardW, cardH, selected ? 0xffedb2 : playable ? 0xf3e6c9 : 0x6a5d4e, playable ? 1 : 0.85)
       .setStrokeStyle(u(selected ? 4 : 2), selected ? 0xffd572 : def.color, playable ? 1 : 0.6)
       .setInteractive({ useHandCursor: true });
-    const accent = this.scene.add.rectangle(0, -cardH / 2 + u(10), cardW, u(20), def.color, 0.92);
+    const selectionAura = this.scene.add
+      .rectangle(0, 0, cardW + u(10), cardH + u(10), 0xffffff, 0)
+      .setStrokeStyle(u(3), 0xfff0a8, selected ? 0.95 : 0);
+    const accent = this.scene.add.rectangle(0, -cardH / 2 + u(14), cardW, u(28), def.color, 0.92);
     const costCircle = this.scene.add
       .circle(-cardW / 2 + u(14), -cardH / 2 + u(14), u(11), 0x14091a, 0.95)
       .setStrokeStyle(u(1.2), 0xffd572, 0.95);
@@ -947,26 +950,26 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const nameText = this.scene.add
-      .text(0, -cardH / 2 + u(10), def.roleLabel, {
+      .text(0, -cardH / 2 + u(14), def.roleLabel, {
         fontFamily: "serif",
-        fontSize: px(12),
+        fontSize: px(14),
         color: "#1a0f22",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
     const reverseBadge = this.scene.add
-      .text(cardW / 2 - u(20), -cardH / 2 + u(14), card.isReversed ? "REV" : "UP", {
+      .text(cardW / 2 - u(20), -cardH / 2 + u(14), `C${def.cost}`, {
         fontFamily: "serif",
         fontSize: px(8),
-        color: card.isReversed ? "#ff5e7a" : "#2f2520",
+        color: "#2f2520",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
     const portrait = this.scene.add
-      .rectangle(0, -cardH / 2 + u(50), cardW - u(18), u(46), 0x24182f, 0.22)
+      .rectangle(0, -cardH / 2 + u(58), cardW - u(18), u(54), 0x24182f, 0.18)
       .setStrokeStyle(u(1), def.color, 0.65);
     const roleText = this.scene.add
-      .text(0, -cardH / 2 + u(42), def.name, {
+      .text(0, -cardH / 2 + u(48), def.name, {
         fontFamily: "serif",
         fontSize: px(11),
         color: "#4b3545",
@@ -974,26 +977,27 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const powerText = this.scene.add
-      .text(0, -cardH / 2 + u(50), `전투력 ${card.power}`, {
+      .text(0, -cardH / 2 + u(68), `전투력 ${card.power}`, {
         fontFamily: "serif",
-        fontSize: px(12),
+        fontSize: px(10),
         color: "#2f2520",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
     const descText = this.scene.add
-      .text(0, u(32), `${def.description}\n선택해서 같은 역할 합체`, {
+      .text(0, u(42), `${def.description}\n같은 역할 선택 합체`, {
         fontFamily: "serif",
-        fontSize: px(9.2),
+        fontSize: px(8.2),
         color: playable ? "#2f2520" : "#cfc0b0",
         fontStyle: "bold",
         align: "center",
-        wordWrap: { width: cardW - u(10) },
+        wordWrap: { width: cardW - u(16) },
       })
       .setOrigin(0.5);
 
     const container = this.scene.add
       .container(x, y, [
+        selectionAura,
         bg,
         accent,
         costCircle,
@@ -1006,7 +1010,19 @@ export class CardBattleSystem {
         descText,
       ])
       .setSize(cardW, cardH);
-    if (selected) container.setY(y - u(16));
+    if (selected) {
+      container.setY(y - u(18));
+      this.scene.tweens.add({
+        targets: selectionAura,
+        alpha: { from: 0.6, to: 1 },
+        scaleX: { from: 1, to: 1.06 },
+        scaleY: { from: 1, to: 1.06 },
+        yoyo: true,
+        repeat: -1,
+        duration: 780,
+        ease: "Sine.easeInOut",
+      });
+    }
     this.overlay?.add(container);
 
     bg.on("pointerover", () => {
