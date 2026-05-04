@@ -1,15 +1,6 @@
-export type StoryAct = "기" | "승" | "전" | "결";
+export type StoryAct = "intro" | "outer" | "core" | "finale";
 export type StageSet = 1 | 2 | 3;
-
-export type StageKey =
-  | "E1"
-  | "E1_stage5"
-  | "E1_stage6"
-  | "E1_stage7"
-  | "E1_stage2"
-  | "E1_stage4"
-  | "E1_stage3"
-  | "E1_swim";
+export type StageKey = "E1";
 
 export interface PartDef {
   id: string;
@@ -23,15 +14,65 @@ export interface PartDef {
   prerequisites: string[];
 }
 
-export const STAGE_ORDER: StageKey[] = [
-  "E1",
-  "E1_stage5",
-  "E1_stage6",
-  "E1_stage7",
-  "E1_stage2",
-  "E1_stage4",
-  "E1_stage3",
-  "E1_swim",
+export interface StageLayerDef {
+  id: string;
+  textureKey: string;
+  path: string;
+  depth: number;
+  partId?: string;
+}
+
+export const STAGE_ORDER: StageKey[] = ["E1"];
+
+export const STAGE_LAYERS: StageLayerDef[] = [
+  {
+    id: "base",
+    textureKey: "E1_base",
+    path: "/assets/E1_base.png",
+    depth: 10,
+  },
+  {
+    id: "underwear",
+    textureKey: "E1_Underwear",
+    path: "/assets/E1_Underwear.png",
+    depth: 11,
+    partId: "underwear",
+  },
+  {
+    id: "boots",
+    textureKey: "E1_boots",
+    path: "/assets/E1_boots.png",
+    depth: 12,
+    partId: "boots",
+  },
+  {
+    id: "sweater",
+    textureKey: "E1_sweater",
+    path: "/assets/E1_sweater.png",
+    depth: 13,
+    partId: "sweater",
+  },
+  {
+    id: "skirt",
+    textureKey: "E1_skirt",
+    path: "/assets/E1_skirt.png",
+    depth: 14,
+    partId: "skirt",
+  },
+  {
+    id: "cape",
+    textureKey: "E1_cape",
+    path: "/assets/E1_cape.png",
+    depth: 15,
+    partId: "cape",
+  },
+  {
+    id: "circlet",
+    textureKey: "E1_Circlet",
+    path: "/assets/E1_Circlet.png",
+    depth: 16,
+    partId: "circlet",
+  },
 ];
 
 export const INTERACTION_ORDER = [
@@ -53,137 +94,86 @@ export const INTERACTION_ASSET_PATHS: Record<InteractionKey, string> = {
   ani_heart2: "/assets/ani/Heart2.png",
 };
 
-export const STAGE_TIER: Record<StageKey, number> = {
-  E1: 0,
-  E1_stage5: 1,
-  E1_stage6: 1,
-  E1_stage7: 1,
-  E1_stage2: 1,
-  E1_stage4: 2,
-  E1_stage3: 3,
-  E1_swim: 4,
-};
-
 const PARTS_STAGE1: PartDef[] = [
   {
-    id: "boots",
-    label: "신발",
-    act: "기",
+    id: "circlet",
+    label: "서클릿",
+    act: "intro",
     difficulty: 1,
-    hitbox: { x: 0.22, y: 0.66, w: 0.56, h: 0.32 },
-    tint: 0x8b2f39,
+    hitbox: { x: 0.38, y: 0.02, w: 0.24, h: 0.11 },
+    tint: 0xffd572,
     order: 1,
-    stageAfter: "E1_stage5",
+    stageAfter: null,
     prerequisites: [],
   },
   {
-    id: "cape",
-    label: "자켓",
-    act: "승",
-    difficulty: 2,
-    hitbox: { x: 0.0, y: 0.1, w: 0.16, h: 0.78 },
-    tint: 0xd43a2f,
+    id: "boots",
+    label: "신발",
+    act: "intro",
+    difficulty: 1,
+    hitbox: { x: 0.23, y: 0.69, w: 0.54, h: 0.29 },
+    tint: 0x8b2f39,
     order: 2,
-    stageAfter: "E1_stage4",
-    prerequisites: [],
+    stageAfter: null,
+    prerequisites: ["circlet"],
+  },
+  {
+    id: "cape",
+    label: "망토",
+    act: "outer",
+    difficulty: 2,
+    hitbox: { x: 0.03, y: 0.13, w: 0.94, h: 0.72 },
+    tint: 0xd43a2f,
+    order: 3,
+    stageAfter: null,
+    prerequisites: ["boots"],
   },
   {
     id: "sweater",
     label: "상의",
-    act: "전",
+    act: "core",
     difficulty: 3,
-    hitbox: { x: 0.17, y: 0.09, w: 0.66, h: 0.33 },
+    hitbox: { x: 0.2, y: 0.15, w: 0.6, h: 0.27 },
     tint: 0xe5b968,
-    order: 3,
-    stageAfter: "E1_stage3",
-    prerequisites: ["boots", "cape"],
-  },
-  {
-    id: "skirt",
-    label: "치마",
-    act: "결",
-    difficulty: 4,
-    hitbox: { x: 0.22, y: 0.43, w: 0.56, h: 0.22 },
-    tint: 0x5c3d2e,
     order: 4,
     stageAfter: null,
-    prerequisites: ["boots", "cape", "sweater"],
-  },
-];
-
-// Stage 2 has more authored image steps, so we expand it to 5 parts.
-const PARTS_STAGE2: PartDef[] = [
-  {
-    id: "heels",
-    label: "신발",
-    act: "기",
-    difficulty: 1,
-    hitbox: { x: 0.28, y: 0.79, w: 0.46, h: 0.18 },
-    tint: 0x845b3c,
-    order: 1,
-    stageAfter: "E1_stage5",
-    prerequisites: [],
-  },
-  {
-    id: "jacket",
-    label: "자켓",
-    act: "승",
-    difficulty: 2,
-    hitbox: { x: 0.16, y: 0.13, w: 0.66, h: 0.39 },
-    tint: 0x5a606f,
-    order: 2,
-    stageAfter: "E1_stage6",
-    prerequisites: ["heels"],
-  },
-  {
-    id: "stockings",
-    label: "스타킹",
-    act: "전",
-    difficulty: 2,
-    hitbox: { x: 0.27, y: 0.54, w: 0.48, h: 0.36 },
-    tint: 0x4f3f41,
-    order: 3,
-    stageAfter: "E1_stage4",
-    prerequisites: ["jacket"],
-  },
-  {
-    id: "blouse",
-    label: "상의",
-    act: "전",
-    difficulty: 3,
-    hitbox: { x: 0.25, y: 0.18, w: 0.48, h: 0.27 },
-    tint: 0xc8c9ce,
-    order: 4,
-    stageAfter: "E1_stage3",
-    prerequisites: ["stockings"],
+    prerequisites: ["cape"],
   },
   {
     id: "skirt",
-    label: "치마",
-    act: "결",
+    label: "스커트",
+    act: "core",
     difficulty: 4,
-    hitbox: { x: 0.25, y: 0.43, w: 0.5, h: 0.23 },
+    hitbox: { x: 0.23, y: 0.42, w: 0.54, h: 0.22 },
     tint: 0x5c3d2e,
     order: 5,
-    stageAfter: "E1_swim",
-    prerequisites: ["blouse"],
+    stageAfter: null,
+    prerequisites: ["sweater"],
+  },
+  {
+    id: "underwear",
+    label: "언더웨어",
+    act: "finale",
+    difficulty: 5,
+    hitbox: { x: 0.22, y: 0.18, w: 0.56, h: 0.45 },
+    tint: 0xf1c6a8,
+    order: 6,
+    stageAfter: null,
+    prerequisites: ["skirt"],
   },
 ];
-
-// Stage 3 currently has one visual, so we keep stage-1 part layout.
-const PARTS_STAGE3: PartDef[] = PARTS_STAGE1;
 
 const PARTS_BY_STAGE: Record<StageSet, PartDef[]> = {
   1: PARTS_STAGE1,
-  2: PARTS_STAGE2,
-  3: PARTS_STAGE3,
+  2: PARTS_STAGE1,
+  3: PARTS_STAGE1,
 };
 
 function cloneParts(parts: PartDef[]): PartDef[] {
-  return parts.map((p) => ({
-    ...p,
-    hitbox: { ...p.hitbox },
-    prerequisites: [...p.prerequisites],
+  return parts.map((part) => ({
+    ...part,
+    hitbox: { ...part.hitbox },
+    prerequisites: [...part.prerequisites],
   }));
 }
 
@@ -191,56 +181,13 @@ export function getPartsForStage(stageSet: StageSet): PartDef[] {
   return cloneParts(PARTS_BY_STAGE[stageSet]);
 }
 
-// Kept for legacy imports; stage-specific flows should use getPartsForStage.
 export const PARTS: PartDef[] = getPartsForStage(1);
 
-const STAGE1_REQUIREMENTS: [StageKey, string[]][] = [
-  ["E1_swim", ["boots", "cape", "sweater", "skirt"]],
-  ["E1_stage3", ["boots", "cape", "sweater"]],
-  ["E1_stage4", ["boots", "cape"]],
-  ["E1_stage5", ["boots"]],
-  ["E1_stage6", ["cape"]],
-  ["E1_stage7", ["sweater"]],
-  ["E1_stage2", ["skirt"]],
-  ["E1", []],
-];
-
-const STAGE2_REQUIREMENTS: [StageKey, string[]][] = [
-  ["E1_swim", ["heels", "jacket", "stockings", "blouse", "skirt"]],
-  ["E1_stage3", ["heels", "jacket", "stockings", "blouse"]],
-  ["E1_stage4", ["heels", "jacket", "stockings"]],
-  ["E1_stage6", ["heels", "jacket"]],
-  ["E1_stage5", ["heels"]],
-  ["E1", []],
-];
-
-const STAGE3_REQUIREMENTS: [StageKey, string[]][] = STAGE1_REQUIREMENTS;
-
-const STAGE_REQUIREMENTS_BY_STAGE: Record<StageSet, [StageKey, string[]][]> = {
-  1: STAGE1_REQUIREMENTS,
-  2: STAGE2_REQUIREMENTS,
-  3: STAGE3_REQUIREMENTS,
-};
-
 export function stageForRemoved(
-  removedIds: Set<string>,
-  stageSet: StageSet = 1
+  _removedIds: Set<string>,
+  _stageSet: StageSet = 1
 ): StageKey {
-  const table = STAGE_REQUIREMENTS_BY_STAGE[stageSet];
-  let best: StageKey = "E1";
-  let bestCount = -1;
-  let bestTier = -1;
-
-  for (const [key, reqs] of table) {
-    if (!reqs.every((id) => removedIds.has(id))) continue;
-    const tier = STAGE_TIER[key];
-    if (reqs.length > bestCount || (reqs.length === bestCount && tier > bestTier)) {
-      best = key;
-      bestCount = reqs.length;
-      bestTier = tier;
-    }
-  }
-  return best;
+  return "E1";
 }
 
-export const FINALE_STAGE: StageKey = "E1_swim";
+export const FINALE_STAGE: StageKey = "E1";

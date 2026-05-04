@@ -1,11 +1,14 @@
 import Phaser from "phaser";
-import { STAGE_ORDER, type StageKey } from "../data/parts";
+import { STAGE_LAYERS, type StageKey, type StageLayerDef } from "../data/parts";
 
 export class StageManager {
   private scene: Phaser.Scene;
-  private layers: Map<StageKey, Phaser.GameObjects.Image> = new Map();
+  private baseLayer!: Phaser.GameObjects.Image;
+  private layers: Map<string, Phaser.GameObjects.Image> = new Map();
+  private partLayerIds: Map<string, string[]> = new Map();
+  private hiddenPartIds: Set<string> = new Set();
   private extraLayers: Map<string, Phaser.GameObjects.Image> = new Map();
-  private currentKey: StageKey;
+  private currentKey: StageKey = "E1";
   private centerX: number;
   private centerY: number;
   private scale: number;
@@ -15,56 +18,67 @@ export class StageManager {
     centerX: number,
     centerY: number,
     scale: number,
-    textureForKey?: (key: StageKey) => string
+    _textureForKey?: (key: StageKey) => string,
+    layerDefs: StageLayerDef[] = STAGE_LAYERS
   ) {
     this.scene = scene;
     this.centerX = centerX;
     this.centerY = centerY;
     this.scale = scale;
-    this.currentKey = STAGE_ORDER[0];
 
-    STAGE_ORDER.forEach((key) => {
-      const textureKey = textureForKey ? textureForKey(key) : key;
-      const img = scene.add
-        .image(centerX, centerY, textureKey)
+    [...layerDefs]
+      .sort((a, b) => a.depth - b.depth)
+      .forEach((layer) => {
+        const img = scene.add
+          .image(centerX, centerY, layer.textureKey)
+          .setOrigin(0.5, 0.5)
+          .setScale(scale)
+          .setDepth(layer.depth)
+          .setAlpha(1);
+        this.layers.set(layer.id, img);
+        if (layer.id === "base") this.baseLayer = img;
+        if (layer.partId) {
+          const ids = this.partLayerIds.get(layer.partId) ?? [];
+          ids.push(layer.id);
+          this.partLayerIds.set(layer.partId, ids);
+        }
+      });
+
+    if (!this.baseLayer) {
+      this.baseLayer = scene.add
+        .image(centerX, centerY, "E1")
         .setOrigin(0.5, 0.5)
         .setScale(scale)
-        .setAlpha(key === this.currentKey ? 1 : 0)
         .setDepth(10);
-      this.layers.set(key, img);
-    });
+    }
   }
 
   getCurrentKey(): StageKey {
     return this.currentKey;
   }
 
-  transitionTo(next: StageKey, duration = 650) {
-    if (next === this.currentKey) return;
-    const fromImg = this.layers.get(this.currentKey);
-    const toImg = this.layers.get(next);
-    if (!fromImg || !toImg) return;
+  transitionTo(_next: StageKey, _duration = 650) {
+    this.currentKey = "E1";
+  }
 
-    this.fadeOutExtraLayers(duration);
-    this.scene.tweens.add({
-      targets: fromImg,
-      alpha: 0,
-      duration,
-      ease: "Quad.easeInOut",
+  hidePartLayer(partId: string, duration = 420) {
+    this.hiddenPartIds.add(partId);
+    const layerIds = this.partLayerIds.get(partId) ?? [];
+    layerIds.forEach((layerId) => {
+      const img = this.layers.get(layerId);
+      if (!img) return;
+      this.scene.tweens.killTweensOf(img);
+      this.scene.tweens.add({
+        targets: img,
+        alpha: 0,
+        duration,
+        ease: "Quad.easeOut",
+      });
     });
-    this.scene.tweens.add({
-      targets: toImg,
-      alpha: 1,
-      duration,
-      ease: "Quad.easeInOut",
-    });
-
-    this.currentKey = next;
   }
 
   transitionToTexture(layerId: string, textureKey: string, duration = 650) {
-    const fromImg = this.layers.get(this.currentKey);
-    if (!fromImg || !this.scene.textures.exists(textureKey)) return false;
+    if (!this.scene.textures.exists(textureKey)) return false;
 
     let toImg = this.extraLayers.get(layerId);
     if (!toImg) {
@@ -73,23 +87,13 @@ export class StageManager {
         .setOrigin(0.5, 0.5)
         .setScale(this.scale)
         .setAlpha(0)
-        .setDepth(10);
+        .setDepth(30);
       this.extraLayers.set(layerId, toImg);
     } else {
       toImg.setTexture(textureKey).setAlpha(0).setVisible(true);
     }
 
     this.layers.forEach((img) => {
-      this.scene.tweens.killTweensOf(img);
-      this.scene.tweens.add({
-        targets: img,
-        alpha: 0,
-        duration,
-        ease: "Quad.easeInOut",
-      });
-    });
-    this.extraLayers.forEach((img, id) => {
-      if (id === layerId) return;
       this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({
         targets: img,
@@ -108,19 +112,14 @@ export class StageManager {
   }
 
   getDisplayBounds(): { left: number; top: number; width: number; height: number } {
-    const img = this.layers.get(this.currentKey);
-    if (!img) return { left: 0, top: 0, width: 0, height: 0 };
     return {
-      left: img.x - img.displayWidth / 2,
-      top: img.y - img.displayHeight / 2,
-      width: img.displayWidth,
-      height: img.displayHeight,
+      left: this.baseLayer.x - this.baseLayer.displayWidth / 2,
+      top: this.baseLayer.y - this.baseLayer.displayHeight / 2,
+      width: this.baseLayer.displayWidth,
+      height: this.baseLayer.displayHeight,
     };
   }
 
-  // Fade every stage image to alpha 0. Used when handing the canvas
-  // over to another system (e.g., interaction mode) that renders its
-  // own character above the stage depth.
   fadeOutAll(duration = 400) {
     this.layers.forEach((img) => {
       this.scene.tweens.killTweensOf(img);
@@ -129,19 +128,26 @@ export class StageManager {
     this.fadeOutExtraLayers(duration);
   }
 
-  // Force-show a specific stage image, fading out everything else. Used
-  // to restore the finale when returning from interaction mode.
   showKey(key: StageKey, duration = 400) {
     this.currentKey = key;
     this.fadeOutExtraLayers(duration);
-    this.layers.forEach((img, k) => {
+    this.layers.forEach((img, layerId) => {
+      const partId = this.getPartIdForLayer(layerId);
+      const shouldShow = !partId || !this.hiddenPartIds.has(partId);
       this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({
         targets: img,
-        alpha: k === key ? 1 : 0,
+        alpha: shouldShow ? 1 : 0,
         duration,
       });
     });
+  }
+
+  private getPartIdForLayer(layerId: string): string | undefined {
+    for (const [partId, layerIds] of this.partLayerIds.entries()) {
+      if (layerIds.includes(layerId)) return partId;
+    }
+    return undefined;
   }
 
   private fadeOutExtraLayers(duration: number) {

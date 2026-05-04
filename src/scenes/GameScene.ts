@@ -6,6 +6,7 @@ import { StageManager } from "../systems/StageManager";
 import { InteractionSystem } from "../systems/InteractionSystem";
 import {
   FINALE_STAGE,
+  STAGE_LAYERS,
   type StageKey,
   type StageSet,
   type PartDef,
@@ -111,7 +112,8 @@ export class GameScene extends Phaser.Scene {
       characterX,
       characterY,
       scale,
-      (key) => this.resolveTextureKey(key)
+      (key) => this.resolveTextureKey(key),
+      STAGE_LAYERS
     );
 
     this.interactionSystem = new InteractionSystem(
@@ -147,6 +149,7 @@ export class GameScene extends Phaser.Scene {
         if (success) {
           this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
           this.partSystem.removePart(part.id);
+          this.stageManager.hidePartLayer(part.id);
           this.progressSystem.advance();
           this.removed.add(part.id);
           this.events.emit("progress", this.progressSystem.getProgress());
@@ -368,6 +371,7 @@ export class GameScene extends Phaser.Scene {
     for (const part of this.parts) {
       if (this.removed.has(part.id)) continue;
       this.partSystem.removePart(part.id);
+      this.stageManager.hidePartLayer(part.id, 240);
       this.removed.add(part.id);
       this.progressSystem.advance();
       this.grantCoins(5 + part.difficulty * 2);
@@ -404,8 +408,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveTextureKey(stageKey: StageKey): string {
-    if (this.stageSet === 2) return `S2_${stageKey}`;
-    if (this.stageSet === 3) return `S3_${stageKey}`;
     return stageKey;
   }
 
@@ -415,7 +417,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveClearTextureKey(): string {
-    if (this.stageSet === 2) return "E2_clear";
     return "E1_clear";
   }
 
@@ -501,7 +502,7 @@ export class GameScene extends Phaser.Scene {
     return {
       id: `farm_${Date.now()}`,
       label: "훈련",
-      act: this.parts[0]?.act ?? "기",
+      act: this.parts[0]?.act ?? "intro",
       difficulty,
       hitbox: { x: 0, y: 0, w: 0, h: 0 },
       tint: 0xffffff,
