@@ -98,10 +98,10 @@ export class GameScene extends Phaser.Scene {
       .getSourceImage() as HTMLImageElement;
     const origW = baseTex.width;
     const origH = baseTex.height;
-    const topUi = 2 * 150 + 40;
-    const botUi = 2 * 230 + 50;
+    const topUi = 2 * 190 + 40;
+    const botUi = 2 * 300 + 60;
     const availableH = height - topUi - botUi;
-    const scale = Math.min(availableH / origH, (width * 0.78) / origW);
+    const scale = Math.min(availableH / origH, (width * 0.7) / origW);
 
     const characterX = width / 2;
     const characterY = topUi + availableH / 2;

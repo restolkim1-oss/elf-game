@@ -1,11 +1,12 @@
 import Phaser from "phaser";
 import type { PartDef } from "../data/parts";
+import { DiceRoller } from "./Dice";
 import { UI_SCALE } from "../main";
 
 const u = (n: number) => n * UI_SCALE;
 const px = (n: number) => `${Math.round(n * UI_SCALE * 1.55)}px`;
 
-const PLAYER_HP_MAX = 40;
+const PLAYER_HP_MAX = 50;
 const ENERGY_MAX = 3;
 const START_HAND = 5;
 const HAND_LIMIT = 7;
@@ -38,6 +39,38 @@ interface CardDef {
   description: string;
   effects: CardEffect[];
   color: number;
+  isReversed: boolean;
+  damage: number;
+  risk: number;
+}
+
+interface TarotCardState {
+  uid: number;
+  cardId: CardId;
+  isReversed: boolean;
+  damage: number;
+  risk: number;
+}
+
+interface TarotBattleCard {
+  isReversed: boolean;
+  damage: number;
+  risk: number;
+}
+
+export function calculateDamage(playerCard: TarotBattleCard, enemyCard: TarotBattleCard) {
+  const playerPower = playerCard.damage * (playerCard.isReversed ? 1.15 : 1);
+  const enemyPower = enemyCard.damage;
+  const didWin = playerPower >= enemyPower;
+  return {
+    didWin,
+    damage: didWin
+      ? Math.max(1, Math.round(playerCard.damage * (playerCard.isReversed ? 2.5 : 1)))
+      : 0,
+    backlash: didWin
+      ? 0
+      : Math.max(1, Math.round(playerCard.risk * (playerCard.isReversed ? 1 : 0.35))),
+  };
 }
 
 const CARDS: Record<CardId, CardDef> = {
@@ -48,6 +81,9 @@ const CARDS: Record<CardId, CardDef> = {
     description: "공격 4",
     effects: [{ kind: "attack", amount: 4 }],
     color: 0xc04040,
+    isReversed: false,
+    damage: 4,
+    risk: 4,
   },
   smash: {
     id: "smash",
@@ -56,6 +92,9 @@ const CARDS: Record<CardId, CardDef> = {
     description: "공격 9",
     effects: [{ kind: "attack", amount: 9 }],
     color: 0xa02020,
+    isReversed: false,
+    damage: 9,
+    risk: 6,
   },
   guard: {
     id: "guard",
@@ -64,6 +103,9 @@ const CARDS: Record<CardId, CardDef> = {
     description: "보호막 5",
     effects: [{ kind: "block", amount: 5 }],
     color: 0x4060c0,
+    isReversed: false,
+    damage: 2,
+    risk: 3,
   },
   heal: {
     id: "heal",
@@ -72,6 +114,9 @@ const CARDS: Record<CardId, CardDef> = {
     description: "HP +5",
     effects: [{ kind: "heal", amount: 5 }],
     color: 0x40c060,
+    isReversed: false,
+    damage: 1,
+    risk: 3,
   },
   shock: {
     id: "shock",
@@ -80,6 +125,9 @@ const CARDS: Record<CardId, CardDef> = {
     description: "공격 6 · 적 행동 무력화",
     effects: [{ kind: "attack", amount: 6 }, { kind: "stun" }],
     color: 0xf0d040,
+    isReversed: false,
+    damage: 6,
+    risk: 8,
   },
   burn: {
     id: "burn",
@@ -88,6 +136,9 @@ const CARDS: Record<CardId, CardDef> = {
     description: "2턴 화상 (턴당 3)",
     effects: [{ kind: "burn", amount: 3, turns: 2 }],
     color: 0xe06030,
+    isReversed: false,
+    damage: 5,
+    risk: 5,
   },
   freeze: {
     id: "freeze",
@@ -99,6 +150,9 @@ const CARDS: Record<CardId, CardDef> = {
       { kind: "weaken", amount: 3, turns: 1 },
     ],
     color: 0x70c0f0,
+    isReversed: false,
+    damage: 3,
+    risk: 4,
   },
   focus: {
     id: "focus",
@@ -107,6 +161,9 @@ const CARDS: Record<CardId, CardDef> = {
     description: "카드 2장 드로우",
     effects: [{ kind: "draw", amount: 2 }],
     color: 0xc0a060,
+    isReversed: false,
+    damage: 1,
+    risk: 2,
   },
 };
 
@@ -138,7 +195,7 @@ interface SideState {
 type CardBattleResult = (success: boolean) => void;
 
 interface HandCard {
-  cardId: CardId;
+  card: TarotCardState;
   container: Phaser.GameObjects.Container;
   bg: Phaser.GameObjects.Rectangle;
   baseX: number;
@@ -159,12 +216,13 @@ export class CardBattleSystem {
   private enemy!: SideState;
   private energy = 0;
   private turn = 0;
-  private deck: CardId[] = [];
-  private hand: CardId[] = [];
-  private discard: CardId[] = [];
+  private deck: TarotCardState[] = [];
+  private hand: TarotCardState[] = [];
+  private discard: TarotCardState[] = [];
   private intentPattern: Intent[] = [];
   private intentIdx = 0;
   private enemyStunned = false;
+  private nextCardUid = 1;
 
   private playerHpFill!: Phaser.GameObjects.Rectangle;
   private playerHpText!: Phaser.GameObjects.Text;
@@ -198,6 +256,7 @@ export class CardBattleSystem {
     this.cancelled = false;
     this.finished = false;
     this.busy = false;
+    this.nextCardUid = 1;
     this.activeDone = done;
     this.startBattle(part);
   }
@@ -243,7 +302,7 @@ export class CardBattleSystem {
     this.overlay = this.scene.add.container(0, 0).setDepth(500);
 
     // Initialize state
-    const enemyHpMax = 30 + part.difficulty * 14;
+    const enemyHpMax = 22 + part.difficulty * 9;
     this.player = {
       hp: PLAYER_HP_MAX,
       hpMax: PLAYER_HP_MAX,
@@ -260,7 +319,7 @@ export class CardBattleSystem {
     };
     this.energy = ENERGY_MAX;
     this.turn = 1;
-    this.deck = shuffle([...STARTER_DECK]);
+    this.deck = shuffle(STARTER_DECK.map((cardId) => this.createTarotCard(cardId)));
     this.hand = [];
     this.discard = [];
     this.intentPattern = buildIntentPattern(part.difficulty);
@@ -523,9 +582,11 @@ export class CardBattleSystem {
         dmg = Math.max(0, dmg - this.enemy.weaken.amount);
       }
       this.applyAttack(this.player, dmg);
+      this.playAttackEffect("player", dmg);
       this.flashLog(`적 공격 ${intent.amount}${this.enemy.weaken ? ` (약화 -${this.enemy.weaken.amount})` : ""}`);
     } else if (intent.kind === "block") {
       this.enemy.block += intent.amount;
+      this.playGuardEffect("enemy");
       this.flashLog(`적 보호막 +${intent.amount}`);
     }
     this.refreshAll();
@@ -560,17 +621,17 @@ export class CardBattleSystem {
 
   private tryPlayCard(handIdx: number) {
     if (this.busy || this.finished) return;
-    const cardId = this.hand[handIdx];
-    if (!cardId) return;
-    const def = CARDS[cardId];
+    const card = this.hand[handIdx];
+    if (!card) return;
+    const def = CARDS[card.cardId];
     if (this.energy < def.cost) {
       this.flashLog(`기력 부족 (${def.cost} 필요)`);
       return;
     }
     this.energy -= def.cost;
     this.hand.splice(handIdx, 1);
-    this.discard.push(cardId);
-    this.applyCardEffects(def);
+    this.discard.push(card);
+    this.applyCardEffects(card);
     this.refreshAll();
 
     if (this.enemy.hp <= 0) {
@@ -580,14 +641,29 @@ export class CardBattleSystem {
     }
   }
 
-  private applyCardEffects(def: CardDef) {
+  private applyCardEffects(card: TarotCardState) {
+    const def = CARDS[card.cardId];
+    const enemyCard = this.currentEnemyCard();
+    const duel = calculateDamage(card, enemyCard);
+    let attemptedAttack = false;
+    let didAttack = false;
+    let didGuard = false;
     for (const e of def.effects) {
       switch (e.kind) {
         case "attack":
-          this.applyAttack(this.enemy, e.amount);
+          attemptedAttack = true;
+          if (duel.didWin) {
+            this.applyAttack(this.enemy, duel.damage);
+            didAttack = true;
+          } else {
+            this.applyDirectDamage(this.player, duel.backlash);
+            this.playAttackEffect("player", duel.backlash);
+            this.flashLog(card.isReversed ? `역방향 실패 - 내구도 ${duel.backlash} 감소` : `심리전 실패 - 내구도 ${duel.backlash} 감소`);
+          }
           break;
         case "block":
           this.player.block += e.amount;
+          didGuard = true;
           break;
         case "heal":
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + e.amount);
@@ -606,7 +682,9 @@ export class CardBattleSystem {
           break;
       }
     }
-    this.flashLog(`${def.name} 사용`);
+    if (didAttack) this.rollDiceAfterHit(duel.damage);
+    if (didGuard) this.playGuardEffect("player");
+    if (duel.didWin || !attemptedAttack) this.flashLog(`${def.name}${card.isReversed ? " 역방향" : ""} 사용`);
   }
 
   private applyAttack(target: SideState, raw: number) {
@@ -623,6 +701,55 @@ export class CardBattleSystem {
 
   private applyDirectDamage(target: SideState, amount: number) {
     target.hp = Math.max(0, target.hp - amount);
+  }
+
+  private createTarotCard(cardId: CardId): TarotCardState {
+    const def = CARDS[cardId];
+    return {
+      uid: this.nextCardUid++,
+      cardId,
+      isReversed: def.isReversed,
+      damage: def.damage,
+      risk: def.risk,
+    };
+  }
+
+  private currentEnemyCard(): TarotBattleCard {
+    const intent = this.intentPattern[this.intentIdx % this.intentPattern.length];
+    const damage = intent.kind === "attack" ? intent.amount : Math.max(1, Math.ceil(intent.amount * 0.6));
+    return {
+      isReversed: false,
+      damage,
+      risk: Math.max(1, Math.ceil(damage * 0.5)),
+    };
+  }
+
+  private toggleCardReverse(uid: number) {
+    if (this.busy || this.finished) return;
+    const card = this.hand.find((c) => c.uid === uid);
+    if (!card) return;
+    card.isReversed = !card.isReversed;
+    this.flashLog(card.isReversed ? "카드 역방향 선택" : "카드 정방향 선택");
+    this.refreshHandRender();
+  }
+
+  private rollDiceAfterHit(baseDamage: number) {
+    const { width } = this.scene.scale;
+    this.playAttackEffect("enemy", baseDamage);
+    DiceRoller.roll(this.scene, this.overlay, width / 2, u(285), (roll) => {
+      if (this.finished) return;
+      if (roll.critical) {
+        const criticalDamage = Math.max(4, Math.round(baseDamage * 0.85));
+        this.applyDirectDamage(this.enemy, criticalDamage);
+        this.playAttackEffect("enemy", criticalDamage);
+        this.flashLog(`Critical Hit! 추가 내구도 ${criticalDamage} 감소`);
+        this.refreshAll();
+        if (this.enemy.hp <= 0) {
+          this.busy = true;
+          this.scene.time.delayedCall(360, () => this.finish(true));
+        }
+      }
+    });
   }
 
   // -- Deck --
@@ -722,13 +849,13 @@ export class CardBattleSystem {
   }
 
   private makeCardVisual(
-    cardId: CardId,
+    card: TarotCardState,
     x: number,
     y: number,
     cardW: number,
     cardH: number
   ): HandCard {
-    const def = CARDS[cardId];
+    const def = CARDS[card.cardId];
     const playable = this.energy >= def.cost && !this.busy && !this.finished;
 
     const bg = this.scene.add
@@ -755,10 +882,18 @@ export class CardBattleSystem {
         fontStyle: "bold",
       })
       .setOrigin(0.5);
-    const descText = this.scene.add
-      .text(0, u(8), def.description, {
+    const reverseBadge = this.scene.add
+      .text(cardW / 2 - u(20), -cardH / 2 + u(14), card.isReversed ? "REV" : "UP", {
         fontFamily: "serif",
-        fontSize: px(9),
+        fontSize: px(8),
+        color: card.isReversed ? "#ff5e7a" : "#2f2520",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    const descText = this.scene.add
+      .text(0, u(8), `${def.description}\n${card.isReversed ? "역방향: 승리 x2.5 / 실패 리스크" : "상단 클릭 또는 드래그: 반전"}`, {
+        fontFamily: "serif",
+        fontSize: px(8.2),
         color: playable ? "#2f2520" : "#cfc0b0",
         fontStyle: "bold",
         align: "center",
@@ -767,8 +902,9 @@ export class CardBattleSystem {
       .setOrigin(0.5);
 
     const container = this.scene.add
-      .container(x, y, [bg, accent, costCircle, costText, nameText, descText])
+      .container(x, y, [bg, accent, costCircle, costText, nameText, reverseBadge, descText])
       .setSize(cardW, cardH);
+    if (card.isReversed) container.setAngle(180);
     this.overlay?.add(container);
 
     bg.on("pointerover", () => {
@@ -790,13 +926,25 @@ export class CardBattleSystem {
         duration: 140,
       });
     });
-    bg.on("pointerdown", () => {
+    let downX = 0;
+    let downY = 0;
+    bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      downX = pointer.x;
+      downY = pointer.y;
+    });
+    bg.on("pointerup", (pointer: Phaser.Input.Pointer, _localX: number, localY: number) => {
+      const dragged = Math.abs(pointer.x - downX) + Math.abs(pointer.y - downY) > u(28);
+      const clickedFlipZone = localY < -cardH / 2 + u(36);
+      if (dragged || clickedFlipZone) {
+        this.toggleCardReverse(card.uid);
+        return;
+      }
       const idx = this.handObjs.findIndex((o) => o === slot);
       if (idx >= 0) this.tryPlayCard(idx);
     });
 
     const slot: HandCard = {
-      cardId,
+      card,
       container,
       bg,
       baseX: x,
@@ -821,6 +969,96 @@ export class CardBattleSystem {
       alpha: 0.3,
       duration: 1200,
       delay: 800,
+    });
+  }
+
+  private playAttackEffect(target: "enemy" | "player", amount = 0) {
+    const { width, height } = this.scene.scale;
+    const y = target === "enemy" ? u(180) : height - u(280);
+    const x = width / 2;
+    const color = target === "enemy" ? 0xff5e7a : 0xffd572;
+    this.scene.cameras.main.shake(target === "enemy" ? 150 : 220, target === "enemy" ? 0.006 : 0.009);
+
+    const slash = this.scene.add.graphics().setDepth(720);
+    slash.lineStyle(u(8), color, 0.95);
+    slash.beginPath();
+    slash.moveTo(x - u(150), y - u(52));
+    slash.lineTo(x + u(150), y + u(52));
+    slash.strokePath();
+    slash.lineStyle(u(3), 0xffffff, 0.9);
+    slash.beginPath();
+    slash.moveTo(x - u(112), y - u(34));
+    slash.lineTo(x + u(112), y + u(34));
+    slash.strokePath();
+    this.overlay?.add(slash);
+
+    const burst = this.scene.add.circle(x, y, u(18), color, 0.35).setDepth(721);
+    this.overlay?.add(burst);
+    if (amount > 0) {
+      const damage = this.scene.add
+        .text(x, y - u(54), `-${amount}`, {
+          fontFamily: "serif",
+          fontSize: px(20),
+          color: "#ffffff",
+          fontStyle: "bold",
+          stroke: "#5a1018",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5)
+        .setDepth(722);
+      this.overlay?.add(damage);
+      this.scene.tweens.add({
+        targets: damage,
+        y: damage.y - u(36),
+        alpha: 0,
+        duration: 520,
+        ease: "Cubic.easeOut",
+        onComplete: () => damage.destroy(),
+      });
+    }
+
+    this.scene.tweens.add({
+      targets: slash,
+      alpha: 0,
+      scaleX: 1.18,
+      scaleY: 1.18,
+      duration: 260,
+      ease: "Cubic.easeOut",
+      onComplete: () => slash.destroy(),
+    });
+    this.scene.tweens.add({
+      targets: burst,
+      radius: u(90),
+      alpha: 0,
+      duration: 360,
+      ease: "Cubic.easeOut",
+      onComplete: () => burst.destroy(),
+    });
+  }
+
+  private playGuardEffect(target: "enemy" | "player") {
+    const { width, height } = this.scene.scale;
+    const y = target === "enemy" ? u(180) : height - u(280);
+    const x = width / 2;
+    this.scene.cameras.main.shake(90, 0.003);
+
+    const shield = this.scene.add.graphics().setDepth(721);
+    shield.lineStyle(u(5), 0x9ad0ff, 0.95);
+    shield.fillStyle(0x4060c0, 0.18);
+    shield.fillCircle(x, y, u(54));
+    shield.strokeCircle(x, y, u(54));
+    shield.lineStyle(u(2), 0xffffff, 0.8);
+    shield.strokeCircle(x, y, u(36));
+    this.overlay?.add(shield);
+
+    this.scene.tweens.add({
+      targets: shield,
+      alpha: 0,
+      scaleX: 1.45,
+      scaleY: 1.45,
+      duration: 420,
+      ease: "Cubic.easeOut",
+      onComplete: () => shield.destroy(),
     });
   }
 
@@ -872,12 +1110,12 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function buildIntentPattern(difficulty: number): Intent[] {
-  const a = Math.max(2, 2 + difficulty);
-  const b = Math.max(2, 1 + difficulty);
-  const a2 = Math.max(3, 4 + difficulty);
+  const a = Math.max(1, 1 + difficulty);
+  const b = Math.max(1, difficulty);
+  const a2 = Math.max(2, 2 + difficulty);
   return [
-    { kind: "attack", amount: a },
     { kind: "block", amount: b },
+    { kind: "attack", amount: a },
     { kind: "attack", amount: a2 },
   ];
 }
