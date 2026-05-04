@@ -7,35 +7,26 @@ const u = (n: number) => n * UI_SCALE;
 const px = (n: number) => `${Math.round(n * UI_SCALE * 1.55)}px`;
 
 const PLAYER_HP_MAX = 50;
-const ENERGY_MAX = 3;
+const ENERGY_MAX = 5;
 const START_HAND = 5;
 const HAND_LIMIT = 7;
 const DRAW_PER_TURN = 1;
 const MAX_TURNS = 12;
 
-type CardId =
-  | "slash"
-  | "smash"
-  | "guard"
-  | "heal"
-  | "shock"
-  | "burn"
-  | "freeze"
-  | "focus";
+type CardId = "attack" | "powerAttack" | "defense" | "heal" | "parry";
+type CardRole = "attack" | "defense" | "heal" | "parry";
 
 type CardEffect =
   | { kind: "attack"; amount: number }
   | { kind: "block"; amount: number }
   | { kind: "heal"; amount: number }
-  | { kind: "draw"; amount: number }
-  | { kind: "stun" }
-  | { kind: "burn"; amount: number; turns: number }
-  | { kind: "weaken"; amount: number; turns: number };
+  | { kind: "parry"; amount: number };
 
 interface CardDef {
   id: CardId;
   characterName: string;
-  role: string;
+  role: CardRole;
+  roleLabel: string;
   name: string;
   cost: number;
   description: string;
@@ -89,14 +80,15 @@ function calculateCardPower(card: Pick<CardDef, "level" | "attack" | "defense" |
 }
 
 const CARDS: Record<CardId, CardDef> = {
-  slash: {
-    id: "slash",
+  attack: {
+    id: "attack",
     characterName: "엘리",
-    role: "밸런스형 기사",
-    name: "베기",
+    role: "attack",
+    roleLabel: "공격",
+    name: "공격",
     cost: 1,
-    description: "공격 4",
-    effects: [{ kind: "attack", amount: 4 }],
+    description: "기본 공격",
+    effects: [{ kind: "attack", amount: 5 }],
     color: 0xc04040,
     isReversed: false,
     level: 1,
@@ -106,13 +98,14 @@ const CARDS: Record<CardId, CardDef> = {
     damage: 4,
     risk: 4,
   },
-  smash: {
-    id: "smash",
+  powerAttack: {
+    id: "powerAttack",
     characterName: "나느사스",
-    role: "강공격형 기사",
-    name: "강타",
+    role: "attack",
+    roleLabel: "공격",
+    name: "강공격",
     cost: 2,
-    description: "공격 9",
+    description: "강한 공격",
     effects: [{ kind: "attack", amount: 9 }],
     color: 0xa02020,
     isReversed: false,
@@ -123,14 +116,15 @@ const CARDS: Record<CardId, CardDef> = {
     damage: 9,
     risk: 6,
   },
-  guard: {
-    id: "guard",
+  defense: {
+    id: "defense",
     characterName: "아리아",
-    role: "수호형 기사",
-    name: "방패",
+    role: "defense",
+    roleLabel: "디펜스",
+    name: "디펜스",
     cost: 1,
-    description: "보호막 5",
-    effects: [{ kind: "block", amount: 5 }],
+    description: "방어막 생성",
+    effects: [{ kind: "block", amount: 6 }],
     color: 0x4060c0,
     isReversed: false,
     level: 1,
@@ -143,7 +137,8 @@ const CARDS: Record<CardId, CardDef> = {
   heal: {
     id: "heal",
     characterName: "루미아",
-    role: "회복형 기사",
+    role: "heal",
+    roleLabel: "회복",
     name: "회복",
     cost: 2,
     description: "HP +5",
@@ -157,88 +152,32 @@ const CARDS: Record<CardId, CardDef> = {
     damage: 1,
     risk: 3,
   },
-  shock: {
-    id: "shock",
-    characterName: "세리아",
-    role: "번개형 기사",
-    name: "번개",
-    cost: 3,
-    description: "공격 6 · 적 행동 무력화",
-    effects: [{ kind: "attack", amount: 6 }, { kind: "stun" }],
-    color: 0xf0d040,
-    isReversed: false,
-    level: 3,
-    attack: 11,
-    defense: 4,
-    psyche: 10,
-    damage: 6,
-    risk: 8,
-  },
-  burn: {
-    id: "burn",
-    characterName: "이그니스",
-    role: "화염형 기사",
-    name: "화염",
-    cost: 2,
-    description: "2턴 화상 (턴당 3)",
-    effects: [{ kind: "burn", amount: 3, turns: 2 }],
-    color: 0xe06030,
-    isReversed: false,
-    level: 2,
-    attack: 9,
-    defense: 3,
-    psyche: 8,
-    damage: 5,
-    risk: 5,
-  },
-  freeze: {
-    id: "freeze",
-    characterName: "프레이나",
-    role: "빙결형 기사",
-    name: "빙결",
-    cost: 2,
-    description: "공격 3 · 적 공격 -3",
-    effects: [
-      { kind: "attack", amount: 3 },
-      { kind: "weaken", amount: 3, turns: 1 },
-    ],
-    color: 0x70c0f0,
-    isReversed: false,
-    level: 2,
-    attack: 7,
-    defense: 6,
-    psyche: 9,
-    damage: 3,
-    risk: 4,
-  },
-  focus: {
-    id: "focus",
+  parry: {
+    id: "parry",
     characterName: "미르",
-    role: "전략형 기사",
-    name: "집중",
-    cost: 1,
-    description: "카드 2장 드로우",
-    effects: [{ kind: "draw", amount: 2 }],
+    role: "parry",
+    roleLabel: "패링",
+    name: "패링",
+    cost: 2,
+    description: "방어 후 반격",
+    effects: [{ kind: "parry", amount: 4 }],
     color: 0xc0a060,
     isReversed: false,
-    level: 1,
-    attack: 4,
-    defense: 4,
-    psyche: 12,
-    damage: 1,
-    risk: 2,
+    level: 2,
+    attack: 6,
+    defense: 8,
+    psyche: 7,
+    damage: 4,
+    risk: 4,
   },
 };
 
 const STARTER_DECK: CardId[] = [
-  "slash", "slash", "slash", "slash",
-  "smash", "smash",
-  "guard", "guard", "guard",
-  "heal",
-  "shock",
-  "burn",
-  "freeze",
-  "focus", "focus",
+  "attack", "attack", "attack", "attack",
+  "powerAttack", "powerAttack",
+  "defense", "defense", "defense", "defense",
+  "heal", "heal",
+  "parry", "parry", "parry",
 ];
 
 type IntentKind = "attack" | "block";
@@ -691,10 +630,12 @@ export class CardBattleSystem {
       this.flashLog(`기력 부족 (${def.cost} 필요)`);
       return;
     }
-    this.energy -= def.cost;
-    this.hand.splice(handIdx, 1);
-    this.discard.push(card);
-    this.applyCardEffects(card);
+    const comboCards = this.collectPlayableCombo(handIdx);
+    const comboCost = comboCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    this.energy -= comboCost;
+    this.hand = this.hand.filter((c) => !comboCards.includes(c));
+    this.discard.push(...comboCards);
+    this.applyCardEffects(comboCards);
     this.refreshAll();
 
     if (this.enemy.hp <= 0) {
@@ -704,50 +645,82 @@ export class CardBattleSystem {
     }
   }
 
-  private applyCardEffects(card: TarotCardState) {
+  private applyCardEffects(cards: TarotCardState[]) {
+    const card = cards[0];
     const def = CARDS[card.cardId];
+    const role = def.role;
+    const comboMultiplier = 1 + Math.max(0, cards.length - 1) * (role === "defense" ? 0.25 : 0.35);
+    const totalEffect = this.sumComboEffect(cards);
+    const comboBonusText = cards.length > 1 ? ` x${cards.length} 합체` : "";
     const enemyCard = this.currentEnemyCard();
-    const duel = calculateDamage(card, enemyCard);
+    const comboBattleCard: TarotBattleCard = {
+      isReversed: cards.some((c) => c.isReversed),
+      damage: Math.max(1, Math.round(cards.reduce((sum, c) => sum + c.damage, 0) * comboMultiplier)),
+      risk: Math.max(1, Math.round(cards.reduce((sum, c) => sum + c.risk, 0) / cards.length)),
+    };
+    const duel = calculateDamage(comboBattleCard, enemyCard);
     let attemptedAttack = false;
     let didAttack = false;
     let didGuard = false;
-    for (const e of def.effects) {
-      switch (e.kind) {
-        case "attack":
-          attemptedAttack = true;
-          if (duel.didWin) {
-            this.applyAttack(this.enemy, duel.damage);
-            didAttack = true;
-          } else {
-            this.applyDirectDamage(this.player, duel.backlash);
-            this.playAttackEffect("player", duel.backlash);
-            this.flashLog(card.isReversed ? `역방향 실패 - 내구도 ${duel.backlash} 감소` : `심리전 실패 - 내구도 ${duel.backlash} 감소`);
-          }
-          break;
-        case "block":
-          this.player.block += e.amount;
-          didGuard = true;
-          break;
-        case "heal":
-          this.player.hp = Math.min(this.player.hpMax, this.player.hp + e.amount);
-          break;
-        case "draw":
-          this.draw(e.amount);
-          break;
-        case "stun":
-          this.enemyStunned = true;
-          break;
-        case "burn":
-          this.enemy.burn = { dmg: e.amount, turns: e.turns };
-          break;
-        case "weaken":
-          this.enemy.weaken = { amount: e.amount, turns: e.turns };
-          break;
+
+    switch (role) {
+      case "attack":
+        attemptedAttack = true;
+        if (duel.didWin) {
+          this.applyAttack(this.enemy, duel.damage);
+          didAttack = true;
+        } else {
+          this.applyDirectDamage(this.player, duel.backlash);
+          this.playAttackEffect("player", duel.backlash);
+          this.flashLog(card.isReversed ? `역방향 실패 - 내구도 ${duel.backlash} 감소` : `심리전 실패 - 내구도 ${duel.backlash} 감소`);
+        }
+        break;
+      case "defense":
+        this.player.block += Math.max(1, Math.round(totalEffect * comboMultiplier));
+        didGuard = true;
+        break;
+      case "heal":
+        this.player.hp = Math.min(this.player.hpMax, this.player.hp + totalEffect);
+        break;
+      case "parry": {
+        const guard = Math.max(1, Math.round(totalEffect * comboMultiplier));
+        this.player.block += guard;
+        didGuard = true;
+        if (duel.didWin) {
+          const counter = Math.max(1, Math.round(duel.damage * 0.7));
+          this.applyAttack(this.enemy, counter);
+          didAttack = true;
+        }
+        break;
       }
     }
     if (didAttack) this.rollDiceAfterHit(duel.damage);
     if (didGuard) this.playGuardEffect("player");
-    if (duel.didWin || !attemptedAttack) this.flashLog(`${def.name}${card.isReversed ? " 역방향" : ""} 사용`);
+    if (duel.didWin || !attemptedAttack) this.flashLog(`${def.roleLabel}${comboBonusText} 사용`);
+  }
+
+  private collectPlayableCombo(handIdx: number) {
+    const first = this.hand[handIdx];
+    if (!first) return [];
+    const role = CARDS[first.cardId].role;
+    const combo = [first];
+    let cost = CARDS[first.cardId].cost;
+    for (const card of this.hand) {
+      if (card === first) continue;
+      const def = CARDS[card.cardId];
+      if (def.role !== role) continue;
+      if (cost + def.cost > this.energy) continue;
+      combo.push(card);
+      cost += def.cost;
+    }
+    return combo;
+  }
+
+  private sumComboEffect(cards: TarotCardState[]) {
+    return cards.reduce((sum, card) => {
+      const effect = CARDS[card.cardId].effects[0];
+      return sum + ("amount" in effect ? effect.amount : 0);
+    }, 0);
   }
 
   private applyAttack(target: SideState, raw: number) {
@@ -963,9 +936,9 @@ export class CardBattleSystem {
       .rectangle(0, -cardH / 2 + u(50), cardW - u(18), u(46), 0x24182f, 0.22)
       .setStrokeStyle(u(1), def.color, 0.65);
     const roleText = this.scene.add
-      .text(0, -cardH / 2 + u(42), def.role, {
+      .text(0, -cardH / 2 + u(42), def.roleLabel, {
         fontFamily: "serif",
-        fontSize: px(8.5),
+        fontSize: px(11),
         color: "#4b3545",
         fontStyle: "bold",
       })
@@ -978,19 +951,10 @@ export class CardBattleSystem {
         fontStyle: "bold",
       })
       .setOrigin(0.5);
-    const statsText = this.scene.add
-      .text(0, u(4), `공 ${card.attack}  방 ${card.defense}  심 ${card.psyche}`, {
-        fontFamily: "serif",
-        fontSize: px(8.5),
-        color: playable ? "#2f2520" : "#cfc0b0",
-        fontStyle: "bold",
-        align: "center",
-      })
-      .setOrigin(0.5);
     const descText = this.scene.add
-      .text(0, u(38), `${def.description}\n${card.isReversed ? "역방향: 승리 x2.5 / 실패 리스크" : "상단 클릭 또는 드래그: 반전"}`, {
+      .text(0, u(32), `${def.description}\n같은 ${def.roleLabel} 카드 자동 합체`, {
         fontFamily: "serif",
-        fontSize: px(8.4),
+        fontSize: px(9.2),
         color: playable ? "#2f2520" : "#cfc0b0",
         fontStyle: "bold",
         align: "center",
@@ -1009,7 +973,6 @@ export class CardBattleSystem {
         portrait,
         roleText,
         powerText,
-        statsText,
         descText,
       ])
       .setSize(cardW, cardH);
