@@ -12,6 +12,13 @@ const START_HAND = 5;
 const TARGET_HAND = 5;
 const HAND_LIMIT = 7;
 const MAX_TURNS = 12;
+const ENEMY_REACTION_LINES = [
+  "제법인데?",
+  "이럴수가! 잘하네?",
+  "나도 지지 않아!",
+  "흥, 아직이야!",
+  "생각보다 강하네?",
+];
 
 type CardId = "attack" | "powerAttack" | "defense" | "heal" | "parry";
 type CardRole = "attack" | "defense" | "heal" | "parry";
@@ -252,6 +259,8 @@ export class CardBattleSystem {
   private playerHpBarLeft = 0;
   private enemyHpBarLeft = 0;
   private dragStart: { x: number; y: number; card: TarotCardState } | null = null;
+  private speechBubble: Phaser.GameObjects.Container | null = null;
+  private lastSpeechAt = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -293,6 +302,9 @@ export class CardBattleSystem {
   }
 
   private cleanup() {
+    this.speechBubble?.destroy();
+    this.speechBubble = null;
+    this.lastSpeechAt = 0;
     this.overlay?.destroy();
     this.overlay = null;
     this.handObjs = [];
@@ -710,6 +722,7 @@ export class CardBattleSystem {
       this.finish(true);
       return;
     }
+    if (result.didAttack) this.maybeShowEnemySpeech();
 
     const settle = () => this.safeSettleAfterCardUse();
     if (result.didAttack) {
@@ -935,6 +948,87 @@ export class CardBattleSystem {
     };
   }
 
+  private maybeShowEnemySpeech(force = false) {
+    if (this.finished || !this.enemy || !this.player) return;
+    const enemyRatio = this.enemy.hp / Math.max(1, this.enemy.hpMax);
+    const playerIsAhead = this.enemy.hp < this.player.hp || enemyRatio <= 0.68;
+    if (!force && !playerIsAhead) return;
+    const now = this.scene.time.now;
+    if (now - this.lastSpeechAt < 1800) return;
+    if (!force && Phaser.Math.Between(1, 100) > 52) return;
+
+    this.lastSpeechAt = now;
+    const line =
+      ENEMY_REACTION_LINES[Phaser.Math.Between(0, ENEMY_REACTION_LINES.length - 1)];
+    this.showEnemySpeech(line);
+  }
+
+  private showEnemySpeech(line: string) {
+    const { width, height } = this.scene.scale;
+    this.speechBubble?.destroy();
+
+    const x = width * 0.62;
+    const y = height * 0.31;
+    const bubbleW = u(220);
+    const bubbleH = u(72);
+    const c = this.scene.add.container(x, y).setDepth(790);
+    this.speechBubble = c;
+
+    const bg = this.scene.add.graphics();
+    bg.fillStyle(0xffffff, 0.94);
+    bg.lineStyle(u(2), 0xd4a656, 0.95);
+    bg.fillRoundedRect(-bubbleW / 2, -bubbleH / 2, bubbleW, bubbleH, u(18));
+    bg.strokeRoundedRect(-bubbleW / 2, -bubbleH / 2, bubbleW, bubbleH, u(18));
+    bg.fillStyle(0xffffff, 0.94);
+    bg.fillTriangle(
+      -u(58),
+      bubbleH / 2 - u(8),
+      -u(24),
+      bubbleH / 2 - u(8),
+      -u(70),
+      bubbleH / 2 + u(28)
+    );
+    bg.lineStyle(u(2), 0xd4a656, 0.9);
+    bg.lineBetween(-u(58), bubbleH / 2 - u(8), -u(70), bubbleH / 2 + u(28));
+    bg.lineBetween(-u(70), bubbleH / 2 + u(28), -u(24), bubbleH / 2 - u(8));
+
+    const text = this.scene.add
+      .text(0, -u(2), line, {
+        fontFamily: "serif",
+        fontSize: px(15),
+        color: "#3b2410",
+        fontStyle: "bold",
+        align: "center",
+        wordWrap: { width: bubbleW - u(28) },
+      })
+      .setOrigin(0.5);
+    c.add([bg, text]);
+    this.overlay?.add(c);
+
+    c.setAlpha(0).setScale(0.84);
+    this.scene.tweens.add({
+      targets: c,
+      alpha: 1,
+      scale: 1,
+      y: y - u(8),
+      duration: 170,
+      ease: "Back.Out",
+    });
+    this.scene.time.delayedCall(1700, () => {
+      if (this.speechBubble !== c) return;
+      this.scene.tweens.add({
+        targets: c,
+        alpha: 0,
+        y: y - u(22),
+        duration: 260,
+        onComplete: () => {
+          if (this.speechBubble === c) this.speechBubble = null;
+          c.destroy();
+        },
+      });
+    });
+  }
+
   private rollDiceAfterHit(baseDamage: number, onComplete?: () => void) {
     const { width } = this.scene.scale;
     this.playAttackEffect("enemy", baseDamage);
@@ -960,6 +1054,7 @@ export class CardBattleSystem {
         this.playAttackEffect("enemy", criticalDamage);
         this.flashLog(`Critical Hit! 추가 내구도 ${criticalDamage} 감소`);
         this.refreshAll();
+        if (this.enemy.hp > 0) this.maybeShowEnemySpeech();
       }
       if (roll.value === 6 && this.enemy.hp > 0) {
         this.energy = Math.min(ENERGY_MAX, this.energy + 1);

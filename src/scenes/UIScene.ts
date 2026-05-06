@@ -532,10 +532,6 @@ export class UIScene extends Phaser.Scene {
   }
 
   private toggleShopMenu() {
-    if (this.puzzleBusy) {
-      this.flashHint("배틀 중에는 상점을 열 수 없습니다.", COLORS.textHighlight);
-      return;
-    }
     if (this.shopMenu) {
       this.hideShopMenu();
       return;
@@ -547,7 +543,7 @@ export class UIScene extends Phaser.Scene {
     if (!this.shopMenu) return;
     const old = this.shopMenu;
     this.shopMenu = null;
-    this.bottomMenu?.setVisible(true);
+    this.bottomMenu?.setVisible(!this.puzzleBusy);
     this.tweens.add({
       targets: old,
       alpha: 0,
@@ -1066,7 +1062,7 @@ export class UIScene extends Phaser.Scene {
     this.zoomControls = null;
 
     const panelW = width * 0.94;
-    const panelH = u(190);
+    const panelH = u(238);
     const panelY = height - panelH / 2 - u(20);
     const panel = this.add
       .rectangle(width / 2, panelY, panelW, panelH, COLORS.panelMid, 0.98)
@@ -1086,9 +1082,10 @@ export class UIScene extends Phaser.Scene {
     const bw = panelW * 0.7;
     const bh = u(40);
     const buttonX = width / 2;
-    const row1 = panelY - u(22);
-    const row2 = panelY + u(26);
-    const row3 = panelY + u(74);
+    const row1 = panelY - u(50);
+    const row2 = panelY - u(2);
+    const row3 = panelY + u(46);
+    const row4 = panelY + u(94);
     this.makeButton(
       c,
       buttonX,
@@ -1120,6 +1117,19 @@ export class UIScene extends Phaser.Scene {
       bw,
       bh,
       "처음으로",
+      () => {
+        this.closeClearMenu();
+        gs.events.emit("switch-stage-set", 1);
+      },
+      px(11)
+    );
+    this.makeButton(
+      c,
+      buttonX,
+      row4,
+      bw,
+      bh,
+      "홈으로",
       () => {
         this.closeClearMenu();
         gs.events.emit("switch-stage-set", 1);
