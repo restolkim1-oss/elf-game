@@ -57,9 +57,16 @@ export class UIScene extends Phaser.Scene {
   private bottomMenu: Phaser.GameObjects.Container | null = null;
   private bottomPanelGroup: Phaser.GameObjects.Container | null = null;
   private clearCelebration: Phaser.GameObjects.Container | null = null;
+  private topEnemyGroup: Phaser.GameObjects.Container | null = null;
+  private topEnemyName: Phaser.GameObjects.Text | null = null;
+  private topEnemyIntent: Phaser.GameObjects.Text | null = null;
+  private topEnemyHpFill: Phaser.GameObjects.Rectangle | null = null;
+  private topEnemyHpText: Phaser.GameObjects.Text | null = null;
+  private topEnemyHpMaxWidth = 0;
   private finaleTweens: Phaser.Tweens.Tween[] = [];
   private lastEconomy: EconomyState | null = null;
   private puzzleBusy = false;
+  private sideIconExpanded = false;
 
   constructor() {
     super("UIScene");
@@ -78,8 +85,15 @@ export class UIScene extends Phaser.Scene {
     this.bottomMenu = null;
     this.bottomPanelGroup = null;
     this.clearCelebration = null;
+    this.topEnemyGroup = null;
+    this.topEnemyName = null;
+    this.topEnemyIntent = null;
+    this.topEnemyHpFill = null;
+    this.topEnemyHpText = null;
+    this.topEnemyHpMaxWidth = 0;
     this.finaleTweens = [];
     this.puzzleBusy = false;
+    this.sideIconExpanded = false;
     void this.updateEconomy;
     void this.drawActLabel;
     void this.drawProgressPills;
@@ -113,6 +127,15 @@ export class UIScene extends Phaser.Scene {
     });
     game.events.on("viewing-mode", () => this.drawZoomControls(width, height));
     game.events.on("finale", () => this.onFinale());
+    game.events.on("enemy-energy-show", (payload: { label: string; hp: number; hpMax: number; intent?: string }) => {
+      this.showTopEnemyEnergy(payload);
+    });
+    game.events.on("enemy-energy-update", (payload: { hp: number; hpMax: number; intent?: string }) => {
+      this.updateTopEnemyEnergy(payload);
+    });
+    game.events.on("enemy-energy-hide", () => {
+      this.topEnemyGroup?.setVisible(false);
+    });
     game.events.on("puzzle-busy", (busy: boolean) => {
       this.puzzleBusy = busy;
       if (busy) {
@@ -172,16 +195,64 @@ export class UIScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(1502);
     });
+    this.drawTopEnemyEnergy(width, barH, titleH);
+  }
 
-    this.add
-      .text(width / 2, barH + titleH / 2, "캐릭터 파츠별 에너지칸", {
+  private drawTopEnemyEnergy(width: number, barH: number, titleH: number) {
+    const group = this.add.container(0, 0).setDepth(1503).setVisible(false);
+    this.topEnemyGroup = group;
+    const centerY = barH + titleH / 2;
+    const hpW = width * 0.62;
+    this.topEnemyHpMaxWidth = hpW;
+    const name = this.add
+      .text(width * 0.19, centerY - u(22), "", {
         fontFamily: "serif",
-        fontSize: px(23),
+        fontSize: px(13),
+        color: COLORS.text,
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0.5);
+    const intent = this.add
+      .text(width * 0.81, centerY - u(22), "", {
+        fontFamily: "serif",
+        fontSize: px(11),
+        color: COLORS.textHighlight,
+        fontStyle: "bold",
+      })
+      .setOrigin(1, 0.5);
+    const hpBg = this.add
+      .rectangle(width / 2, centerY + u(10), hpW, u(24), 0x24182f, 0.96)
+      .setStrokeStyle(u(1.5), COLORS.gild, 0.9);
+    const hpFill = this.add
+      .rectangle(width / 2 - hpW / 2, centerY + u(10), hpW, u(20), 0xff5e7a, 0.95)
+      .setOrigin(0, 0.5);
+    const hpText = this.add
+      .text(width / 2, centerY + u(10), "", {
+        fontFamily: "serif",
+        fontSize: px(12),
         color: "#ffffff",
         fontStyle: "bold",
       })
-      .setOrigin(0.5)
-      .setDepth(1502);
+      .setOrigin(0.5);
+
+    this.topEnemyName = name;
+    this.topEnemyIntent = intent;
+    this.topEnemyHpFill = hpFill;
+    this.topEnemyHpText = hpText;
+    group.add([name, intent, hpBg, hpFill, hpText]);
+  }
+
+  private showTopEnemyEnergy(payload: { label: string; hp: number; hpMax: number; intent?: string }) {
+    this.topEnemyGroup?.setVisible(true);
+    this.topEnemyName?.setText(`적 파츠 · ${payload.label}`);
+    this.updateTopEnemyEnergy(payload);
+  }
+
+  private updateTopEnemyEnergy(payload: { hp: number; hpMax: number; intent?: string }) {
+    const ratio = Phaser.Math.Clamp(payload.hp / Math.max(1, payload.hpMax), 0, 1);
+    if (this.topEnemyHpFill) this.topEnemyHpFill.width = this.topEnemyHpMaxWidth * ratio;
+    this.topEnemyHpText?.setText(`${payload.hp} / ${payload.hpMax}`);
+    if (payload.intent !== undefined) this.topEnemyIntent?.setText(payload.intent);
   }
 
   private drawBottomPanel(width: number, height: number) {
@@ -241,23 +312,31 @@ export class UIScene extends Phaser.Scene {
   private drawSideIconDock(width: number, height: number) {
     const c = this.add.container(0, 0).setDepth(1650);
     const size = u(58);
+    const topSize = size * 1.5;
     const gap = u(14);
-    const totalH = MENU_ICONS.length * size + (MENU_ICONS.length - 1) * gap;
     const x = width - u(52);
-    const startY = Math.max(u(230), height * 0.44 - totalH / 2 + size / 2);
-    const maxY = height - u(260);
+    const topY = Math.max(u(210), height * 0.3);
+    const childIcons = MENU_ICONS.slice(1, 5);
+    const childEntries: Array<{ setVisible: (visible: boolean) => unknown }> = [];
+    const setChildVisible = (visible: boolean) => {
+      childEntries.forEach((obj) => obj.setVisible(visible));
+    };
 
-    MENU_ICONS.forEach((icon, idx) => {
+    const makeIconButton = (
+      icon: (typeof MENU_ICONS)[number],
+      y: number,
+      diameter: number,
+      onClick: () => void
+    ) => {
       if (!this.textures.exists(icon.key)) return;
-      const y = Math.min(startY + idx * (size + gap), maxY);
       const bg = this.add
-        .circle(x, y, size * 0.54, COLORS.panelSoft, 0.78)
+        .circle(x, y, diameter * 0.54, COLORS.panelSoft, 0.78)
         .setStrokeStyle(u(1.5), COLORS.gild, 0.8);
       const img = this.add.image(x, y, icon.key);
-      const scale = Math.min((size * 0.78) / img.width, (size * 0.78) / img.height);
+      const scale = Math.min((diameter * 0.78) / img.width, (diameter * 0.78) / img.height);
       img.setScale(scale).setAlpha(0.96);
       const label = this.add
-        .text(x, y + size * 0.48, icon.label, {
+        .text(x, y + diameter * 0.48, icon.label, {
           fontFamily: "serif",
           fontSize: px(8),
           color: COLORS.text,
@@ -275,15 +354,30 @@ export class UIScene extends Phaser.Scene {
         img.setScale(scale);
       });
       bg.on("pointerdown", () => {
+        onClick();
+      });
+
+      c.add([bg, img, label]);
+      return [bg, img, label];
+    };
+
+    makeIconButton(MENU_ICONS[0], topY, topSize, () => {
+      this.sideIconExpanded = !this.sideIconExpanded;
+      setChildVisible(this.sideIconExpanded);
+    });
+
+    childIcons.forEach((icon, idx) => {
+      const y = topY + topSize * 0.62 + gap + size / 2 + idx * (size + gap);
+      const entries = makeIconButton(icon, y, size, () => {
         if (icon.key === "menu_icon_shop") {
           this.toggleShopMenu();
         } else {
           this.flashHint(`${icon.label} 메뉴는 준비 중입니다.`, COLORS.textHighlight);
         }
       });
-
-      c.add([bg, img, label]);
+      if (entries) childEntries.push(...entries);
     });
+    setChildVisible(false);
   }
 
   private drawActLabel(width: number) {

@@ -288,6 +288,7 @@ export class CardBattleSystem {
     const done = this.activeDone;
     this.activeDone = null;
     this.cleanup();
+    this.scene.events.emit("enemy-energy-hide");
     if (done) done(success);
   }
 
@@ -339,18 +340,21 @@ export class CardBattleSystem {
     const stripW = width * 0.96;
 
     // -- Top: enemy strip (sits just below the progression pills) --
-    const enemyStripY = u(176);
+    const enemyStripY = u(104);
     const enemyStripBg = this.scene.add
-      .rectangle(width / 2, enemyStripY, stripW, u(72), 0x1a0814, 0.78)
-      .setStrokeStyle(u(1.2), 0xff8fab, 0.7);
+      .rectangle(width / 2, enemyStripY, stripW * 0.86, u(68), 0x000000, 0)
+      .setStrokeStyle(u(1.2), 0xd4a656, 0.7);
     const enemyName = this.scene.add
       .text(width / 2 - stripW / 2 + u(14), enemyStripY - u(22), `적 · ${part.label}`, {
         fontFamily: "serif",
-        fontSize: px(13),
-        color: "#ffd6df",
+        fontSize: px(14),
+        color: "#ffffff",
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
+    enemyName
+      .setPosition(width / 2 - stripW * 0.36, enemyStripY - u(20))
+      .setText(`적 파츠 · ${part.label}`);
     this.enemyIntentText = this.scene.add
       .text(width / 2 + stripW / 2 - u(14), enemyStripY - u(22), "", {
         fontFamily: "serif",
@@ -359,20 +363,21 @@ export class CardBattleSystem {
         fontStyle: "bold",
       })
       .setOrigin(1, 0.5);
+    this.enemyIntentText.setPosition(width / 2 + stripW * 0.36, enemyStripY - u(20));
 
-    const enemyHpY = enemyStripY + u(2);
-    this.enemyHpBarMaxWidth = stripW * 0.84;
+    const enemyHpY = enemyStripY + u(10);
+    this.enemyHpBarMaxWidth = stripW * 0.72;
     this.enemyHpBarLeft = width / 2 - this.enemyHpBarMaxWidth / 2;
     const enemyHpBg = this.scene.add
-      .rectangle(width / 2, enemyHpY, this.enemyHpBarMaxWidth, u(16), 0x2a1a34, 0.92)
-      .setStrokeStyle(u(1), 0xd4a656, 0.6);
+      .rectangle(width / 2, enemyHpY, this.enemyHpBarMaxWidth, u(24), 0x2a1a34, 0.92)
+      .setStrokeStyle(u(1.5), 0xd4a656, 0.85);
     this.enemyHpFill = this.scene.add
-      .rectangle(this.enemyHpBarLeft, enemyHpY, this.enemyHpBarMaxWidth, u(13), 0xff5e7a, 0.95)
+      .rectangle(this.enemyHpBarLeft, enemyHpY, this.enemyHpBarMaxWidth, u(20), 0xff5e7a, 0.95)
       .setOrigin(0, 0.5);
     this.enemyHpText = this.scene.add
       .text(width / 2, enemyHpY, `${this.enemy.hp} / ${this.enemy.hpMax}`, {
         fontFamily: "serif",
-        fontSize: px(10),
+        fontSize: px(12),
         color: "#ffffff",
         fontStyle: "bold",
       })
@@ -386,7 +391,7 @@ export class CardBattleSystem {
       })
       .setOrigin(0, 0.5);
     this.enemyStatusText = this.scene.add
-      .text(width / 2, enemyStripY + u(22), "", {
+      .text(width / 2, enemyStripY + u(36), "", {
         fontFamily: "serif",
         fontSize: px(9),
         color: "#ffaa66",
@@ -404,6 +409,12 @@ export class CardBattleSystem {
       this.enemyBlockText,
       this.enemyStatusText,
     ]);
+    this.scene.events.emit("enemy-energy-show", {
+      label: part.label,
+      hp: this.enemy.hp,
+      hpMax: this.enemy.hpMax,
+      intent: this.getEnemyIntentLabel(),
+    });
 
     // -- Bottom: player strip (above the hand) --
     const playerStripY = height - u(280);
@@ -684,11 +695,6 @@ export class CardBattleSystem {
     this.energy -= comboCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
     this.discard.push(...comboCards);
-    console.log("[BATTLE] play combo", {
-      cards: comboCards.map((c) => c.cardId),
-      energyLeft: this.energy,
-      handSize: this.hand.length,
-    });
     let result: { didAttack: boolean; damage: number };
     try {
       result = this.applyCardEffects(comboCards);
@@ -699,7 +705,11 @@ export class CardBattleSystem {
       return;
     }
     this.refreshAll();
-    console.log("[BATTLE] combo applied", { result, enemyHp: this.enemy.hp });
+    if (this.enemy.hp <= 0) {
+      this.busy = true;
+      this.finish(true);
+      return;
+    }
 
     const settle = () => this.settleAfterCardUse();
     if (result.didAttack) {
@@ -766,17 +776,11 @@ export class CardBattleSystem {
   }
 
   private settleAfterCardUse() {
-    console.log("[BATTLE] settle after card", {
-      finished: this.finished,
-      enemyHp: this.enemy.hp,
-      energy: this.energy,
-    });
     if (this.finished) return;
     this.busy = false;
     if (this.enemy.hp <= 0) {
       this.busy = true;
-      this.refreshButtons();
-      this.scene.time.delayedCall(260, () => this.finish(true));
+      this.finish(true);
       return;
     }
     if (this.energy <= 0) {
@@ -918,23 +922,17 @@ export class CardBattleSystem {
     this.playAttackEffect("enemy", baseDamage);
     let settled = false;
     const settle = (origin: string) => {
-      if (settled) {
-        console.log("[BATTLE] dice settle ignored (already settled)", origin);
-        return;
-      }
+      void origin;
+      if (settled) return;
       if (this.finished) {
-        console.log("[BATTLE] dice settle skipped (finished)", origin);
         settled = true;
         return;
       }
-      console.log("[BATTLE] dice settle", origin);
       settled = true;
       onComplete?.();
     };
     const fallback = this.scene.time.delayedCall(2400, () => settle("fallback"));
-    console.log("[BATTLE] dice rolling", { baseDamage });
     DiceRoller.roll(this.scene, this.overlay, width / 2, u(285), (roll) => {
-      console.log("[BATTLE] dice rolled", roll);
       if (this.finished || settled) return;
       fallback.remove(false);
       if (roll.critical) {
@@ -990,6 +988,7 @@ export class CardBattleSystem {
     this.refreshStatus();
     this.refreshHandRender();
     this.refreshButtons();
+    this.emitEnemyEnergyUpdate();
   }
 
   private refreshHpBars() {
@@ -1020,6 +1019,27 @@ export class CardBattleSystem {
       this.enemyIntentText.setText(`다음: 보호막 +${intent.amount}`);
       this.enemyIntentText.setColor("#9ad0ff");
     }
+  }
+
+  private emitEnemyEnergyUpdate() {
+    this.scene.events.emit("enemy-energy-update", {
+      hp: this.enemy.hp,
+      hpMax: this.enemy.hpMax,
+      intent: this.getEnemyIntentLabel(),
+    });
+  }
+
+  private getEnemyIntentLabel() {
+    if (this.enemyStunned) return "다음: 무력화";
+    const intent = this.intentPattern[this.intentIdx % this.intentPattern.length];
+    if (!intent) return "";
+    if (intent.kind === "attack") {
+      const shown = this.enemy.weaken
+        ? Math.max(0, intent.amount - this.enemy.weaken.amount)
+        : intent.amount;
+      return `다음: 공격 ${shown}`;
+    }
+    return `다음: 보호막 +${intent.amount}`;
   }
 
   private refreshStatus() {
