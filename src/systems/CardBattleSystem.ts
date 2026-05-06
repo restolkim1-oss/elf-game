@@ -263,6 +263,7 @@ export class CardBattleSystem {
   private lastSpeechAt = 0;
   private flowWatchdog: Phaser.Time.TimerEvent | null = null;
   private battleRunId = 0;
+  private effectObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -307,6 +308,7 @@ export class CardBattleSystem {
 
   private cleanup() {
     this.clearFlowWatchdog();
+    this.killTrackedEffectTweens();
     this.speechBubble?.destroy();
     this.speechBubble = null;
     this.lastSpeechAt = 0;
@@ -910,6 +912,34 @@ export class CardBattleSystem {
     return runId === this.battleRunId && !this.finished;
   }
 
+  private trackEffect<T extends Phaser.GameObjects.GameObject>(obj: T) {
+    this.effectObjects.push(obj);
+    return obj;
+  }
+
+  private killTweensForObjectTree(obj: Phaser.GameObjects.GameObject | null) {
+    if (!obj) return;
+    this.scene.tweens.killTweensOf(obj);
+    if (obj instanceof Phaser.GameObjects.Container) {
+      this.scene.tweens.killTweensOf(obj.list);
+      for (const child of obj.list) {
+        this.killTweensForObjectTree(child);
+      }
+    }
+  }
+
+  private killTrackedEffectTweens() {
+    this.killTweensForObjectTree(this.speechBubble);
+    for (const slot of this.handObjs) {
+      this.killTweensForObjectTree(slot.container);
+    }
+    for (const obj of this.effectObjects) {
+      this.killTweensForObjectTree(obj);
+    }
+    this.effectObjects = [];
+    this.killTweensForObjectTree(this.overlay);
+  }
+
   private sumComboEffect(cards: TarotCardState[]) {
     return cards.reduce((sum, card) => {
       const effect = CARDS[card.cardId].effects[0];
@@ -977,10 +1007,12 @@ export class CardBattleSystem {
   }
 
   private playMergeEffect(slot: HandCard) {
-    const ring = this.scene.add
-      .rectangle(slot.container.x, slot.container.y, slot.cardW + u(22), slot.cardH + u(22), 0xffffff, 0)
-      .setStrokeStyle(u(5), 0x82ffe6, 0.95)
-      .setDepth(820);
+    const ring = this.trackEffect(
+      this.scene.add
+        .rectangle(slot.container.x, slot.container.y, slot.cardW + u(22), slot.cardH + u(22), 0xffffff, 0)
+        .setStrokeStyle(u(5), 0x82ffe6, 0.95)
+        .setDepth(820)
+    );
     this.overlay?.add(ring);
     this.scene.tweens.add({
       targets: ring,
@@ -989,7 +1021,9 @@ export class CardBattleSystem {
       alpha: 0,
       duration: 420,
       ease: "Quad.easeOut",
-      onComplete: () => ring.destroy(),
+      onComplete: () => {
+        if (ring.scene) ring.destroy();
+      },
     });
   }
 
@@ -1059,7 +1093,7 @@ export class CardBattleSystem {
     const y = height * 0.22;
     const bubbleW = u(200);
     const bubbleH = u(68);
-    const c = this.scene.add.container(x, y).setDepth(790);
+    const c = this.trackEffect(this.scene.add.container(x, y).setDepth(790));
     this.speechBubble = c;
 
     const bg = this.scene.add.graphics();
@@ -1268,7 +1302,10 @@ export class CardBattleSystem {
 
   private refreshHandRender() {
     // Destroy old hand visuals
-    for (const c of this.handObjs) c.container.destroy();
+    for (const c of this.handObjs) {
+      this.killTweensForObjectTree(c.container);
+      c.container.destroy();
+    }
     this.handObjs = [];
 
     const count = this.hand.length;
@@ -1520,7 +1557,7 @@ export class CardBattleSystem {
     const color = target === "enemy" ? 0xff5e7a : 0xffd572;
     this.scene.cameras.main.shake(target === "enemy" ? 150 : 220, target === "enemy" ? 0.006 : 0.009);
 
-    const slash = this.scene.add.graphics().setDepth(720);
+    const slash = this.trackEffect(this.scene.add.graphics().setDepth(720));
     slash.lineStyle(u(8), color, 0.95);
     slash.beginPath();
     slash.moveTo(x - u(150), y - u(52));
@@ -1533,20 +1570,22 @@ export class CardBattleSystem {
     slash.strokePath();
     this.overlay?.add(slash);
 
-    const burst = this.scene.add.circle(x, y, u(18), color, 0.35).setDepth(721);
+    const burst = this.trackEffect(this.scene.add.circle(x, y, u(18), color, 0.35).setDepth(721));
     this.overlay?.add(burst);
     if (amount > 0) {
-      const damage = this.scene.add
-        .text(x, y - u(54), `-${amount}`, {
-          fontFamily: "serif",
-          fontSize: px(20),
-          color: "#ffffff",
-          fontStyle: "bold",
-          stroke: "#5a1018",
-          strokeThickness: u(2),
-        })
-        .setOrigin(0.5)
-        .setDepth(722);
+      const damage = this.trackEffect(
+        this.scene.add
+          .text(x, y - u(54), `-${amount}`, {
+            fontFamily: "serif",
+            fontSize: px(20),
+            color: "#ffffff",
+            fontStyle: "bold",
+            stroke: "#5a1018",
+            strokeThickness: u(2),
+          })
+          .setOrigin(0.5)
+          .setDepth(722)
+      );
       this.overlay?.add(damage);
       this.scene.tweens.add({
         targets: damage,
@@ -1554,7 +1593,9 @@ export class CardBattleSystem {
         alpha: 0,
         duration: 520,
         ease: "Cubic.easeOut",
-        onComplete: () => damage.destroy(),
+        onComplete: () => {
+          if (damage.scene) damage.destroy();
+        },
       });
     }
 
@@ -1565,7 +1606,9 @@ export class CardBattleSystem {
       scaleY: 1.18,
       duration: 260,
       ease: "Cubic.easeOut",
-      onComplete: () => slash.destroy(),
+      onComplete: () => {
+        if (slash.scene) slash.destroy();
+      },
     });
     this.scene.tweens.add({
       targets: burst,
@@ -1573,7 +1616,9 @@ export class CardBattleSystem {
       alpha: 0,
       duration: 360,
       ease: "Cubic.easeOut",
-      onComplete: () => burst.destroy(),
+      onComplete: () => {
+        if (burst.scene) burst.destroy();
+      },
     });
   }
 
@@ -1583,7 +1628,7 @@ export class CardBattleSystem {
     const x = width / 2;
     this.scene.cameras.main.shake(90, 0.003);
 
-    const shield = this.scene.add.graphics().setDepth(721);
+    const shield = this.trackEffect(this.scene.add.graphics().setDepth(721));
     shield.lineStyle(u(5), 0x9ad0ff, 0.95);
     shield.fillStyle(0x4060c0, 0.18);
     shield.fillCircle(x, y, u(54));
@@ -1599,7 +1644,9 @@ export class CardBattleSystem {
       scaleY: 1.45,
       duration: 420,
       ease: "Cubic.easeOut",
-      onComplete: () => shield.destroy(),
+      onComplete: () => {
+        if (shield.scene) shield.destroy();
+      },
     });
   }
 
