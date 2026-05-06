@@ -22,6 +22,45 @@ export interface StageLayerDef {
   partId?: string;
 }
 
+export interface MenuIconDef {
+  key: string;
+  path: string;
+  label: string;
+}
+
+export const MENU_ICONS: MenuIconDef[] = [
+  {
+    key: "menu_icon_main",
+    path: "/icon/icon.png",
+    label: "메인",
+  },
+  {
+    key: "menu_icon_shop",
+    path: "/icon/상점.png",
+    label: "상점",
+  },
+  {
+    key: "menu_icon_coin",
+    path: "/icon/코인.png",
+    label: "코인",
+  },
+  {
+    key: "menu_icon_gem",
+    path: "/icon/보석.png",
+    label: "보석",
+  },
+  {
+    key: "menu_icon_settings",
+    path: "/icon/환경설정.png",
+    label: "설정",
+  },
+  {
+    key: "menu_icon_extra",
+    path: "/icon/Gemini_Generated_Image_alnwtralnwtralnw.png",
+    label: "보너스",
+  },
+];
+
 export const STAGE_ORDER: StageKey[] = ["E1"];
 
 export const STAGE_LAYERS: StageLayerDef[] = [

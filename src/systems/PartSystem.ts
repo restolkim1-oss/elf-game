@@ -31,6 +31,7 @@ export class PartSystem {
   private parts: PartDef[];
   private visuals: Map<string, PartVisual> = new Map();
   private removed: Set<string> = new Set();
+  private emittedRemoved = new Set<string>();
   private targetedCb: TargetedCallback | null = null;
   private lockedCb: LockedCallback | null = null;
   private getBounds: () => Bounds;
@@ -280,10 +281,11 @@ export class PartSystem {
   }
 
   removePart(id: string) {
-    if (this.removed.has(id)) return;
-    this.removed.add(id);
+    const wasMarkedRemoved = this.removed.has(id);
+    if (!wasMarkedRemoved) this.removed.add(id);
 
     const v = this.visuals.get(id);
+    if (!v && wasMarkedRemoved) return;
     if (v) {
       this.scene.cameras.main.shake(180, 0.006);
       const flash = this.scene.add
@@ -357,7 +359,10 @@ export class PartSystem {
     }
 
     const part = this.parts.find((p) => p.id === id);
-    if (part) this.scene.events.emit("part-removed", part);
+    if (part && !this.emittedRemoved.has(id)) {
+      this.emittedRemoved.add(id);
+      this.scene.events.emit("part-removed", part);
+    }
 
     // After a removal, some other parts might have just unlocked
     this.refreshLocks();

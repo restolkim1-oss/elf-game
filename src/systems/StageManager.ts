@@ -63,8 +63,9 @@ export class StageManager {
 
   hidePartLayer(partId: string, duration = 420) {
     this.hiddenPartIds.add(partId);
-    const layerIds = this.partLayerIds.get(partId) ?? this.findFallbackLayerIds(partId);
-    console.log("[STAGE] hidePartLayer", { partId, layerIds, knownMappings: [...this.partLayerIds.keys()] });
+    const directLayerIds = this.partLayerIds.get(partId) ?? [];
+    const layerIds =
+      directLayerIds.length > 0 ? directLayerIds : this.findFallbackLayerIds(partId);
     if (layerIds.length === 0) {
       console.warn("[STAGE] no layer matches part id", partId);
     }

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { type PartDef, getPartsForStage } from "../data/parts";
+import { MENU_ICONS, type PartDef, getPartsForStage } from "../data/parts";
 import { UI_SCALE } from "../main";
 
 const COLORS = {
@@ -44,8 +44,8 @@ interface EconomyState {
 export class UIScene extends Phaser.Scene {
   private parts: PartDef[] = [];
   private pills: Pill[] = [];
-  private actLabel!: Phaser.GameObjects.Text;
-  private progressCount!: Phaser.GameObjects.Text;
+  private actLabel: Phaser.GameObjects.Text | null = null;
+  private progressCount: Phaser.GameObjects.Text | null = null;
   private hintText!: Phaser.GameObjects.Text;
   private statText!: Phaser.GameObjects.Text;
   private readonly defaultHint =
@@ -81,13 +81,13 @@ export class UIScene extends Phaser.Scene {
     this.finaleTweens = [];
     this.puzzleBusy = false;
     void this.updateEconomy;
+    void this.drawActLabel;
+    void this.drawProgressPills;
+    void this.drawRemovalOrder;
 
     const { width, height } = this.scale;
-    this.drawTopPanel(width);
     this.drawBottomPanel(width, height);
-    this.drawActLabel(width);
-    this.drawProgressPills(width);
-    this.drawRemovalOrder(width);
+    this.drawSideIconDock(width, height);
     this.drawCornerOrnaments(width, height);
     this.drawBottomMenu(width, height);
 
@@ -124,14 +124,6 @@ export class UIScene extends Phaser.Scene {
     });
 
     this.startIdlePillPulse();
-  }
-
-  private drawTopPanel(width: number) {
-    this.add.rectangle(width / 2, u(58), width, u(124), COLORS.panelMid, 0.95);
-    this.add.rectangle(width / 2, u(24), width, u(48), COLORS.panelDeep, 0.45);
-    this.add.rectangle(width / 2, u(1), width, u(1), COLORS.gild, 0.4);
-    this.add.rectangle(width / 2, u(120), width, u(1), COLORS.gild, 0.9);
-    this.add.rectangle(width / 2, u(124), width * 0.55, u(1), COLORS.gild, 0.35);
   }
 
   private drawBottomPanel(width: number, height: number) {
@@ -186,6 +178,54 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     group.add([r1, r2, r3, r4, this.hintText, this.statText]);
+  }
+
+  private drawSideIconDock(width: number, height: number) {
+    const c = this.add.container(0, 0).setDepth(1650);
+    const size = u(58);
+    const gap = u(14);
+    const totalH = MENU_ICONS.length * size + (MENU_ICONS.length - 1) * gap;
+    const x = width - u(52);
+    const startY = Math.max(u(160), height * 0.44 - totalH / 2 + size / 2);
+    const maxY = height - u(260);
+
+    MENU_ICONS.forEach((icon, idx) => {
+      if (!this.textures.exists(icon.key)) return;
+      const y = Math.min(startY + idx * (size + gap), maxY);
+      const bg = this.add
+        .circle(x, y, size * 0.54, COLORS.panelSoft, 0.78)
+        .setStrokeStyle(u(1.5), COLORS.gild, 0.8);
+      const img = this.add.image(x, y, icon.key);
+      const scale = Math.min((size * 0.78) / img.width, (size * 0.78) / img.height);
+      img.setScale(scale).setAlpha(0.96);
+      const label = this.add
+        .text(x, y + size * 0.48, icon.label, {
+          fontFamily: "serif",
+          fontSize: px(8),
+          color: COLORS.text,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0);
+
+      bg.setInteractive({ useHandCursor: true });
+      bg.on("pointerover", () => {
+        bg.setFillStyle(0x2a1a34, 0.95);
+        img.setScale(scale * 1.08);
+      });
+      bg.on("pointerout", () => {
+        bg.setFillStyle(COLORS.panelSoft, 0.78);
+        img.setScale(scale);
+      });
+      bg.on("pointerdown", () => {
+        if (icon.key === "menu_icon_shop") {
+          this.toggleShopMenu();
+        } else {
+          this.flashHint(`${icon.label} 메뉴는 준비 중입니다.`, COLORS.textHighlight);
+        }
+      });
+
+      c.add([bg, img, label]);
+    });
   }
 
   private drawActLabel(width: number) {
@@ -300,18 +340,10 @@ export class UIScene extends Phaser.Scene {
     this.bottomMenu = c;
 
     const labels = [
-      {
-        text: "카드 훈련",
-        action: () => {
-          gs.events.emit("farm-minigame");
-        },
-      },
       { text: "상점", action: () => this.toggleShopMenu() },
       { text: "올 클리어", action: () => gs.events.emit("force-clear") },
     ];
-    const visibleLabels = labels.filter(
-      (item) => !item.action.toString().includes("toggleShopMenu")
-    );
+    const visibleLabels = labels;
     const gap = u(10);
     const btnW = Math.min(
       u(170),
@@ -712,7 +744,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateAct(current: number, total: number) {
-    this.progressCount.setText(`${current} / ${total}`);
+    this.progressCount?.setText(`${current} / ${total}`);
   }
 
   private flashHint(text: string, color: string) {
@@ -738,15 +770,17 @@ export class UIScene extends Phaser.Scene {
     this.hintText.setText("클리어 완료");
     this.hintText.setColor(COLORS.textHighlight);
     this.showClearCelebration();
-    this.finaleTweens.push(
-      this.tweens.add({
-        targets: this.actLabel,
-        alpha: { from: 1, to: 0.45 },
-        yoyo: true,
-        duration: 1000,
-        repeat: -1,
-      })
-    );
+    if (this.actLabel) {
+      this.finaleTweens.push(
+        this.tweens.add({
+          targets: this.actLabel,
+          alpha: { from: 1, to: 0.45 },
+          yoyo: true,
+          duration: 1000,
+          repeat: -1,
+        })
+      );
+    }
     this.time.delayedCall(3000, () => this.showClearMenu());
   }
 

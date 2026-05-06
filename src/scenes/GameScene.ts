@@ -99,7 +99,7 @@ export class GameScene extends Phaser.Scene {
       .getSourceImage() as HTMLImageElement;
     const origW = baseTex.width;
     const origH = baseTex.height;
-    const topUi = 2 * 150 + 40;
+    const topUi = 2 * 70 + 20;
     const botUi = 2 * 230 + 50;
     const availableH = height - topUi - botUi;
     const scale = Math.min(availableH / origH, (width * 0.78) / origW);
@@ -143,40 +143,24 @@ export class GameScene extends Phaser.Scene {
       this.partSystem.setPuzzleActive(true);
       this.partSystem.setInputEnabled(false);
       this.cardBattle.start(part, (success) => {
-        console.log("[GAME] battle done", { partId: part.id, success });
-        this.puzzleBusy = false;
-        this.events.emit("puzzle-busy", false);
-        this.partSystem.setPuzzleActive(false);
-        if (success) {
-          this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
-          this.partSystem.removePart(part.id);
-          this.stageManager.hidePartLayer(part.id);
-          this.progressSystem.advance();
-          this.removed.add(part.id);
-          this.events.emit("progress", this.progressSystem.getProgress());
-          if (this.progressSystem.isFinished()) {
-            this.triggerFinale();
+        try {
+          if (success) {
+            this.handlePartCleared(part);
           } else {
-            const targetKey = stageForRemoved(this.removed, this.stageSet);
-            const currentKey = this.stageManager.getCurrentKey();
-            if (targetKey !== currentKey) {
-              // Stage variants can share the same tier (e.g. stage5/6/7 in set2),
-              // so key-difference itself should trigger a visual transition.
-              this.stageManager.transitionTo(targetKey);
+            if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
+              this.abortingPuzzle = false;
+              this.feedback("미니게임을 포기했습니다.");
+            } else {
+              this.events.emit("failure", part.id);
             }
           }
-        } else {
-          if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
-            this.abortingPuzzle = false;
-            this.feedback("미니게임을 포기했습니다.");
-          } else {
-            this.events.emit("failure", part.id);
-          }
+        } finally {
+          this.puzzleBusy = false;
+          this.events.emit("puzzle-busy", false);
+          this.partSystem.setPuzzleActive(false);
+          // Restore part interactivity after the removed marker has been retired.
+          this.partSystem.setInputEnabled(true);
         }
-        // Restore part interactivity AFTER removePart so the just-cleared
-        // part's marker doesn't briefly resurrect before it shatters.
-        this.partSystem.setInputEnabled(true);
-        console.log("[GAME] battle wrap-up complete", { partId: part.id });
       });
     });
 
@@ -193,7 +177,6 @@ export class GameScene extends Phaser.Scene {
       this.switchStageSet(next)
     );
     this.events.on("next-stage", () => this.goToNextStage());
-    this.events.on("farm-minigame", () => this.startFarmMinigame());
     this.events.on("buy-item", (id: ShopItemId) => this.buyItem(id));
     this.events.on("gift-item", (id: ShopItemId) => this.giftItem(id));
     this.events.on("request-economy-sync", () => this.emitEconomyState());
@@ -367,6 +350,32 @@ export class GameScene extends Phaser.Scene {
     cam.scrollY = Phaser.Math.Clamp(cam.scrollY, -padV, height - visH + padV);
   }
 
+  private handlePartCleared(part: PartDef) {
+    const alreadyCleared = this.removed.has(part.id);
+
+    this.stageManager.hidePartLayer(part.id);
+    this.partSystem.removePart(part.id);
+    if (alreadyCleared) return;
+
+    this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
+    this.removed.add(part.id);
+    this.progressSystem.advance();
+    this.events.emit("progress", this.progressSystem.getProgress());
+
+    if (this.progressSystem.isFinished()) {
+      this.triggerFinale();
+      return;
+    }
+
+    const targetKey = stageForRemoved(this.removed, this.stageSet);
+    const currentKey = this.stageManager.getCurrentKey();
+    if (targetKey !== currentKey) {
+      // Stage variants can share the same tier, so key-difference itself
+      // should trigger a visual transition.
+      this.stageManager.transitionTo(targetKey);
+    }
+  }
+
   private forceClearAll() {
     if (this.interactionActive) this.exitInteractionMode();
 
@@ -464,55 +473,10 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private startFarmMinigame() {
-    if (this.puzzleBusy || this.interactionActive) {
-      this.feedback("지금은 미니게임을 시작할 수 없습니다.");
-      return;
-    }
-
-    this.puzzleBusy = true;
-    this.events.emit("puzzle-busy", true);
-    this.partSystem.setPuzzleActive(true);
-    this.partSystem.setInputEnabled(false);
-    const farmPart = this.createFarmPart();
-    this.feedback("훈련 카드 배틀을 시작합니다.");
-    this.cardBattle.start(farmPart, (success) => {
-      this.puzzleBusy = false;
-      this.events.emit("puzzle-busy", false);
-      this.partSystem.setPuzzleActive(false);
-      this.partSystem.setInputEnabled(true);
-      if (success) {
-        this.grantCoins(10 + farmPart.difficulty * 4, "카드 배틀 클리어");
-      } else {
-        if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
-          this.abortingPuzzle = false;
-          this.feedback("카드 배틀을 포기했습니다.");
-        } else {
-          this.feedback("카드 배틀 실패");
-        }
-      }
-    });
-  }
-
   private abortCurrentPuzzle() {
     if (!this.puzzleBusy) return;
     this.abortingPuzzle = true;
     this.cardBattle.abortCurrent();
-  }
-
-  private createFarmPart(): PartDef {
-    const difficulty = Phaser.Math.Between(1, 4) as 1 | 2 | 3 | 4 | 5;
-    return {
-      id: `farm_${Date.now()}`,
-      label: "훈련",
-      act: this.parts[0]?.act ?? "intro",
-      difficulty,
-      hitbox: { x: 0, y: 0, w: 0, h: 0 },
-      tint: 0xffffff,
-      order: 0,
-      stageAfter: null,
-      prerequisites: [],
-    };
   }
 
   private buyItem(id: ShopItemId) {
