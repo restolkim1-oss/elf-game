@@ -261,6 +261,7 @@ export class CardBattleSystem {
   private dragStart: { x: number; y: number; card: TarotCardState } | null = null;
   private speechBubble: Phaser.GameObjects.Container | null = null;
   private lastSpeechAt = 0;
+  private flowWatchdog: Phaser.Time.TimerEvent | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -294,6 +295,7 @@ export class CardBattleSystem {
     }
     if (this.finished) return;
     this.finished = true;
+    this.clearFlowWatchdog();
     const done = this.activeDone;
     this.activeDone = null;
     this.cleanup();
@@ -302,6 +304,7 @@ export class CardBattleSystem {
   }
 
   private cleanup() {
+    this.clearFlowWatchdog();
     this.speechBubble?.destroy();
     this.speechBubble = null;
     this.lastSpeechAt = 0;
@@ -585,6 +588,10 @@ export class CardBattleSystem {
     if (this.busy || this.finished) return;
     this.busy = true;
     this.refreshButtons();
+    this.armFlowWatchdog("enemy-turn", 3200, () => {
+      this.busy = false;
+      this.startPlayerTurn();
+    });
     this.runEnemyTurn();
   }
 
@@ -604,7 +611,20 @@ export class CardBattleSystem {
       }
     }
 
-    this.scene.time.delayedCall(280, () => this.executeIntent());
+    this.scene.time.delayedCall(280, () => this.safeExecuteIntent());
+  }
+
+  private safeExecuteIntent() {
+    try {
+      this.executeIntent();
+    } catch (err) {
+      console.error("[BATTLE] executeIntent threw", err);
+      if (!this.finished) {
+        this.clearFlowWatchdog();
+        this.busy = false;
+        this.startPlayerTurn();
+      }
+    }
   }
 
   private executeIntent() {
@@ -613,7 +633,7 @@ export class CardBattleSystem {
     if (this.enemyStunned) {
       this.enemyStunned = false;
       this.flashLog("적 행동 무력화");
-      this.scene.time.delayedCall(360, () => this.advanceIntentAndContinue());
+      this.scene.time.delayedCall(360, () => this.safeAdvanceIntentAndContinue());
       return;
     }
 
@@ -638,10 +658,24 @@ export class CardBattleSystem {
       return;
     }
 
-    this.scene.time.delayedCall(360, () => this.advanceIntentAndContinue());
+    this.scene.time.delayedCall(360, () => this.safeAdvanceIntentAndContinue());
+  }
+
+  private safeAdvanceIntentAndContinue() {
+    try {
+      this.advanceIntentAndContinue();
+    } catch (err) {
+      console.error("[BATTLE] advanceIntentAndContinue threw", err);
+      if (!this.finished) {
+        this.clearFlowWatchdog();
+        this.busy = false;
+        this.startPlayerTurn();
+      }
+    }
   }
 
   private advanceIntentAndContinue() {
+    this.clearFlowWatchdog();
     this.intentIdx++;
     // Decrement weaken on enemy at end of enemy turn
     if (this.enemy.weaken) {
@@ -728,6 +762,7 @@ export class CardBattleSystem {
     if (result.didAttack) {
       this.busy = true;
       this.refreshButtons();
+      this.armFlowWatchdog("dice-resolution", 3200, () => this.safeSettleAfterCardUse());
       try {
         this.rollDiceAfterHit(result.damage, settle);
       } catch (err) {
@@ -795,6 +830,7 @@ export class CardBattleSystem {
 
   private settleAfterCardUse() {
     if (this.finished) return;
+    this.clearFlowWatchdog();
     this.busy = false;
     if (this.enemy.hp <= 0) {
       this.busy = true;
@@ -820,6 +856,31 @@ export class CardBattleSystem {
         this.refreshAll();
       }
     }
+  }
+
+  private armFlowWatchdog(reason: string, delay: number, recover: () => void) {
+    this.clearFlowWatchdog();
+    this.flowWatchdog = this.scene.time.delayedCall(delay, () => {
+      this.flowWatchdog = null;
+      if (this.finished) return;
+      console.warn(`[BATTLE] ${reason} watchdog recovered stalled battle`);
+      try {
+        recover();
+      } catch (err) {
+        console.error(`[BATTLE] ${reason} watchdog recovery threw`, err);
+        if (!this.finished) {
+          this.busy = false;
+          this.selectedCards = [];
+          this.drawToFull(TARGET_HAND);
+          this.refreshAll();
+        }
+      }
+    });
+  }
+
+  private clearFlowWatchdog() {
+    this.flowWatchdog?.remove(false);
+    this.flowWatchdog = null;
   }
 
   private sumComboEffect(cards: TarotCardState[]) {
