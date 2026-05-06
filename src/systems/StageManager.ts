@@ -64,9 +64,16 @@ export class StageManager {
   hidePartLayer(partId: string, duration = 420) {
     this.hiddenPartIds.add(partId);
     const layerIds = this.partLayerIds.get(partId) ?? this.findFallbackLayerIds(partId);
+    console.log("[STAGE] hidePartLayer", { partId, layerIds, knownMappings: [...this.partLayerIds.keys()] });
+    if (layerIds.length === 0) {
+      console.warn("[STAGE] no layer matches part id", partId);
+    }
     layerIds.forEach((layerId) => {
       const img = this.layers.get(layerId);
-      if (!img) return;
+      if (!img) {
+        console.warn("[STAGE] layer image missing", layerId);
+        return;
+      }
       this.scene.tweens.killTweensOf(img);
       this.playLayerRemovalEffect(img);
       this.scene.tweens.add({

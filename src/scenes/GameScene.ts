@@ -143,6 +143,7 @@ export class GameScene extends Phaser.Scene {
       this.partSystem.setPuzzleActive(true);
       this.partSystem.setInputEnabled(false);
       this.cardBattle.start(part, (success) => {
+        console.log("[GAME] battle done", { partId: part.id, success });
         this.puzzleBusy = false;
         this.events.emit("puzzle-busy", false);
         this.partSystem.setPuzzleActive(false);
@@ -175,6 +176,7 @@ export class GameScene extends Phaser.Scene {
         // Restore part interactivity AFTER removePart so the just-cleared
         // part's marker doesn't briefly resurrect before it shatters.
         this.partSystem.setInputEnabled(true);
+        console.log("[GAME] battle wrap-up complete", { partId: part.id });
       });
     });
 

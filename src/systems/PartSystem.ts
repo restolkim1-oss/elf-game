@@ -349,6 +349,9 @@ export class PartSystem {
           v.lockIcon.destroy();
           if (v.pulse) v.pulse.stop();
           if (v.ringPulse) v.ringPulse.stop();
+          // Drop the entry so later iterations of `visuals` don't see a
+          // map slot pointing at destroyed Phaser objects.
+          this.visuals.delete(id);
         },
       });
     }

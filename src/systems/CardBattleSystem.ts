@@ -684,8 +684,22 @@ export class CardBattleSystem {
     this.energy -= comboCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
     this.discard.push(...comboCards);
-    const result = this.applyCardEffects(comboCards);
+    console.log("[BATTLE] play combo", {
+      cards: comboCards.map((c) => c.cardId),
+      energyLeft: this.energy,
+      handSize: this.hand.length,
+    });
+    let result: { didAttack: boolean; damage: number };
+    try {
+      result = this.applyCardEffects(comboCards);
+    } catch (err) {
+      console.error("[BATTLE] applyCardEffects threw", err);
+      this.busy = false;
+      this.refreshAll();
+      return;
+    }
     this.refreshAll();
+    console.log("[BATTLE] combo applied", { result, enemyHp: this.enemy.hp });
 
     const settle = () => this.settleAfterCardUse();
     if (result.didAttack) {
@@ -752,6 +766,11 @@ export class CardBattleSystem {
   }
 
   private settleAfterCardUse() {
+    console.log("[BATTLE] settle after card", {
+      finished: this.finished,
+      enemyHp: this.enemy.hp,
+      energy: this.energy,
+    });
     if (this.finished) return;
     this.busy = false;
     if (this.enemy.hp <= 0) {
@@ -898,13 +917,24 @@ export class CardBattleSystem {
     const { width } = this.scene.scale;
     this.playAttackEffect("enemy", baseDamage);
     let settled = false;
-    const settle = () => {
-      if (settled || this.finished) return;
+    const settle = (origin: string) => {
+      if (settled) {
+        console.log("[BATTLE] dice settle ignored (already settled)", origin);
+        return;
+      }
+      if (this.finished) {
+        console.log("[BATTLE] dice settle skipped (finished)", origin);
+        settled = true;
+        return;
+      }
+      console.log("[BATTLE] dice settle", origin);
       settled = true;
       onComplete?.();
     };
-    const fallback = this.scene.time.delayedCall(2400, settle);
+    const fallback = this.scene.time.delayedCall(2400, () => settle("fallback"));
+    console.log("[BATTLE] dice rolling", { baseDamage });
     DiceRoller.roll(this.scene, this.overlay, width / 2, u(285), (roll) => {
+      console.log("[BATTLE] dice rolled", roll);
       if (this.finished || settled) return;
       fallback.remove(false);
       if (roll.critical) {
@@ -920,7 +950,7 @@ export class CardBattleSystem {
         this.flashLog("Lucky Six! 기력 +1 · 카드 보충");
         this.refreshAll();
       }
-      settle();
+      settle("dice-callback");
     });
   }
 
@@ -1203,6 +1233,26 @@ export class CardBattleSystem {
       this.dragStart = null;
       const idx = this.handObjs.findIndex((o) => o === slot);
       if (idx >= 0) this.tryPlayCard(idx);
+    });
+    // If the user releases the pointer outside the card (especially on
+    // touch devices), `pointerup` won't fire on this object. Phaser fires
+    // `pointerupoutside` instead — without this, dragStart can stay set
+    // and the container stays at the elevated depth, leaving the hand
+    // visually stuck after the first interaction.
+    bg.on("pointerupoutside", () => {
+      if (this.dragStart && this.dragStart.card === card) {
+        this.dragStart = null;
+      }
+      this.clearMergeHighlights();
+      this.scene.tweens.add({
+        targets: container,
+        x,
+        y: selected ? y - u(18) : y,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 160,
+        ease: "Quad.easeOut",
+      });
     });
 
     const slot: HandCard = {
