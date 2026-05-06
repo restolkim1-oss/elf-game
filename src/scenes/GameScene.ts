@@ -39,6 +39,7 @@ export class GameScene extends Phaser.Scene {
   private finaleTriggered = false;
   private puzzleBusy = false;
   private abortingPuzzle = false;
+  private battleFlowId = 0;
 
   private stageSet: StageSet = 1;
   private stage2StoryUnlocked = false;
@@ -70,6 +71,7 @@ export class GameScene extends Phaser.Scene {
     this.activePointers = [];
     this.isPanning = false;
     this.finaleTriggered = false;
+    this.battleFlowId = 0;
     this.removed = new Set<string>();
     this.interactionReturnKey = "E1";
     this.loadMetaState();
@@ -376,6 +378,8 @@ export class GameScene extends Phaser.Scene {
 
   private startPartBattle(part: PartDef) {
     if (this.finaleTriggered) return;
+    this.battleFlowId += 1;
+    const flowId = this.battleFlowId;
     this.puzzleBusy = true;
     this.events.emit("puzzle-busy", true);
     this.partSystem.setActivePart(part.id);
@@ -383,6 +387,7 @@ export class GameScene extends Phaser.Scene {
     this.partSystem.setInputEnabled(false);
 
     this.cardBattle.start(part, (success) => {
+      if (flowId !== this.battleFlowId) return;
       let nextPart: PartDef | null = null;
       try {
         if (success) {
@@ -397,7 +402,7 @@ export class GameScene extends Phaser.Scene {
       } finally {
         if (success && nextPart && !this.finaleTriggered) {
           const queuedPart = nextPart;
-          this.queueNextPartBattle(queuedPart);
+          this.queueNextPartBattle(queuedPart, flowId);
         } else {
           this.releaseBattleLock();
         }
@@ -405,13 +410,14 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private queueNextPartBattle(part: PartDef) {
+  private queueNextPartBattle(part: PartDef, flowId = this.battleFlowId) {
     this.puzzleBusy = true;
     this.events.emit("puzzle-busy", true);
     this.partSystem.setPuzzleActive(true);
     this.partSystem.setInputEnabled(false);
     this.partSystem.setActivePart(part.id);
     this.time.delayedCall(720, () => {
+      if (flowId !== this.battleFlowId) return;
       if (this.finaleTriggered || this.interactionActive) {
         this.releaseBattleLock();
         return;
@@ -419,7 +425,7 @@ export class GameScene extends Phaser.Scene {
       if (this.removed.has(part.id)) {
         const next = this.getNextPart();
         if (next) {
-          this.queueNextPartBattle(next);
+          this.queueNextPartBattle(next, flowId);
         } else {
           this.releaseBattleLock();
           this.triggerFinale();

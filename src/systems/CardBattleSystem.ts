@@ -262,6 +262,7 @@ export class CardBattleSystem {
   private speechBubble: Phaser.GameObjects.Container | null = null;
   private lastSpeechAt = 0;
   private flowWatchdog: Phaser.Time.TimerEvent | null = null;
+  private battleRunId = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -269,6 +270,7 @@ export class CardBattleSystem {
 
   start(part: PartDef, done: CardBattleResult) {
     this.cleanup();
+    this.battleRunId += 1;
     this.cancelled = false;
     this.finished = false;
     this.busy = false;
@@ -597,6 +599,7 @@ export class CardBattleSystem {
 
   private runEnemyTurn() {
     if (this.finished) return;
+    const runId = this.battleRunId;
     // Burn ticks on enemy at start of enemy turn
     if (this.enemy.burn) {
       const dmg = this.enemy.burn.dmg;
@@ -606,20 +609,25 @@ export class CardBattleSystem {
       this.flashLog(`화상 ${dmg}`);
       this.refreshAll();
       if (this.enemy.hp <= 0) {
-        this.scene.time.delayedCall(420, () => this.finish(true));
+        this.scene.time.delayedCall(420, () => {
+          if (this.isCurrentRun(runId)) this.finish(true);
+        });
         return;
       }
     }
 
-    this.scene.time.delayedCall(280, () => this.safeExecuteIntent());
+    this.scene.time.delayedCall(280, () => {
+      if (this.isCurrentRun(runId)) this.safeExecuteIntent(runId);
+    });
   }
 
-  private safeExecuteIntent() {
+  private safeExecuteIntent(runId = this.battleRunId) {
+    if (!this.isCurrentRun(runId)) return;
     try {
-      this.executeIntent();
+      this.executeIntent(runId);
     } catch (err) {
       console.error("[BATTLE] executeIntent threw", err);
-      if (!this.finished) {
+      if (this.isCurrentRun(runId)) {
         this.clearFlowWatchdog();
         this.busy = false;
         this.startPlayerTurn();
@@ -627,13 +635,15 @@ export class CardBattleSystem {
     }
   }
 
-  private executeIntent() {
-    if (this.finished) return;
+  private executeIntent(runId = this.battleRunId) {
+    if (!this.isCurrentRun(runId)) return;
 
     if (this.enemyStunned) {
       this.enemyStunned = false;
       this.flashLog("적 행동 무력화");
-      this.scene.time.delayedCall(360, () => this.safeAdvanceIntentAndContinue());
+      this.scene.time.delayedCall(360, () => {
+        if (this.isCurrentRun(runId)) this.safeAdvanceIntentAndContinue(runId);
+      });
       return;
     }
 
@@ -654,19 +664,24 @@ export class CardBattleSystem {
     this.refreshAll();
 
     if (this.player.hp <= 0) {
-      this.scene.time.delayedCall(540, () => this.finish(false));
+      this.scene.time.delayedCall(540, () => {
+        if (this.isCurrentRun(runId)) this.finish(false);
+      });
       return;
     }
 
-    this.scene.time.delayedCall(360, () => this.safeAdvanceIntentAndContinue());
+    this.scene.time.delayedCall(360, () => {
+      if (this.isCurrentRun(runId)) this.safeAdvanceIntentAndContinue(runId);
+    });
   }
 
-  private safeAdvanceIntentAndContinue() {
+  private safeAdvanceIntentAndContinue(runId = this.battleRunId) {
+    if (!this.isCurrentRun(runId)) return;
     try {
-      this.advanceIntentAndContinue();
+      this.advanceIntentAndContinue(runId);
     } catch (err) {
       console.error("[BATTLE] advanceIntentAndContinue threw", err);
-      if (!this.finished) {
+      if (this.isCurrentRun(runId)) {
         this.clearFlowWatchdog();
         this.busy = false;
         this.startPlayerTurn();
@@ -674,7 +689,8 @@ export class CardBattleSystem {
     }
   }
 
-  private advanceIntentAndContinue() {
+  private advanceIntentAndContinue(runId = this.battleRunId) {
+    if (!this.isCurrentRun(runId)) return;
     this.clearFlowWatchdog();
     this.intentIdx++;
     // Decrement weaken on enemy at end of enemy turn
@@ -686,7 +702,9 @@ export class CardBattleSystem {
     if (this.turn > MAX_TURNS) {
       this.flashLog("시간 초과 - 실패");
       this.refreshAll();
-      this.scene.time.delayedCall(620, () => this.finish(false));
+      this.scene.time.delayedCall(620, () => {
+        if (this.isCurrentRun(runId)) this.finish(false);
+      });
       return;
     }
     this.busy = false;
@@ -727,6 +745,7 @@ export class CardBattleSystem {
 
   private playSelectedCards() {
     if (this.busy || this.finished) return;
+    const runId = this.battleRunId;
     if (this.selectedCards.length === 0) {
       this.flashLog("사용할 카드를 선택하세요");
       return;
@@ -764,7 +783,7 @@ export class CardBattleSystem {
       this.refreshButtons();
       this.armFlowWatchdog("dice-resolution", 3200, () => this.safeSettleAfterCardUse());
       try {
-        this.rollDiceAfterHit(result.damage, settle);
+        this.rollDiceAfterHit(result.damage, settle, runId);
       } catch (err) {
         console.error("[BATTLE] rollDiceAfterHit threw", err);
         settle();
@@ -839,7 +858,10 @@ export class CardBattleSystem {
     }
     if (this.energy <= 0) {
       this.flashLog("기력을 모두 사용해 턴 종료");
-      this.scene.time.delayedCall(220, () => this.endPlayerTurn());
+      const runId = this.battleRunId;
+      this.scene.time.delayedCall(220, () => {
+        if (this.isCurrentRun(runId)) this.endPlayerTurn();
+      });
       return;
     }
     this.refreshAll();
@@ -860,9 +882,10 @@ export class CardBattleSystem {
 
   private armFlowWatchdog(reason: string, delay: number, recover: () => void) {
     this.clearFlowWatchdog();
+    const runId = this.battleRunId;
     this.flowWatchdog = this.scene.time.delayedCall(delay, () => {
       this.flowWatchdog = null;
-      if (this.finished) return;
+      if (!this.isCurrentRun(runId)) return;
       console.warn(`[BATTLE] ${reason} watchdog recovered stalled battle`);
       try {
         recover();
@@ -881,6 +904,10 @@ export class CardBattleSystem {
   private clearFlowWatchdog() {
     this.flowWatchdog?.remove(false);
     this.flowWatchdog = null;
+  }
+
+  private isCurrentRun(runId: number) {
+    return runId === this.battleRunId && !this.finished;
   }
 
   private sumComboEffect(cards: TarotCardState[]) {
@@ -1075,8 +1102,9 @@ export class CardBattleSystem {
       duration: 170,
       ease: "Back.Out",
     });
+    const runId = this.battleRunId;
     this.scene.time.delayedCall(1700, () => {
-      if (this.speechBubble !== c) return;
+      if (this.speechBubble !== c || !this.isCurrentRun(runId)) return;
       this.scene.tweens.add({
         targets: c,
         alpha: 0,
@@ -1090,14 +1118,14 @@ export class CardBattleSystem {
     });
   }
 
-  private rollDiceAfterHit(baseDamage: number, onComplete?: () => void) {
+  private rollDiceAfterHit(baseDamage: number, onComplete?: () => void, runId = this.battleRunId) {
     const { width } = this.scene.scale;
     this.playAttackEffect("enemy", baseDamage);
     let settled = false;
     const settle = (origin: string) => {
       void origin;
       if (settled) return;
-      if (this.finished) {
+      if (!this.isCurrentRun(runId)) {
         settled = true;
         return;
       }
@@ -1106,7 +1134,7 @@ export class CardBattleSystem {
     };
     const fallback = this.scene.time.delayedCall(2400, () => settle("fallback"));
     DiceRoller.roll(this.scene, this.overlay, width / 2, u(170), (roll) => {
-      if (this.finished || settled) return;
+      if (!this.isCurrentRun(runId) || settled) return;
       fallback.remove(false);
       try {
       if (roll.critical) {
