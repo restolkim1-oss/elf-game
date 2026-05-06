@@ -406,12 +406,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   private queueNextPartBattle(part: PartDef) {
-    this.releaseBattleLock();
+    this.puzzleBusy = true;
+    this.events.emit("puzzle-busy", true);
+    this.partSystem.setPuzzleActive(true);
+    this.partSystem.setInputEnabled(false);
     this.partSystem.setActivePart(part.id);
     this.time.delayedCall(720, () => {
-      if (this.finaleTriggered || this.interactionActive) return;
+      if (this.finaleTriggered || this.interactionActive) {
+        this.releaseBattleLock();
+        return;
+      }
       if (this.removed.has(part.id)) {
-        this.startOrderedBattle();
+        const next = this.getNextPart();
+        if (next) {
+          this.queueNextPartBattle(next);
+        } else {
+          this.releaseBattleLock();
+          this.triggerFinale();
+        }
         return;
       }
       this.startPartBattle(part);

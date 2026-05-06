@@ -315,7 +315,7 @@ export class UIScene extends Phaser.Scene {
     const topSize = size * 1.5;
     const gap = u(14);
     const x = width - u(52);
-    const topY = u(150);
+    const topY = u(190);
     const childIcons = MENU_ICONS.slice(1, 5);
     const childEntries: Array<{ setVisible: (visible: boolean) => unknown }> = [];
     const setChildVisible = (visible: boolean) => {
@@ -328,13 +328,22 @@ export class UIScene extends Phaser.Scene {
       diameter: number,
       onClick: () => void
     ) => {
-      if (!this.textures.exists(icon.key)) return;
       const bg = this.add
         .circle(x, y, diameter * 0.54, COLORS.panelSoft, 0.78)
         .setStrokeStyle(u(1.5), COLORS.gild, 0.8);
-      const img = this.add.image(x, y, icon.key);
-      const scale = Math.min((diameter * 0.78) / img.width, (diameter * 0.78) / img.height);
-      img.setScale(scale).setAlpha(0.96);
+      const img = this.textures.exists(icon.key) ? this.add.image(x, y, icon.key) : null;
+      const scale = img ? Math.min((diameter * 0.78) / img.width, (diameter * 0.78) / img.height) : 1;
+      img?.setScale(scale).setAlpha(0.96);
+      const fallback = img
+        ? null
+        : this.add
+            .text(x, y, icon.label.slice(0, 1), {
+              fontFamily: "serif",
+              fontSize: px(18),
+              color: COLORS.textHighlight,
+              fontStyle: "bold",
+            })
+            .setOrigin(0.5);
       const label = this.add
         .text(x, y + diameter * 0.48, icon.label, {
           fontFamily: "serif",
@@ -347,18 +356,21 @@ export class UIScene extends Phaser.Scene {
       bg.setInteractive({ useHandCursor: true });
       bg.on("pointerover", () => {
         bg.setFillStyle(0x2a1a34, 0.95);
-        img.setScale(scale * 1.08);
+        img?.setScale(scale * 1.08);
+        fallback?.setScale(1.08);
       });
       bg.on("pointerout", () => {
         bg.setFillStyle(COLORS.panelSoft, 0.78);
-        img.setScale(scale);
+        img?.setScale(scale);
+        fallback?.setScale(1);
       });
       bg.on("pointerdown", () => {
         onClick();
       });
 
-      c.add([bg, img, label]);
-      return [bg, img, label];
+      const entries = img ? [bg, img, label] : [bg, fallback!, label];
+      c.add(entries);
+      return entries;
     };
 
     makeIconButton(MENU_ICONS[0], topY, topSize, () => {
