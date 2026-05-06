@@ -897,8 +897,16 @@ export class CardBattleSystem {
   private rollDiceAfterHit(baseDamage: number, onComplete?: () => void) {
     const { width } = this.scene.scale;
     this.playAttackEffect("enemy", baseDamage);
+    let settled = false;
+    const settle = () => {
+      if (settled || this.finished) return;
+      settled = true;
+      onComplete?.();
+    };
+    const fallback = this.scene.time.delayedCall(2400, settle);
     DiceRoller.roll(this.scene, this.overlay, width / 2, u(285), (roll) => {
-      if (this.finished) return;
+      if (this.finished || settled) return;
+      fallback.remove(false);
       if (roll.critical) {
         const criticalDamage = Math.max(4, Math.round(baseDamage * 0.85));
         this.applyDirectDamage(this.enemy, criticalDamage);
@@ -912,7 +920,7 @@ export class CardBattleSystem {
         this.flashLog("Lucky Six! 기력 +1 · 카드 보충");
         this.refreshAll();
       }
-      onComplete?.();
+      settle();
     });
   }
 

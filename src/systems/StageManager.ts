@@ -63,7 +63,7 @@ export class StageManager {
 
   hidePartLayer(partId: string, duration = 420) {
     this.hiddenPartIds.add(partId);
-    const layerIds = this.partLayerIds.get(partId) ?? [];
+    const layerIds = this.partLayerIds.get(partId) ?? this.findFallbackLayerIds(partId);
     layerIds.forEach((layerId) => {
       const img = this.layers.get(layerId);
       if (!img) return;
@@ -150,6 +150,13 @@ export class StageManager {
       if (layerIds.includes(layerId)) return partId;
     }
     return undefined;
+  }
+
+  private findFallbackLayerIds(partId: string) {
+    const normalized = partId.toLowerCase();
+    return [...this.layers.keys()].filter((layerId) =>
+      layerId.toLowerCase().includes(normalized)
+    );
   }
 
   private fadeOutExtraLayers(duration: number) {
