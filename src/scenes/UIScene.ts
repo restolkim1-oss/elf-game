@@ -86,6 +86,7 @@ export class UIScene extends Phaser.Scene {
     void this.drawRemovalOrder;
 
     const { width, height } = this.scale;
+    this.drawTopChrome(width);
     this.drawBottomPanel(width, height);
     this.drawSideIconDock(width, height);
     this.drawCornerOrnaments(width, height);
@@ -124,6 +125,63 @@ export class UIScene extends Phaser.Scene {
     });
 
     this.startIdlePillPulse();
+  }
+
+  private drawTopChrome(width: number) {
+    const barH = u(52);
+    const titleH = u(86);
+    this.add
+      .rectangle(width / 2, barH / 2, width, barH, 0xf8f6ef, 0.96)
+      .setDepth(1500)
+      .setStrokeStyle(u(1), COLORS.gild, 0.75);
+    this.add
+      .rectangle(width / 2, barH + titleH / 2, width, titleH, 0x000000, 0.94)
+      .setDepth(1500);
+
+    const resources = [
+      { key: "menu_icon_main", text: "21/21" },
+      { key: "menu_icon_coin", text: "199,240" },
+      { key: "menu_icon_gem", text: "4,300" },
+      { key: "menu_icon_settings", text: "100" },
+    ];
+    const cellW = width / resources.length;
+    resources.forEach((item, idx) => {
+      const x = cellW * idx + cellW / 2;
+      const iconX = x - cellW * 0.32;
+      if (this.textures.exists(item.key)) {
+        const icon = this.add.image(iconX, barH / 2, item.key).setDepth(1502);
+        const scale = Math.min(u(38) / icon.width, u(38) / icon.height);
+        icon.setScale(scale);
+      }
+      this.add
+        .text(x + cellW * 0.05, barH / 2, item.text, {
+          fontFamily: "serif",
+          fontSize: px(15),
+          color: "#76562c",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(1502);
+      this.add
+        .text(x + cellW * 0.34, barH / 2, "+", {
+          fontFamily: "serif",
+          fontSize: px(17),
+          color: "#b8954f",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(1502);
+    });
+
+    this.add
+      .text(width / 2, barH + titleH / 2, "캐릭터 파츠별 에너지칸", {
+        fontFamily: "serif",
+        fontSize: px(23),
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setDepth(1502);
   }
 
   private drawBottomPanel(width: number, height: number) {
@@ -186,7 +244,7 @@ export class UIScene extends Phaser.Scene {
     const gap = u(14);
     const totalH = MENU_ICONS.length * size + (MENU_ICONS.length - 1) * gap;
     const x = width - u(52);
-    const startY = Math.max(u(160), height * 0.44 - totalH / 2 + size / 2);
+    const startY = Math.max(u(230), height * 0.44 - totalH / 2 + size / 2);
     const maxY = height - u(260);
 
     MENU_ICONS.forEach((icon, idx) => {
@@ -704,6 +762,7 @@ export class UIScene extends Phaser.Scene {
     const idx = this.parts.findIndex((p) => p.id === partId);
     if (idx < 0) return;
     const pill = this.pills[idx];
+    if (!pill) return;
     if (pill.cleared) return;
     pill.cleared = true;
     pill.bg.setFillStyle(COLORS.gild);

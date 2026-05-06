@@ -99,7 +99,7 @@ export class GameScene extends Phaser.Scene {
       .getSourceImage() as HTMLImageElement;
     const origW = baseTex.width;
     const origH = baseTex.height;
-    const topUi = 2 * 70 + 20;
+    const topUi = 2 * 210 + 30;
     const botUi = 2 * 230 + 50;
     const availableH = height - topUi - botUi;
     const scale = Math.min(availableH / origH, (width * 0.78) / origW);
@@ -136,35 +136,12 @@ export class GameScene extends Phaser.Scene {
       this.events.emit("part-locked", { part, reason });
     });
 
-    this.partSystem.onPartTargeted((part) => {
-      if (this.puzzleBusy) return;
-      this.puzzleBusy = true;
-      this.events.emit("puzzle-busy", true);
-      this.partSystem.setPuzzleActive(true);
-      this.partSystem.setInputEnabled(false);
-      this.cardBattle.start(part, (success) => {
-        try {
-          if (success) {
-            this.handlePartCleared(part);
-          } else {
-            if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
-              this.abortingPuzzle = false;
-              this.feedback("미니게임을 포기했습니다.");
-            } else {
-              this.events.emit("failure", part.id);
-            }
-          }
-        } finally {
-          this.puzzleBusy = false;
-          this.events.emit("puzzle-busy", false);
-          this.partSystem.setPuzzleActive(false);
-          // Restore part interactivity after the removed marker has been retired.
-          this.partSystem.setInputEnabled(true);
-        }
-      });
+    this.partSystem.onPartTargeted(() => {
+      this.startOrderedBattle();
     });
 
     this.partSystem.start();
+    this.partSystem.setActivePart(this.getNextPart()?.id ?? null);
     this.events.emit("progress", this.progressSystem.getProgress());
     this.emitEconomyState();
     this.events.emit("stage-set", this.stageSet);
@@ -374,6 +351,62 @@ export class GameScene extends Phaser.Scene {
       // should trigger a visual transition.
       this.stageManager.transitionTo(targetKey);
     }
+    this.partSystem.setActivePart(this.getNextPart()?.id ?? null);
+  }
+
+  private getNextPart(): PartDef | null {
+    return (
+      this.parts
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .find((part) => !this.removed.has(part.id)) ?? null
+    );
+  }
+
+  private startOrderedBattle() {
+    if (this.puzzleBusy || this.interactionActive || this.finaleTriggered) return;
+    const nextPart = this.getNextPart();
+    if (!nextPart) {
+      this.triggerFinale();
+      return;
+    }
+    this.startPartBattle(nextPart);
+  }
+
+  private startPartBattle(part: PartDef) {
+    if (this.finaleTriggered) return;
+    this.puzzleBusy = true;
+    this.events.emit("puzzle-busy", true);
+    this.partSystem.setActivePart(part.id);
+    this.partSystem.setPuzzleActive(true);
+    this.partSystem.setInputEnabled(false);
+
+    this.cardBattle.start(part, (success) => {
+      let nextPart: PartDef | null = null;
+      try {
+        if (success) {
+          this.handlePartCleared(part);
+          nextPart = this.getNextPart();
+        } else if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
+          this.abortingPuzzle = false;
+          this.feedback("미니게임을 포기했습니다.");
+        } else {
+          this.events.emit("failure", part.id);
+        }
+      } finally {
+        if (success && nextPart && !this.finaleTriggered) {
+          const queuedPart = nextPart;
+          this.partSystem.setActivePart(queuedPart.id);
+          this.time.delayedCall(760, () => this.startPartBattle(queuedPart));
+        } else {
+          this.puzzleBusy = false;
+          this.events.emit("puzzle-busy", false);
+          this.partSystem.setPuzzleActive(false);
+          this.partSystem.setActivePart(this.getNextPart()?.id ?? null);
+          this.partSystem.setInputEnabled(true);
+        }
+      }
+    });
   }
 
   private forceClearAll() {
@@ -390,6 +423,7 @@ export class GameScene extends Phaser.Scene {
 
     this.events.emit("progress", this.progressSystem.getProgress());
     if (this.progressSystem.isFinished()) {
+      this.partSystem.setActivePart(null);
       this.triggerFinale(240, 700);
     }
   }

@@ -37,6 +37,7 @@ export class PartSystem {
   private getBounds: () => Bounds;
   private puzzleActive = false;
   private inputEnabled = true;
+  private activePartId: string | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -81,6 +82,11 @@ export class PartSystem {
         v.lockIcon.setAlpha(0);
       }
     });
+  }
+
+  setActivePart(id: string | null) {
+    this.activePartId = id;
+    this.refreshLocks();
   }
 
   start() {
@@ -217,12 +223,15 @@ export class PartSystem {
 
   private isPartUnlocked(partId: string): boolean {
     if (this.removed.has(partId)) return false;
-    return true;
+    return this.activePartId === null || this.activePartId === partId;
   }
 
   private lockReason(partId: string): string {
     const part = this.getPart(partId);
     if (!part) return "";
+    if (this.activePartId && this.activePartId !== partId) {
+      return "정해진 순서대로 진행됩니다.";
+    }
     const missing = part.prerequisites.filter((id) => !this.removed.has(id));
     if (missing.length === 0) return "";
     const labels = missing.map((id) => this.getPart(id)?.label ?? id);
@@ -285,7 +294,15 @@ export class PartSystem {
     if (!wasMarkedRemoved) this.removed.add(id);
 
     const v = this.visuals.get(id);
-    if (!v && wasMarkedRemoved) return;
+    if (!v && wasMarkedRemoved) {
+      const part = this.parts.find((p) => p.id === id);
+      if (part && !this.emittedRemoved.has(id)) {
+        this.emittedRemoved.add(id);
+        this.scene.events.emit("part-removed", part);
+      }
+      this.refreshLocks();
+      return;
+    }
     if (v) {
       this.scene.cameras.main.shake(180, 0.006);
       const flash = this.scene.add

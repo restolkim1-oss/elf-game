@@ -339,7 +339,7 @@ export class CardBattleSystem {
     const stripW = width * 0.96;
 
     // -- Top: enemy strip (sits just below the progression pills) --
-    const enemyStripY = u(180);
+    const enemyStripY = u(176);
     const enemyStripBg = this.scene.add
       .rectangle(width / 2, enemyStripY, stripW, u(72), 0x1a0814, 0.78)
       .setStrokeStyle(u(1.2), 0xff8fab, 0.7);
