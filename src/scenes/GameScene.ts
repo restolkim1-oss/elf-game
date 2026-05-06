@@ -159,6 +159,7 @@ export class GameScene extends Phaser.Scene {
     this.events.on("request-economy-sync", () => this.emitEconomyState());
     this.events.on("abort-current-puzzle", () => this.abortCurrentPuzzle());
     this.events.emit("puzzle-busy", false);
+    this.time.delayedCall(650, () => this.startOrderedBattle());
   }
 
   private enterInteractionMode() {
@@ -396,17 +397,33 @@ export class GameScene extends Phaser.Scene {
       } finally {
         if (success && nextPart && !this.finaleTriggered) {
           const queuedPart = nextPart;
-          this.partSystem.setActivePart(queuedPart.id);
-          this.time.delayedCall(760, () => this.startPartBattle(queuedPart));
+          this.queueNextPartBattle(queuedPart);
         } else {
-          this.puzzleBusy = false;
-          this.events.emit("puzzle-busy", false);
-          this.partSystem.setPuzzleActive(false);
-          this.partSystem.setActivePart(this.getNextPart()?.id ?? null);
-          this.partSystem.setInputEnabled(true);
+          this.releaseBattleLock();
         }
       }
     });
+  }
+
+  private queueNextPartBattle(part: PartDef) {
+    this.releaseBattleLock();
+    this.partSystem.setActivePart(part.id);
+    this.time.delayedCall(720, () => {
+      if (this.finaleTriggered || this.interactionActive) return;
+      if (this.removed.has(part.id)) {
+        this.startOrderedBattle();
+        return;
+      }
+      this.startPartBattle(part);
+    });
+  }
+
+  private releaseBattleLock() {
+    this.puzzleBusy = false;
+    this.events.emit("puzzle-busy", false);
+    this.partSystem.setPuzzleActive(false);
+    this.partSystem.setActivePart(this.getNextPart()?.id ?? null);
+    this.partSystem.setInputEnabled(true);
   }
 
   private forceClearAll() {

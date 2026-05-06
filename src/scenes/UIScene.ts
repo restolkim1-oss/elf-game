@@ -309,13 +309,13 @@ export class UIScene extends Phaser.Scene {
     group.add([r1, r2, r3, r4, this.hintText, this.statText]);
   }
 
-  private drawSideIconDock(width: number, height: number) {
+  private drawSideIconDock(width: number, _height: number) {
     const c = this.add.container(0, 0).setDepth(1650);
     const size = u(58);
     const topSize = size * 1.5;
     const gap = u(14);
     const x = width - u(52);
-    const topY = Math.max(u(210), height * 0.3);
+    const topY = u(150);
     const childIcons = MENU_ICONS.slice(1, 5);
     const childEntries: Array<{ setVisible: (visible: boolean) => unknown }> = [];
     const setChildVisible = (visible: boolean) => {
@@ -492,7 +492,6 @@ export class UIScene extends Phaser.Scene {
     this.bottomMenu = c;
 
     const labels = [
-      { text: "상점", action: () => this.toggleShopMenu() },
       { text: "올 클리어", action: () => gs.events.emit("force-clear") },
     ];
     const visibleLabels = labels;
