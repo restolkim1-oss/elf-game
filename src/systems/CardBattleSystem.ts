@@ -967,10 +967,10 @@ export class CardBattleSystem {
     const { width, height } = this.scene.scale;
     this.speechBubble?.destroy();
 
-    const x = width * 0.62;
-    const y = height * 0.31;
-    const bubbleW = u(220);
-    const bubbleH = u(72);
+    const x = width * 0.76;
+    const y = height * 0.22;
+    const bubbleW = u(200);
+    const bubbleH = u(68);
     const c = this.scene.add.container(x, y).setDepth(790);
     this.speechBubble = c;
 
@@ -1044,7 +1044,7 @@ export class CardBattleSystem {
       onComplete?.();
     };
     const fallback = this.scene.time.delayedCall(2400, () => settle("fallback"));
-    DiceRoller.roll(this.scene, this.overlay, width / 2, u(285), (roll) => {
+    DiceRoller.roll(this.scene, this.overlay, width / 2, u(170), (roll) => {
       if (this.finished || settled) return;
       fallback.remove(false);
       try {

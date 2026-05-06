@@ -19,8 +19,8 @@ export class DiceRoller {
   ) {
     const value = Phaser.Math.Between(1, 6);
     const critical = value >= 4;
-    const startY = y + u(86);
-    const apexY = y - u(96);
+    const startY = y + u(44);
+    const apexY = y - u(70);
 
     const group = scene.add.container(x, startY).setDepth(760);
     const shadow = scene.add
