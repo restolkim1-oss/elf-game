@@ -68,11 +68,13 @@ export class StageManager {
       const img = this.layers.get(layerId);
       if (!img) return;
       this.scene.tweens.killTweensOf(img);
+      this.playLayerRemovalEffect(img);
       this.scene.tweens.add({
         targets: img,
         alpha: 0,
         duration,
         ease: "Quad.easeOut",
+        onComplete: () => img.setVisible(false),
       });
     });
   }
@@ -160,5 +162,52 @@ export class StageManager {
         ease: "Quad.easeInOut",
       });
     });
+  }
+
+  private playLayerRemovalEffect(img: Phaser.GameObjects.Image) {
+    const cx = img.x;
+    const cy = img.y;
+    const burstRadius = Math.min(img.displayWidth, img.displayHeight) * 0.18;
+    const ring = this.scene.add
+      .ellipse(cx, cy, img.displayWidth * 0.32, img.displayHeight * 0.18, 0xffffff, 0)
+      .setStrokeStyle(4, 0xfff0a8, 0.85)
+      .setDepth(img.depth + 20);
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 1.35,
+      scaleY: 1.35,
+      alpha: 0,
+      duration: 520,
+      ease: "Quad.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+
+    for (let i = 0; i < 20; i++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const distance = Phaser.Math.FloatBetween(burstRadius * 0.35, burstRadius);
+      const shard = this.scene.add
+        .rectangle(
+          cx + Phaser.Math.Between(-18, 18),
+          cy + Phaser.Math.Between(-30, 30),
+          Phaser.Math.Between(8, 20),
+          Phaser.Math.Between(4, 11),
+          i % 4 === 0 ? 0xffffff : 0xffd572,
+          0.82
+        )
+        .setAngle(Phaser.Math.Between(0, 180))
+        .setDepth(img.depth + 21);
+      this.scene.tweens.add({
+        targets: shard,
+        x: cx + Math.cos(angle) * distance,
+        y: cy + Math.sin(angle) * distance * 0.7,
+        alpha: 0,
+        angle: shard.angle + Phaser.Math.Between(-240, 240),
+        scaleX: 0.25,
+        scaleY: 0.25,
+        duration: Phaser.Math.Between(420, 780),
+        ease: "Cubic.easeOut",
+        onComplete: () => shard.destroy(),
+      });
+    }
   }
 }

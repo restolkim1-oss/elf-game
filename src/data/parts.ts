@@ -115,7 +115,7 @@ const PARTS_STAGE1: PartDef[] = [
     tint: 0x8b2f39,
     order: 2,
     stageAfter: null,
-    prerequisites: ["circlet"],
+    prerequisites: [],
   },
   {
     id: "cape",
@@ -126,7 +126,7 @@ const PARTS_STAGE1: PartDef[] = [
     tint: 0xd43a2f,
     order: 3,
     stageAfter: null,
-    prerequisites: ["boots"],
+    prerequisites: [],
   },
   {
     id: "sweater",
@@ -137,7 +137,7 @@ const PARTS_STAGE1: PartDef[] = [
     tint: 0xe5b968,
     order: 4,
     stageAfter: null,
-    prerequisites: ["cape"],
+    prerequisites: [],
   },
   {
     id: "skirt",
@@ -148,7 +148,7 @@ const PARTS_STAGE1: PartDef[] = [
     tint: 0x5c3d2e,
     order: 5,
     stageAfter: null,
-    prerequisites: ["sweater"],
+    prerequisites: [],
   },
   {
     id: "underwear",
@@ -159,7 +159,7 @@ const PARTS_STAGE1: PartDef[] = [
     tint: 0xf1c6a8,
     order: 6,
     stageAfter: null,
-    prerequisites: ["skirt"],
+    prerequisites: [],
   },
 ];
 

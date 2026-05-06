@@ -215,10 +215,8 @@ export class PartSystem {
   }
 
   private isPartUnlocked(partId: string): boolean {
-    const part = this.getPart(partId);
-    if (!part) return false;
     if (this.removed.has(partId)) return false;
-    return part.prerequisites.every((id) => this.removed.has(id));
+    return true;
   }
 
   private lockReason(partId: string): string {

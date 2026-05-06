@@ -9,8 +9,8 @@ const px = (n: number) => `${Math.round(n * UI_SCALE * 1.55)}px`;
 const PLAYER_HP_MAX = 50;
 const ENERGY_MAX = 5;
 const START_HAND = 5;
+const TARGET_HAND = 5;
 const HAND_LIMIT = 7;
-const DRAW_PER_TURN = 1;
 const MAX_TURNS = 12;
 
 type CardId = "attack" | "powerAttack" | "defense" | "heal" | "parry";
@@ -200,6 +200,7 @@ interface HandCard {
   card: TarotCardState;
   container: Phaser.GameObjects.Container;
   bg: Phaser.GameObjects.Rectangle;
+  dropGlow: Phaser.GameObjects.Rectangle;
   baseX: number;
   baseY: number;
   cardW: number;
@@ -250,6 +251,7 @@ export class CardBattleSystem {
   private enemyHpBarMaxWidth = 0;
   private playerHpBarLeft = 0;
   private enemyHpBarLeft = 0;
+  private dragStart: { x: number; y: number; card: TarotCardState } | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -297,6 +299,7 @@ export class CardBattleSystem {
     this.hand = [];
     this.discard = [];
     this.selectedCards = [];
+    this.dragStart = null;
   }
 
   private startBattle(part: PartDef) {
@@ -328,6 +331,7 @@ export class CardBattleSystem {
     this.hand = [];
     this.discard = [];
     this.selectedCards = [];
+    this.dragStart = null;
     this.intentPattern = buildIntentPattern(part.difficulty);
     this.intentIdx = 0;
     this.enemyStunned = false;
@@ -539,7 +543,7 @@ export class CardBattleSystem {
     });
 
     // Start of battle
-    this.draw(START_HAND);
+    this.drawToFull(START_HAND);
     this.refreshAll();
   }
 
@@ -550,7 +554,7 @@ export class CardBattleSystem {
     this.player.block = 0;
     this.energy = ENERGY_MAX;
     this.selectedCards = [];
-    this.draw(DRAW_PER_TURN);
+    this.drawToFull(TARGET_HAND);
     this.refreshAll();
   }
 
@@ -680,17 +684,16 @@ export class CardBattleSystem {
     this.energy -= comboCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
     this.discard.push(...comboCards);
-    this.applyCardEffects(comboCards);
+    const result = this.applyCardEffects(comboCards);
     this.refreshAll();
 
-    if (this.enemy.hp <= 0) {
+    const settle = () => this.settleAfterCardUse();
+    if (result.didAttack) {
       this.busy = true;
-      this.scene.time.delayedCall(420, () => this.finish(true));
-      return;
-    }
-    if (this.energy <= 0) {
-      this.flashLog("기력을 모두 사용해 턴 종료");
-      this.scene.time.delayedCall(360, () => this.endPlayerTurn());
+      this.refreshButtons();
+      this.rollDiceAfterHit(result.damage, settle);
+    } else {
+      settle();
     }
   }
 
@@ -743,9 +746,26 @@ export class CardBattleSystem {
         break;
       }
     }
-    if (didAttack) this.rollDiceAfterHit(duel.damage);
     if (didGuard) this.playGuardEffect("player");
     if (duel.didWin || !attemptedAttack) this.flashLog(`${def.roleLabel}${comboBonusText} 사용`);
+    return { didAttack, damage: duel.damage };
+  }
+
+  private settleAfterCardUse() {
+    if (this.finished) return;
+    this.busy = false;
+    if (this.enemy.hp <= 0) {
+      this.busy = true;
+      this.refreshButtons();
+      this.scene.time.delayedCall(260, () => this.finish(true));
+      return;
+    }
+    if (this.energy <= 0) {
+      this.flashLog("기력을 모두 사용해 턴 종료");
+      this.scene.time.delayedCall(220, () => this.endPlayerTurn());
+      return;
+    }
+    this.refreshAll();
   }
 
   private sumComboEffect(cards: TarotCardState[]) {
@@ -753,6 +773,82 @@ export class CardBattleSystem {
       const effect = CARDS[card.cardId].effects[0];
       return sum + ("amount" in effect ? effect.amount : 0);
     }, 0);
+  }
+
+  private highlightMergeTarget(source: TarotCardState, pointerX?: number, pointerY?: number) {
+    if (this.busy || this.finished) return;
+    this.handObjs.forEach((slot) => {
+      if (slot.card === source || slot.card.cardId !== source.cardId) {
+        slot.dropGlow.setAlpha(0);
+        return;
+      }
+      if (pointerX === undefined || pointerY === undefined) {
+        slot.dropGlow.setAlpha(0.75);
+        return;
+      }
+      slot.dropGlow.setAlpha(this.isPointInsideSlot(pointerX, pointerY, slot) ? 0.95 : 0.25);
+    });
+  }
+
+  private clearMergeHighlights() {
+    this.handObjs.forEach((slot) => slot.dropGlow.setAlpha(0));
+  }
+
+  private tryMergeDraggedCard(source: TarotCardState, pointerX: number, pointerY: number) {
+    const targetSlot = this.handObjs.find(
+      (slot) =>
+        slot.card !== source &&
+        slot.card.cardId === source.cardId &&
+        this.isPointInsideSlot(pointerX, pointerY, slot)
+    );
+    if (!targetSlot) return false;
+
+    const target = targetSlot.card;
+    target.level += 1;
+    target.attack += Math.max(1, Math.ceil(source.attack * 0.45));
+    target.defense += Math.max(1, Math.ceil(source.defense * 0.45));
+    target.psyche += Math.max(1, Math.ceil(source.psyche * 0.45));
+    target.damage += Math.max(1, Math.ceil(source.damage * 0.5));
+    target.risk = Math.max(1, Math.ceil((target.risk + source.risk) * 0.45));
+    target.power = calculateCardPower({
+      level: target.level,
+      attack: target.attack,
+      defense: target.defense,
+      psyche: target.psyche,
+    });
+
+    this.hand = this.hand.filter((card) => card !== source);
+    this.selectedCards = this.selectedCards.filter((card) => card !== source);
+    this.playMergeEffect(targetSlot);
+    this.flashLog(`${CARDS[target.cardId].roleLabel} 카드 합성! 전투력 ${target.power}`);
+    this.refreshAll();
+    return true;
+  }
+
+  private isPointInsideSlot(x: number, y: number, slot: HandCard) {
+    return (
+      x >= slot.container.x - slot.cardW / 2 &&
+      x <= slot.container.x + slot.cardW / 2 &&
+      y >= slot.container.y - slot.cardH / 2 &&
+      y <= slot.container.y + slot.cardH / 2
+    );
+  }
+
+  private playMergeEffect(slot: HandCard) {
+    const ring = this.scene.add
+      .rectangle(slot.container.x, slot.container.y, slot.cardW + u(22), slot.cardH + u(22), 0xffffff, 0)
+      .setStrokeStyle(u(5), 0x82ffe6, 0.95)
+      .setDepth(820);
+    this.overlay?.add(ring);
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 1.25,
+      scaleY: 1.25,
+      alpha: 0,
+      duration: 420,
+      ease: "Quad.easeOut",
+      onComplete: () => ring.destroy(),
+    });
   }
 
   private applyAttack(target: SideState, raw: number) {
@@ -798,7 +894,7 @@ export class CardBattleSystem {
     };
   }
 
-  private rollDiceAfterHit(baseDamage: number) {
+  private rollDiceAfterHit(baseDamage: number, onComplete?: () => void) {
     const { width } = this.scene.scale;
     this.playAttackEffect("enemy", baseDamage);
     DiceRoller.roll(this.scene, this.overlay, width / 2, u(285), (roll) => {
@@ -809,15 +905,31 @@ export class CardBattleSystem {
         this.playAttackEffect("enemy", criticalDamage);
         this.flashLog(`Critical Hit! 추가 내구도 ${criticalDamage} 감소`);
         this.refreshAll();
-        if (this.enemy.hp <= 0) {
-          this.busy = true;
-          this.scene.time.delayedCall(360, () => this.finish(true));
-        }
       }
+      if (roll.value === 6 && this.enemy.hp > 0) {
+        this.energy = Math.min(ENERGY_MAX, this.energy + 1);
+        this.drawToFull(TARGET_HAND);
+        this.flashLog("Lucky Six! 기력 +1 · 카드 보충");
+        this.refreshAll();
+      }
+      onComplete?.();
     });
   }
 
   // -- Deck --
+
+  private drawToFull(targetCount: number) {
+    const target = Math.min(targetCount, HAND_LIMIT);
+    while (this.hand.length < target) {
+      const before = this.hand.length;
+      this.draw(1);
+      if (this.hand.length === before) {
+        this.deck = shuffle(STARTER_DECK.map((cardId) => this.createTarotCard(cardId)));
+        this.draw(1);
+        if (this.hand.length === before) break;
+      }
+    }
+  }
 
   private draw(n: number) {
     for (let i = 0; i < n; i++) {
@@ -937,6 +1049,9 @@ export class CardBattleSystem {
     const selectionAura = this.scene.add
       .rectangle(0, 0, cardW + u(10), cardH + u(10), 0xffffff, 0)
       .setStrokeStyle(u(3), 0xfff0a8, selected ? 0.95 : 0);
+    const dropGlow = this.scene.add
+      .rectangle(0, 0, cardW + u(16), cardH + u(16), 0xffffff, 0)
+      .setStrokeStyle(u(4), 0x82ffe6, 0);
     const accent = this.scene.add.rectangle(0, -cardH / 2 + u(14), cardW, u(28), def.color, 0.92);
     const costCircle = this.scene.add
       .circle(-cardW / 2 + u(14), -cardH / 2 + u(14), u(11), 0x14091a, 0.95)
@@ -997,6 +1112,7 @@ export class CardBattleSystem {
 
     const container = this.scene.add
       .container(x, y, [
+        dropGlow,
         selectionAura,
         bg,
         accent,
@@ -1027,6 +1143,7 @@ export class CardBattleSystem {
 
     bg.on("pointerover", () => {
       if (this.busy || this.finished) return;
+      this.highlightMergeTarget(card);
       this.scene.tweens.add({
         targets: container,
         y: y - u(14),
@@ -1036,15 +1153,46 @@ export class CardBattleSystem {
       });
     });
     bg.on("pointerout", () => {
+      dropGlow.setAlpha(0);
       this.scene.tweens.add({
         targets: container,
-        y,
+        y: selected ? y - u(18) : y,
         scaleX: 1,
         scaleY: 1,
         duration: 140,
       });
     });
-    bg.on("pointerup", () => {
+    bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      this.dragStart = { x: pointer.x, y: pointer.y, card };
+      container.setDepth(800);
+    });
+    bg.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (!this.dragStart || this.dragStart.card !== card) return;
+      const moved = Math.abs(pointer.x - this.dragStart.x) + Math.abs(pointer.y - this.dragStart.y);
+      if (moved <= u(12)) return;
+      container.setPosition(pointer.x, pointer.y);
+      this.highlightMergeTarget(card, pointer.x, pointer.y);
+    });
+    bg.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+      const moved =
+        this.dragStart && this.dragStart.card === card
+          ? Math.abs(pointer.x - this.dragStart.x) + Math.abs(pointer.y - this.dragStart.y)
+          : 0;
+      if (moved > u(24)) {
+        if (!this.tryMergeDraggedCard(card, pointer.x, pointer.y)) {
+          this.scene.tweens.add({
+            targets: container,
+            x,
+            y: selected ? y - u(18) : y,
+            duration: 160,
+            ease: "Quad.easeOut",
+          });
+        }
+        this.clearMergeHighlights();
+        this.dragStart = null;
+        return;
+      }
+      this.dragStart = null;
       const idx = this.handObjs.findIndex((o) => o === slot);
       if (idx >= 0) this.tryPlayCard(idx);
     });
@@ -1053,6 +1201,7 @@ export class CardBattleSystem {
       card,
       container,
       bg,
+      dropGlow,
       baseX: x,
       baseY: y,
       cardW,
