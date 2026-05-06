@@ -711,11 +711,16 @@ export class CardBattleSystem {
       return;
     }
 
-    const settle = () => this.settleAfterCardUse();
+    const settle = () => this.safeSettleAfterCardUse();
     if (result.didAttack) {
       this.busy = true;
       this.refreshButtons();
-      this.rollDiceAfterHit(result.damage, settle);
+      try {
+        this.rollDiceAfterHit(result.damage, settle);
+      } catch (err) {
+        console.error("[BATTLE] rollDiceAfterHit threw", err);
+        settle();
+      }
     } else {
       settle();
     }
@@ -789,6 +794,19 @@ export class CardBattleSystem {
       return;
     }
     this.refreshAll();
+  }
+
+  private safeSettleAfterCardUse() {
+    try {
+      this.settleAfterCardUse();
+    } catch (err) {
+      console.error("[BATTLE] settleAfterCardUse threw", err);
+      if (!this.finished) {
+        this.busy = false;
+        this.selectedCards = [];
+        this.refreshAll();
+      }
+    }
   }
 
   private sumComboEffect(cards: TarotCardState[]) {
@@ -935,6 +953,7 @@ export class CardBattleSystem {
     DiceRoller.roll(this.scene, this.overlay, width / 2, u(285), (roll) => {
       if (this.finished || settled) return;
       fallback.remove(false);
+      try {
       if (roll.critical) {
         const criticalDamage = Math.max(4, Math.round(baseDamage * 0.85));
         this.applyDirectDamage(this.enemy, criticalDamage);
@@ -948,7 +967,11 @@ export class CardBattleSystem {
         this.flashLog("Lucky Six! 기력 +1 · 카드 보충");
         this.refreshAll();
       }
-      settle("dice-callback");
+      } catch (err) {
+        console.error("[BATTLE] dice callback threw", err);
+      } finally {
+        settle("dice-callback");
+      }
     });
   }
 
