@@ -33,6 +33,8 @@ type CardEffect =
   | { kind: "energy"; amount: number }
   | { kind: "drain"; amount: number }
   | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
+  | { kind: "reflectNextAttack"; ratio: number }
+  | { kind: "weakenNextAttack"; ratio: number; maxTurns: number }
   | { kind: "parry"; amount: number };
 
 interface CardDef {
@@ -211,6 +213,8 @@ interface SideState {
   block: number;
   burn: { dmg: number; turns: number } | null;
   weaken: { amount: number; turns: number } | null;
+  reflectNextAttack: { ratio: number } | null;
+  weakenNextAttack: { ratio: number; turnsLeft: number } | null;
 }
 
 type CardBattleResult = (success: boolean) => void;
@@ -354,6 +358,8 @@ export class CardBattleSystem {
       block: 0,
       burn: null,
       weaken: null,
+      reflectNextAttack: null,
+      weakenNextAttack: null,
     };
     this.enemy = {
       hp: enemyHpMax,
@@ -361,6 +367,8 @@ export class CardBattleSystem {
       block: 0,
       burn: null,
       weaken: null,
+      reflectNextAttack: null,
+      weakenNextAttack: null,
     };
     this.energy = ENERGY_MAX;
     this.turn = 1;
@@ -635,6 +643,11 @@ export class CardBattleSystem {
 
   private startPlayerTurn() {
     if (this.finished) return;
+    if (this.player.reflectNextAttack) {
+      this.player.reflectNextAttack = null;
+      this.flashLog("반격 대기 효과가 사라졌습니다");
+    }
+    this.tickWeakenNextAttackLifetime();
     this.player.block = 0;
     this.energy = ENERGY_MAX;
     this.selectedCards = [];
@@ -706,13 +719,15 @@ export class CardBattleSystem {
 
     const intent = this.intentPattern[this.intentIdx % this.intentPattern.length];
     if (intent.kind === "attack") {
-      let dmg = intent.amount;
-      if (this.enemy.weaken) {
-        dmg = Math.max(0, dmg - this.enemy.weaken.amount);
+      const outcome = this.resolveEnemyAttackIntent(intent.amount);
+      this.flashLog(outcome.log);
+      if (this.enemy.hp <= 0) {
+        this.refreshAll();
+        this.scene.time.delayedCall(540, () => {
+          if (this.isCurrentRun(runId)) this.finish(true);
+        });
+        return;
       }
-      this.applyAttack(this.player, dmg);
-      this.playAttackEffect("player", dmg);
-      this.flashLog(`적 공격 ${intent.amount}${this.enemy.weaken ? ` (약화 -${this.enemy.weaken.amount})` : ""}`);
     } else if (intent.kind === "block") {
       this.enemy.block += intent.amount;
       this.playGuardEffect("enemy");
@@ -730,6 +745,45 @@ export class CardBattleSystem {
     this.scene.time.delayedCall(360, () => {
       if (this.isCurrentRun(runId)) this.safeAdvanceIntentAndContinue(runId);
     });
+  }
+
+  private resolveEnemyAttackIntent(rawAmount: number) {
+    const parts: string[] = [];
+    let incoming = rawAmount;
+
+    if (this.enemy.weaken) {
+      incoming = Math.max(0, incoming - this.enemy.weaken.amount);
+      parts.push(`약화 -${this.enemy.weaken.amount}`);
+    }
+    if (this.enemy.weakenNextAttack) {
+      const ratio = this.enemy.weakenNextAttack.ratio;
+      incoming = Math.max(0, Math.round(incoming * (1 - ratio)));
+      this.enemy.weakenNextAttack = null;
+      parts.push(`무장해제 ${Math.round(ratio * 100)}%`);
+      this.playWeakenBreakEffect();
+    }
+
+    this.applyAttack(this.player, incoming);
+    this.playAttackEffect("player", incoming);
+
+    let reflected = 0;
+    if (this.player.reflectNextAttack) {
+      const ratio = this.player.reflectNextAttack.ratio;
+      this.player.reflectNextAttack = null;
+      reflected = Math.max(0, Math.round(incoming * ratio));
+      if (reflected > 0) {
+        this.applyAttack(this.enemy, reflected);
+        this.playReflectEffect(reflected);
+      }
+      parts.push(`반격 ${reflected}`);
+    }
+
+    const suffix = parts.length > 0 ? ` (${parts.join(" · ")})` : "";
+    return {
+      incoming,
+      reflected,
+      log: `적 공격 ${rawAmount} → ${incoming}${suffix}`,
+    };
   }
 
   private safeAdvanceIntentAndContinue(runId = this.battleRunId) {
@@ -967,6 +1021,19 @@ export class CardBattleSystem {
         case "energy":
           this.energy = Math.min(ENERGY_MAX, this.energy + effect.amount);
           logParts.push(`기력 +${effect.amount}`);
+          break;
+        case "reflectNextAttack":
+          this.player.reflectNextAttack = { ratio: effect.ratio };
+          this.playCounterReadyEffect();
+          logParts.push(`반격 대기 ${Math.round(effect.ratio * 100)}%`);
+          break;
+        case "weakenNextAttack":
+          this.enemy.weakenNextAttack = {
+            ratio: effect.ratio,
+            turnsLeft: effect.maxTurns,
+          };
+          this.playDisarmReadyEffect();
+          logParts.push(`다음 공격 약화 ${Math.round(effect.ratio * 100)}%`);
           break;
         case "parry":
           break;
@@ -1289,6 +1356,15 @@ export class CardBattleSystem {
     return removed;
   }
 
+  private tickWeakenNextAttackLifetime() {
+    if (!this.enemy?.weakenNextAttack) return;
+    this.enemy.weakenNextAttack.turnsLeft -= 1;
+    if (this.enemy.weakenNextAttack.turnsLeft <= 0) {
+      this.enemy.weakenNextAttack = null;
+      this.flashLog("무장해제 약화가 사라졌습니다");
+    }
+  }
+
   private currentEnemyCard(): TarotBattleCard {
     const intent = this.intentPattern[this.intentIdx % this.intentPattern.length];
     const damage = intent.kind === "attack" ? intent.amount * 3 : Math.max(1, Math.ceil(intent.amount * 1.8));
@@ -1481,8 +1557,7 @@ export class CardBattleSystem {
       return;
     }
     if (intent.kind === "attack") {
-      let shown = intent.amount;
-      if (this.enemy.weaken) shown = Math.max(0, shown - this.enemy.weaken.amount);
+      const shown = this.getPredictedEnemyAttackDamage(intent.amount);
       this.enemyIntentText.setText(`다음: 공격 ${shown}`);
       this.enemyIntentText.setColor("#ff8090");
     } else {
@@ -1504,23 +1579,36 @@ export class CardBattleSystem {
     const intent = this.intentPattern[this.intentIdx % this.intentPattern.length];
     if (!intent) return "";
     if (intent.kind === "attack") {
-      const shown = this.enemy.weaken
-        ? Math.max(0, intent.amount - this.enemy.weaken.amount)
-        : intent.amount;
+      const shown = this.getPredictedEnemyAttackDamage(intent.amount);
       return `다음: 공격 ${shown}`;
     }
     return `다음: 보호막 +${intent.amount}`;
+  }
+
+  private getPredictedEnemyAttackDamage(rawAmount: number) {
+    let shown = rawAmount;
+    if (this.enemy.weaken) shown = Math.max(0, shown - this.enemy.weaken.amount);
+    if (this.enemy.weakenNextAttack) {
+      shown = Math.max(0, Math.round(shown * (1 - this.enemy.weakenNextAttack.ratio)));
+    }
+    return shown;
   }
 
   private refreshStatus() {
     const enemyParts: string[] = [];
     if (this.enemy.burn) enemyParts.push(`화상 ${this.enemy.burn.dmg} × ${this.enemy.burn.turns}턴`);
     if (this.enemy.weaken) enemyParts.push(`약화 -${this.enemy.weaken.amount}`);
+    if (this.enemy.weakenNextAttack) {
+      enemyParts.push(`무장해제 ${Math.round(this.enemy.weakenNextAttack.ratio * 100)}%`);
+    }
     this.enemyStatusText.setText(enemyParts.join("  ·  "));
 
     const playerParts: string[] = [];
     if (this.player.burn) playerParts.push(`화상 ${this.player.burn.dmg} × ${this.player.burn.turns}턴`);
     if (this.player.weaken) playerParts.push(`약화 -${this.player.weaken.amount}`);
+    if (this.player.reflectNextAttack) {
+      playerParts.push(`반격 ${Math.round(this.player.reflectNextAttack.ratio * 100)}%`);
+    }
     this.playerStatusText.setText(playerParts.join("  ·  "));
 
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
@@ -1827,6 +1915,107 @@ export class CardBattleSystem {
       alpha: 0.3,
       duration: 1200,
       delay: 800,
+    });
+  }
+
+  private playCounterReadyEffect() {
+    const { width, height } = this.scene.scale;
+    const ring = this.trackEffect(
+      this.scene.add
+        .circle(width * 0.33, height * 0.52, u(34), 0x82ffe6, 0.12)
+        .setStrokeStyle(u(3), 0x82ffe6, 0.85)
+        .setDepth(724)
+    );
+    this.overlay?.add(ring);
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 1.35,
+      scaleY: 1.35,
+      alpha: 0,
+      duration: 780,
+      ease: "Sine.easeOut",
+      onComplete: () => {
+        if (ring.scene) ring.destroy();
+      },
+    });
+  }
+
+  private playDisarmReadyEffect() {
+    const { width } = this.scene.scale;
+    const icon = this.trackEffect(
+      this.scene.add
+        .text(width / 2 + u(88), u(152), "약화", {
+          fontFamily: "serif",
+          fontSize: px(14),
+          color: "#b8c7ff",
+          fontStyle: "bold",
+          stroke: "#1a1038",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5)
+        .setDepth(724)
+    );
+    this.overlay?.add(icon);
+    this.scene.tweens.add({
+      targets: icon,
+      y: icon.y - u(18),
+      alpha: 0,
+      duration: 900,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (icon.scene) icon.destroy();
+      },
+    });
+  }
+
+  private playWeakenBreakEffect() {
+    const { width } = this.scene.scale;
+    const flash = this.trackEffect(
+      this.scene.add
+        .circle(width / 2, u(168), u(24), 0x778cff, 0.2)
+        .setStrokeStyle(u(3), 0xb8c7ff, 0.9)
+        .setDepth(724)
+    );
+    this.overlay?.add(flash);
+    this.scene.tweens.add({
+      targets: flash,
+      scaleX: 1.45,
+      scaleY: 1.45,
+      alpha: 0,
+      duration: 360,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        if (flash.scene) flash.destroy();
+      },
+    });
+  }
+
+  private playReflectEffect(amount: number) {
+    const { width } = this.scene.scale;
+    this.scene.cameras.main.shake(180, 0.005);
+    const text = this.trackEffect(
+      this.scene.add
+        .text(width / 2, u(150), `반사 -${amount}`, {
+          fontFamily: "serif",
+          fontSize: px(18),
+          color: "#82ffe6",
+          fontStyle: "bold",
+          stroke: "#06282c",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5)
+        .setDepth(725)
+    );
+    this.overlay?.add(text);
+    this.scene.tweens.add({
+      targets: text,
+      y: text.y - u(34),
+      alpha: 0,
+      duration: 680,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (text.scene) text.destroy();
+      },
     });
   }
 

@@ -6,7 +6,9 @@ export type FusionEffect =
   | { kind: "drain"; amount: number }
   | { kind: "block"; amount: number }
   | { kind: "heal"; amount: number }
-  | { kind: "energy"; amount: number };
+  | { kind: "energy"; amount: number }
+  | { kind: "reflectNextAttack"; ratio: number }
+  | { kind: "weakenNextAttack"; ratio: number; maxTurns: number };
 
 export interface FusionResultCard {
   id: `temp_${string}`;
@@ -41,6 +43,38 @@ export const CARD_FUSION_RECIPES: CardFusionRecipe[] = [
       effects: [
         { kind: "attack", amount: 14 },
         { kind: "partBonusAttack", amount: 6, partIds: ["circlet"], label: "머리 추가 피해" },
+      ],
+    },
+  },
+  {
+    id: "attack_defense_counter",
+    roles: ["attack", "defense"],
+    result: {
+      id: "temp_counter",
+      name: "반격",
+      role: "attack",
+      cost: 2,
+      color: 0xd49a38,
+      description: "피해 + 다음 공격\n50% 반사",
+      effects: [
+        { kind: "attack", amount: 8 },
+        { kind: "reflectNextAttack", ratio: 0.5 },
+      ],
+    },
+  },
+  {
+    id: "attack_parry_disarm",
+    roles: ["attack", "parry"],
+    result: {
+      id: "temp_disarm",
+      name: "무장해제",
+      role: "attack",
+      cost: 2,
+      color: 0x7560d8,
+      description: "피해 + 다음 공격\n50% 약화",
+      effects: [
+        { kind: "attack", amount: 7 },
+        { kind: "weakenNextAttack", ratio: 0.5, maxTurns: 2 },
       ],
     },
   },
