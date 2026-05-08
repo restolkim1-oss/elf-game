@@ -237,6 +237,8 @@ export class CardBattleSystem {
 
   private playerHpFill!: Phaser.GameObjects.Rectangle;
   private playerHpText!: Phaser.GameObjects.Text;
+  private playerEnergyFill!: Phaser.GameObjects.Rectangle;
+  private playerEnergyText!: Phaser.GameObjects.Text;
   private playerBlockText!: Phaser.GameObjects.Text;
   private playerStatusText!: Phaser.GameObjects.Text;
   private enemyHpFill!: Phaser.GameObjects.Rectangle;
@@ -255,8 +257,10 @@ export class CardBattleSystem {
   private handAreaY = 0;
   private handAreaWidth = 0;
   private playerHpBarMaxWidth = 0;
+  private playerEnergyBarMaxWidth = 0;
   private enemyHpBarMaxWidth = 0;
   private playerHpBarLeft = 0;
+  private playerEnergyBarLeft = 0;
   private enemyHpBarLeft = 0;
   private dragStart: { x: number; y: number; card: TarotCardState } | null = null;
   private speechBubble: Phaser.GameObjects.Container | null = null;
@@ -435,51 +439,57 @@ export class CardBattleSystem {
       intent: this.getEnemyIntentLabel(),
     });
 
-    // -- Bottom: player strip (above the hand) --
-    const playerStripY = height - u(280);
+    // -- Bottom: player command panel (status, hand and actions) --
+    const playerStripY = height - u(278);
+    const playerPanelW = stripW * 0.98;
     const playerStripBg = this.scene.add
-      .rectangle(width / 2, playerStripY, stripW, u(60), 0x10141a, 0.78)
-      .setStrokeStyle(u(1.2), 0x9ad0ff, 0.7);
+      .rectangle(width / 2, playerStripY, playerPanelW, u(86), 0x08080d, 0.84)
+      .setStrokeStyle(u(1.4), 0xd4a656, 0.86);
+    const playerStripInner = this.scene.add
+      .rectangle(width / 2, playerStripY, playerPanelW - u(10), u(74), 0x11131a, 0.48)
+      .setStrokeStyle(u(0.8), 0xf3d48a, 0.28);
     const playerName = this.scene.add
-      .text(width / 2 - stripW / 2 + u(14), playerStripY - u(20), "당신", {
+      .text(width / 2 - playerPanelW / 2 + u(18), playerStripY - u(30), "당신", {
         fontFamily: "serif",
-        fontSize: px(12),
-        color: "#cfe6ff",
+        fontSize: px(13),
+        color: "#f3e6c9",
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
     this.energyText = this.scene.add
-      .text(width / 2, playerStripY - u(20), "", {
+      .text(width / 2, playerStripY - u(31), "", {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: px(15),
         color: "#ffd572",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
     this.turnText = this.scene.add
-      .text(width / 2 + stripW / 2 - u(14), playerStripY - u(20), "", {
+      .text(width / 2 + playerPanelW / 2 - u(18), playerStripY - u(30), "", {
         fontFamily: "serif",
-        fontSize: px(11),
-        color: "#d4a656",
+        fontSize: px(13),
+        color: "#f3d48a",
         fontStyle: "bold",
       })
       .setOrigin(1, 0.5);
 
     const playerHpY = playerStripY + u(2);
-    this.playerHpBarMaxWidth = stripW * 0.66;
-    this.playerHpBarLeft = width / 2 - stripW / 2 + u(20);
+    this.playerHpBarMaxWidth = playerPanelW * 0.55;
+    this.playerEnergyBarMaxWidth = playerPanelW * 0.18;
+    this.playerHpBarLeft = width / 2 - playerPanelW / 2 + u(22);
+    this.playerEnergyBarLeft = this.playerHpBarLeft + this.playerHpBarMaxWidth + u(8);
     const playerHpBg = this.scene.add
       .rectangle(
         this.playerHpBarLeft + this.playerHpBarMaxWidth / 2,
         playerHpY,
         this.playerHpBarMaxWidth,
-        u(16),
-        0x2a1a34,
+        u(20),
+        0x1b141f,
         0.92
       )
-      .setStrokeStyle(u(1), 0xd4a656, 0.6);
+      .setStrokeStyle(u(1), 0xf3d48a, 0.7);
     this.playerHpFill = this.scene.add
-      .rectangle(this.playerHpBarLeft, playerHpY, this.playerHpBarMaxWidth, u(13), 0x86e08d, 0.95)
+      .rectangle(this.playerHpBarLeft, playerHpY, this.playerHpBarMaxWidth, u(14), 0x43e5c8, 0.96)
       .setOrigin(0, 0.5);
     this.playerHpText = this.scene.add
       .text(
@@ -494,8 +504,34 @@ export class CardBattleSystem {
         }
       )
       .setOrigin(0.5);
+    const playerEnergyBg = this.scene.add
+      .rectangle(
+        this.playerEnergyBarLeft + this.playerEnergyBarMaxWidth / 2,
+        playerHpY,
+        this.playerEnergyBarMaxWidth,
+        u(20),
+        0x171529,
+        0.92
+      )
+      .setStrokeStyle(u(1), 0x9ad0ff, 0.75);
+    this.playerEnergyFill = this.scene.add
+      .rectangle(this.playerEnergyBarLeft, playerHpY, this.playerEnergyBarMaxWidth, u(14), 0x58a8ff, 0.96)
+      .setOrigin(0, 0.5);
+    this.playerEnergyText = this.scene.add
+      .text(
+        this.playerEnergyBarLeft + this.playerEnergyBarMaxWidth / 2,
+        playerHpY,
+        `${this.energy} / ${ENERGY_MAX}`,
+        {
+          fontFamily: "serif",
+          fontSize: px(10),
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
     this.playerBlockText = this.scene.add
-      .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(6), playerHpY, "", {
+      .text(this.playerEnergyBarLeft + this.playerEnergyBarMaxWidth + u(8), playerHpY, "", {
         fontFamily: "serif",
         fontSize: px(10),
         color: "#9ad0ff",
@@ -503,7 +539,7 @@ export class CardBattleSystem {
       })
       .setOrigin(0, 0.5);
     this.playerStatusText = this.scene.add
-      .text(width / 2 - stripW * 0.18, playerStripY + u(22), "", {
+      .text(width / 2 - playerPanelW / 2 + u(22), playerStripY + u(28), "", {
         fontFamily: "serif",
         fontSize: px(9),
         color: "#ffaa66",
@@ -511,7 +547,7 @@ export class CardBattleSystem {
       })
       .setOrigin(0, 0.5);
     this.deckCountText = this.scene.add
-      .text(width / 2 + stripW / 2 - u(14), playerStripY + u(22), "", {
+      .text(width / 2 + playerPanelW / 2 - u(18), playerStripY + u(28), "", {
         fontFamily: "serif",
         fontSize: px(9),
         color: "#d4a656",
@@ -521,12 +557,16 @@ export class CardBattleSystem {
 
     this.overlay.add([
       playerStripBg,
+      playerStripInner,
       playerName,
       this.energyText,
       this.turnText,
       playerHpBg,
       this.playerHpFill,
       this.playerHpText,
+      playerEnergyBg,
+      this.playerEnergyFill,
+      this.playerEnergyText,
       this.playerBlockText,
       this.playerStatusText,
       this.deckCountText,
@@ -534,7 +574,7 @@ export class CardBattleSystem {
 
     // Floating log readout above the player strip
     this.logText = this.scene.add
-      .text(width / 2, playerStripY - u(56), "", {
+      .text(width / 2, playerStripY - u(64), "", {
         fontFamily: "serif",
         fontSize: px(12),
         color: "#f3e6c9",
@@ -546,28 +586,28 @@ export class CardBattleSystem {
     this.overlay.add(this.logText);
 
     // Hand area sits in the slot freed by the hidden bottom panel
-    this.handAreaY = height - u(150);
-    this.handAreaWidth = stripW * 0.98;
+    this.handAreaY = height - u(148);
+    this.handAreaWidth = stripW * 0.96;
 
     // Action buttons at the very bottom corners
-    const btnY = height - u(40);
+    const btnY = height - u(31);
     this.endTurnBg = this.makeButton(
-      width - u(110),
+      width - u(106),
       btnY,
-      u(160),
-      u(46),
+      u(170),
+      u(42),
       "턴 종료",
       () => this.endPlayerTurn()
     );
     this.useCardsBg = this.makeButton(
       width / 2,
       btnY,
-      u(180),
-      u(46),
+      u(205),
+      u(42),
       "카드 사용",
       () => this.playSelectedCards()
     );
-    this.makeButton(u(110), btnY, u(160), u(46), "포기", () => {
+    this.makeButton(u(106), btnY, u(170), u(42), "포기", () => {
       this.cancelled = true;
       this.finish(false);
     });
@@ -1233,12 +1273,12 @@ export class CardBattleSystem {
   }
 
   private refreshHpBars() {
-    const pRatio = this.player.hp / this.player.hpMax;
+    const pRatio = Phaser.Math.Clamp(this.player.hp / this.player.hpMax, 0, 1);
     this.playerHpFill.width = this.playerHpBarMaxWidth * pRatio;
     this.playerHpText.setText(`${this.player.hp} / ${this.player.hpMax}`);
     this.playerBlockText.setText(this.player.block > 0 ? `🛡 ${this.player.block}` : "");
 
-    const eRatio = this.enemy.hp / this.enemy.hpMax;
+    const eRatio = Phaser.Math.Clamp(this.enemy.hp / this.enemy.hpMax, 0, 1);
     this.enemyHpFill.width = this.enemyHpBarMaxWidth * eRatio;
     this.enemyHpText.setText(`${this.enemy.hp} / ${this.enemy.hpMax}`);
     this.enemyBlockText.setText(this.enemy.block > 0 ? `🛡 ${this.enemy.block}` : "");
@@ -1295,6 +1335,9 @@ export class CardBattleSystem {
     this.playerStatusText.setText(playerParts.join("  ·  "));
 
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    const energyRatio = Phaser.Math.Clamp(this.energy / ENERGY_MAX, 0, 1);
+    this.playerEnergyFill.width = this.playerEnergyBarMaxWidth * energyRatio;
+    this.playerEnergyText.setText(`${this.energy} / ${ENERGY_MAX}`);
     this.energyText.setText(`기력 ${this.energy} / ${ENERGY_MAX}${selectedCost > 0 ? ` · 선택 ${selectedCost}` : ""}`);
     this.turnText.setText(`턴 ${this.turn} / ${MAX_TURNS}`);
     this.deckCountText.setText(`덱 ${this.deck.length} · 버림 ${this.discard.length}`);
@@ -1311,13 +1354,13 @@ export class CardBattleSystem {
     const count = this.hand.length;
     if (count === 0) return;
 
-    const gap = u(6);
-    const maxCardW = u(120);
+    const gap = u(7);
+    const maxCardW = u(126);
     const cardW = Math.min(
       maxCardW,
       (this.handAreaWidth - gap * (count - 1)) / count
     );
-    const cardH = Math.min(u(150), cardW * 1.4);
+    const cardH = Math.min(u(174), cardW * 1.48);
     const totalW = count * cardW + (count - 1) * gap;
     const startX = this.scene.scale.width / 2 - totalW / 2 + cardW / 2;
 
@@ -1344,9 +1387,10 @@ export class CardBattleSystem {
       selected;
     const playable = sameRole && selectedCost + (selected ? 0 : def.cost) <= this.energy && !this.busy && !this.finished;
 
+    const cardFill = selected ? 0xffe8aa : playable ? 0xefe0bd : 0x5f5446;
     const bg = this.scene.add
-      .rectangle(0, 0, cardW, cardH, selected ? 0xffedb2 : playable ? 0xf3e6c9 : 0x6a5d4e, playable ? 1 : 0.85)
-      .setStrokeStyle(u(selected ? 4 : 2), selected ? 0xffd572 : def.color, playable ? 1 : 0.6)
+      .rectangle(0, 0, cardW, cardH, cardFill, playable ? 1 : 0.84)
+      .setStrokeStyle(u(selected ? 4 : 2), selected ? 0xfff0a8 : 0x8f6a34, playable ? 1 : 0.62)
       .setInteractive({ useHandCursor: true });
     const selectionAura = this.scene.add
       .rectangle(0, 0, cardW + u(10), cardH + u(10), 0xffffff, 0)
@@ -1354,12 +1398,18 @@ export class CardBattleSystem {
     const dropGlow = this.scene.add
       .rectangle(0, 0, cardW + u(16), cardH + u(16), 0xffffff, 0)
       .setStrokeStyle(u(4), 0x82ffe6, 0);
-    const accent = this.scene.add.rectangle(0, -cardH / 2 + u(14), cardW, u(28), def.color, 0.92);
+    const innerFrame = this.scene.add
+      .rectangle(0, u(8), cardW - u(14), cardH - u(20), 0xffffff, 0)
+      .setStrokeStyle(u(1), 0x7b5b34, playable ? 0.75 : 0.4);
+    const accent = this.scene.add
+      .rectangle(0, -cardH / 2 + u(17), cardW - u(8), u(34), def.color, playable ? 0.95 : 0.62)
+      .setStrokeStyle(u(1), 0xffd572, 0.55);
+    const headerLine = this.scene.add.rectangle(0, -cardH / 2 + u(36), cardW - u(22), u(2), 0xffd572, 0.7);
     const costCircle = this.scene.add
-      .circle(-cardW / 2 + u(14), -cardH / 2 + u(14), u(11), 0x14091a, 0.95)
+      .circle(-cardW / 2 + u(17), -cardH / 2 + u(17), u(12), 0x172018, 0.98)
       .setStrokeStyle(u(1.2), 0xffd572, 0.95);
     const costText = this.scene.add
-      .text(-cardW / 2 + u(14), -cardH / 2 + u(14), String(def.cost), {
+      .text(-cardW / 2 + u(17), -cardH / 2 + u(17), String(def.cost), {
         fontFamily: "serif",
         fontSize: px(12),
         color: "#ffd572",
@@ -1367,57 +1417,79 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const nameText = this.scene.add
-      .text(0, -cardH / 2 + u(14), def.roleLabel, {
+      .text(0, -cardH / 2 + u(17), def.roleLabel, {
         fontFamily: "serif",
-        fontSize: px(14),
-        color: "#1a0f22",
+        fontSize: px(15),
+        color: "#fdf3d4",
         fontStyle: "bold",
+        stroke: "#1a0f22",
+        strokeThickness: u(1.2),
       })
       .setOrigin(0.5);
     const reverseBadge = this.scene.add
-      .text(cardW / 2 - u(20), -cardH / 2 + u(14), `C${def.cost}`, {
+      .text(cardW / 2 - u(20), -cardH / 2 + u(17), `C${def.cost}`, {
         fontFamily: "serif",
-        fontSize: px(8),
-        color: "#2f2520",
+        fontSize: px(9),
+        color: "#fdf3d4",
         fontStyle: "bold",
+        stroke: "#1a0f22",
+        strokeThickness: u(1),
       })
       .setOrigin(0.5);
     const portrait = this.scene.add
-      .rectangle(0, -cardH / 2 + u(58), cardW - u(18), u(54), 0x24182f, 0.18)
-      .setStrokeStyle(u(1), def.color, 0.65);
+      .rectangle(0, -cardH / 2 + u(67), cardW - u(24), u(58), 0xfff5dc, playable ? 0.68 : 0.28)
+      .setStrokeStyle(u(1), 0xa5793e, 0.72);
     const roleText = this.scene.add
-      .text(0, -cardH / 2 + u(48), def.name, {
+      .text(0, -cardH / 2 + u(55), def.name, {
         fontFamily: "serif",
         fontSize: px(11),
-        color: "#4b3545",
+        color: playable ? "#3b2a27" : "#d0c1aa",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
     const powerText = this.scene.add
-      .text(0, -cardH / 2 + u(68), `전투력 ${card.power}`, {
+      .text(0, -cardH / 2 + u(79), `전투력 ${card.power}`, {
         fontFamily: "serif",
         fontSize: px(10),
-        color: "#2f2520",
+        color: playable ? "#2f2520" : "#d0c1aa",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
+    const descBg = this.scene.add
+      .rectangle(0, u(43), cardW - u(26), u(58), 0xfff7df, playable ? 0.7 : 0.16)
+      .setStrokeStyle(u(0.8), 0xa5793e, playable ? 0.55 : 0.22);
     const descText = this.scene.add
-      .text(0, u(42), `${def.description}\n같은 역할 선택 합체`, {
+      .text(0, u(43), `${def.description}\n같은 역할 선택\n합체`, {
         fontFamily: "serif",
-        fontSize: px(8.2),
+        fontSize: px(7.8),
         color: playable ? "#2f2520" : "#cfc0b0",
         fontStyle: "bold",
         align: "center",
-        wordWrap: { width: cardW - u(16) },
+        wordWrap: { width: cardW - u(22) },
       })
       .setOrigin(0.5);
+    const cornerSize = u(5);
+    const cornerLt = this.scene.add
+      .rectangle(-cardW / 2 + u(9), -cardH / 2 + u(9), cornerSize, cornerSize, 0xffd572, 0.82)
+      .setAngle(45);
+    const cornerRt = this.scene.add
+      .rectangle(cardW / 2 - u(9), -cardH / 2 + u(9), cornerSize, cornerSize, 0xffd572, 0.82)
+      .setAngle(45);
+    const cornerLb = this.scene.add
+      .rectangle(-cardW / 2 + u(9), cardH / 2 - u(9), cornerSize, cornerSize, 0xffd572, 0.82)
+      .setAngle(45);
+    const cornerRb = this.scene.add
+      .rectangle(cardW / 2 - u(9), cardH / 2 - u(9), cornerSize, cornerSize, 0xffd572, 0.82)
+      .setAngle(45);
 
     const container = this.scene.add
       .container(x, y, [
         dropGlow,
         selectionAura,
         bg,
+        innerFrame,
         accent,
+        headerLine,
         costCircle,
         costText,
         nameText,
@@ -1425,7 +1497,12 @@ export class CardBattleSystem {
         portrait,
         roleText,
         powerText,
+        descBg,
         descText,
+        cornerLt,
+        cornerRt,
+        cornerLb,
+        cornerRb,
       ])
       .setSize(cardW, cardH);
     if (selected) {
@@ -1534,8 +1611,8 @@ export class CardBattleSystem {
 
   private refreshButtons() {
     const canEnd = !this.busy && !this.finished;
-    this.endTurnBg.setFillStyle(0x2a1a34, canEnd ? 0.96 : 0.5);
-    this.useCardsBg.setFillStyle(0x2a1a34, canEnd && this.selectedCards.length > 0 ? 0.96 : 0.5);
+    this.endTurnBg.setFillStyle(0x12101e, canEnd ? 0.96 : 0.45);
+    this.useCardsBg.setFillStyle(0x12101e, canEnd && this.selectedCards.length > 0 ? 0.96 : 0.45);
   }
 
   private flashLog(text: string) {
@@ -1658,23 +1735,43 @@ export class CardBattleSystem {
     label: string,
     onClick: () => void
   ): Phaser.GameObjects.Rectangle {
+    const outer = this.scene.add
+      .rectangle(x, y, w, h, 0x07070d, 0.98)
+      .setStrokeStyle(u(1.6), 0xd4a656, 0.9);
     const bg = this.scene.add
-      .rectangle(x, y, w, h, 0x2a1a34, 0.96)
-      .setStrokeStyle(u(1.5), 0xd4a656, 0.85)
+      .rectangle(x, y, w - u(8), h - u(8), 0x12101e, 0.96)
+      .setStrokeStyle(u(1), 0xf3e6c9, 0.72)
       .setInteractive({ useHandCursor: true });
+    const inner = this.scene.add
+      .rectangle(x, y, w - u(22), h - u(20), 0xffffff, 0)
+      .setStrokeStyle(u(0.8), 0x7d653d, 0.76);
+    const leftGem = this.scene.add
+      .rectangle(x - w / 2 + u(18), y, u(7), u(7), 0xd4a656, 0.9)
+      .setAngle(45);
+    const rightGem = this.scene.add
+      .rectangle(x + w / 2 - u(18), y, u(7), u(7), 0xd4a656, 0.9)
+      .setAngle(45);
     const text = this.scene.add
       .text(x, y, label, {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: px(14),
         color: "#f3e6c9",
         fontStyle: "bold",
+        stroke: "#050409",
+        strokeThickness: u(1),
       })
       .setOrigin(0.5);
-    bg.on("pointerover", () => bg.setFillStyle(0x3a2444, 0.98));
-    bg.on("pointerout", () => bg.setFillStyle(0x2a1a34, 0.96));
+    bg.on("pointerover", () => {
+      bg.setFillStyle(0x211836, 0.98);
+      outer.setStrokeStyle(u(1.8), 0xffd572, 1);
+    });
+    bg.on("pointerout", () => {
+      bg.setFillStyle(0x12101e, 0.96);
+      outer.setStrokeStyle(u(1.6), 0xd4a656, 0.9);
+    });
     bg.on("pointerdown", () => {
       this.scene.tweens.add({
-        targets: [bg, text],
+        targets: [outer, bg, inner, leftGem, rightGem, text],
         scaleX: 0.95,
         scaleY: 0.95,
         yoyo: true,
@@ -1682,8 +1779,7 @@ export class CardBattleSystem {
         onComplete: onClick,
       });
     });
-    this.overlay?.add(bg);
-    this.overlay?.add(text);
+    this.overlay?.add([outer, bg, inner, leftGem, rightGem, text]);
     return bg;
   }
 }
