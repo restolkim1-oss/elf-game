@@ -352,6 +352,33 @@ export class GameScene extends Phaser.Scene {
     this.partSystem.setActivePart(this.getNextPart()?.id ?? null);
   }
 
+  private handlePartsDestroyedInBattle(partIds: string[], activePartId: string) {
+    for (const partId of partIds) {
+      const mappedId = this.mapBattlePartIdToStagePartId(partId);
+      if (!mappedId || this.removed.has(mappedId)) continue;
+      const part = this.parts.find((candidate) => candidate.id === mappedId);
+      if (!part) continue;
+
+      this.stageManager.hidePartLayer(mappedId);
+      this.partSystem.removePart(mappedId);
+      this.removed.add(mappedId);
+      this.progressSystem.advance();
+      this.events.emit("progress", this.progressSystem.getProgress());
+      if (mappedId !== activePartId) {
+        this.feedback(`${part.label} 파츠가 전투 중 파괴되었습니다.`);
+      }
+    }
+    if (this.progressSystem.isFinished() && !this.finaleTriggered) {
+      this.grantCoins(120, "스테이지 클리어 보너스");
+      this.triggerFinale();
+    }
+  }
+
+  private mapBattlePartIdToStagePartId(partId: string) {
+    if (partId === "shoes") return "boots";
+    return partId;
+  }
+
   private getNextPart(): PartDef | null {
     return (
       this.parts
@@ -381,11 +408,12 @@ export class GameScene extends Phaser.Scene {
     this.partSystem.setPuzzleActive(true);
     this.partSystem.setInputEnabled(false);
 
-    this.cardBattle.start(part, (success) => {
+    this.cardBattle.start(part, (success, battleResult) => {
       if (flowId !== this.battleFlowId) return;
       let nextPart: PartDef | null = null;
       try {
         if (success) {
+          this.handlePartsDestroyedInBattle(battleResult?.destroyedPartIds ?? [], part.id);
           this.handlePartCleared(part);
           nextPart = this.getNextPart();
         } else if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {

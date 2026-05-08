@@ -1,8 +1,11 @@
+import type { PartId } from "./enemyParts";
+
 export type FusionRole = "attack" | "defense" | "heal" | "parry";
 
 export type FusionEffect =
   | { kind: "attack"; amount: number }
   | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
+  | { kind: "partDamage"; partId: PartId; amount: number }
   | { kind: "drain"; amount: number }
   | { kind: "block"; amount: number }
   | { kind: "heal"; amount: number }
@@ -45,7 +48,7 @@ export const CARD_FUSION_RECIPES: CardFusionRecipe[] = [
       description: "큰 데미지\n서클릿 추가 피해",
       effects: [
         { kind: "attack", amount: 14 },
-        { kind: "partBonusAttack", amount: 6, partIds: ["circlet"], label: "머리 추가 피해" },
+        { kind: "partDamage", partId: "circlet", amount: 14 },
       ],
     },
   },
@@ -76,7 +79,8 @@ export const CARD_FUSION_RECIPES: CardFusionRecipe[] = [
       color: 0x7560d8,
       description: "피해 + 다음 공격\n50% 약화",
       effects: [
-        { kind: "attack", amount: 7 },
+        { kind: "attack", amount: 14 },
+        { kind: "partDamage", partId: "shoes", amount: 13 },
         { kind: "weakenNextAttack", ratio: 0.5, maxTurns: 2 },
       ],
     },

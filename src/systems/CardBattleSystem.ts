@@ -34,6 +34,7 @@ type CardEffect =
   | { kind: "energy"; amount: number }
   | { kind: "drain"; amount: number }
   | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
+  | { kind: "partDamage"; partId: PartId; amount: number }
   | { kind: "reflectNextAttack"; ratio: number }
   | { kind: "weakenNextAttack"; ratio: number; maxTurns: number }
   | { kind: "autoParryNextAttack"; counterDamage: number; maxTurns: number }
@@ -226,6 +227,11 @@ interface EnemyPartRuntimeState {
   shoesNegateFirstHit: boolean;
 }
 
+interface PlayerDamageContext {
+  shoesChecked: boolean;
+  prevented: boolean;
+}
+
 interface SideState {
   hp: number;
   hpMax: number;
@@ -241,7 +247,7 @@ interface SideState {
   partRuntime: EnemyPartRuntimeState;
 }
 
-type CardBattleResult = (success: boolean) => void;
+type CardBattleResult = (success: boolean, result?: { destroyedPartIds: PartId[] }) => void;
 
 interface HandCard {
   card: TarotCardState;
@@ -262,6 +268,7 @@ export class CardBattleSystem {
   private finished = false;
   private busy = false;
   private activePartId = "";
+  private lastDestroyedPartIds: PartId[] = [];
 
   private player!: SideState;
   private enemy!: SideState;
@@ -301,6 +308,7 @@ export class CardBattleSystem {
       {
         container: Phaser.GameObjects.Container;
         bg: Phaser.GameObjects.Rectangle;
+        hpFill: Phaser.GameObjects.Rectangle;
         hpText: Phaser.GameObjects.Text;
         counterText: Phaser.GameObjects.Text;
       }
@@ -351,6 +359,7 @@ export class CardBattleSystem {
     this.cancelled = false;
     this.finished = false;
     this.busy = false;
+    this.lastDestroyedPartIds = [];
     this.nextCardUid = 1;
     this.activeDone = done;
     this.startBattle(part);
@@ -376,10 +385,11 @@ export class CardBattleSystem {
     this.finished = true;
     this.clearFlowWatchdog();
     const done = this.activeDone;
+    const destroyedPartIds = [...this.lastDestroyedPartIds];
     this.activeDone = null;
     this.cleanup();
     this.scene.events.emit("enemy-energy-hide");
-    if (done) done(success);
+    if (done) done(success, { destroyedPartIds });
   }
 
   private cleanup() {
@@ -1060,12 +1070,13 @@ export class CardBattleSystem {
     let didAttack = false;
     let didGuard = false;
     let resolvedAttackDamage = duel.damage;
+    const damageContext = this.createPlayerDamageContext();
 
     switch (role) {
       case "attack":
         attemptedAttack = true;
         if (duel.didWin) {
-          const result = this.applyPlayerDamageToEnemy(duel.damage);
+          const result = this.applyPlayerDamageToEnemy(duel.damage, damageContext);
           didAttack = !result.prevented;
           resolvedAttackDamage = result.appliedAmount;
         } else {
@@ -1087,7 +1098,7 @@ export class CardBattleSystem {
         didGuard = true;
         if (duel.didWin) {
           const counter = Math.max(1, Math.round(duel.damage * 0.7));
-          const result = this.applyPlayerDamageToEnemy(counter);
+          const result = this.applyPlayerDamageToEnemy(counter, damageContext);
           didAttack = !result.prevented;
           resolvedAttackDamage = result.appliedAmount;
         }
@@ -1104,11 +1115,12 @@ export class CardBattleSystem {
     let didGuard = false;
     let totalDamage = 0;
     const logParts: string[] = [];
+    const damageContext = this.createPlayerDamageContext();
 
     for (const effect of def.effects) {
       switch (effect.kind) {
         case "attack": {
-          const result = this.applyPlayerDamageToEnemy(effect.amount);
+          const result = this.applyPlayerDamageToEnemy(effect.amount, damageContext);
           const dealt = result.dealt;
           didAttack = didAttack || !result.prevented;
           totalDamage += result.appliedAmount;
@@ -1117,7 +1129,7 @@ export class CardBattleSystem {
         }
         case "partBonusAttack": {
           if (effect.partIds.includes(this.activePartId)) {
-            const result = this.applyPlayerDamageToEnemy(effect.amount);
+            const result = this.applyPlayerDamageToEnemy(effect.amount, damageContext);
             const dealt = result.dealt;
             didAttack = didAttack || !result.prevented;
             totalDamage += result.appliedAmount;
@@ -1125,8 +1137,15 @@ export class CardBattleSystem {
           }
           break;
         }
+        case "partDamage": {
+          const result = this.applyPlayerPartDamage(effect.partId, effect.amount, damageContext);
+          didAttack = didAttack || !result.prevented;
+          logParts.push(`${result.partName} ${result.partDamage}`);
+          if (result.destroyed) logParts.push(`${result.partName} 파괴`);
+          break;
+        }
         case "drain": {
-          const result = this.applyPlayerDamageToEnemy(effect.amount);
+          const result = this.applyPlayerDamageToEnemy(effect.amount, damageContext);
           const dealt = result.dealt;
           const before = this.player.hp;
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + dealt);
@@ -1422,14 +1441,84 @@ export class CardBattleSystem {
     target.hp = Math.max(0, target.hp - amount);
   }
 
-  private applyPlayerDamageToEnemy(raw: number) {
+  private createPlayerDamageContext(): PlayerDamageContext {
+    return { shoesChecked: false, prevented: false };
+  }
+
+  private applyPlayerDamageToEnemy(raw: number, context?: PlayerDamageContext) {
+    const modifier = this.applyActivePlayerDamageModifiers(raw, context);
+    if (modifier.prevented) return { dealt: 0, appliedAmount: 0, prevented: true };
+    const dealt = this.applyAttack(this.enemy, modifier.amount);
+    return { dealt, appliedAmount: modifier.amount, prevented: false };
+  }
+
+  private applyPlayerPartDamage(partId: PartId, raw: number, context?: PlayerDamageContext) {
+    const modifier = this.applyActivePlayerDamageModifiers(raw, context);
+    const target = this.getEnemyPart(partId);
+    const partName = target?.displayName ?? partId;
+    if (modifier.prevented) {
+      return {
+        partName,
+        partDamage: 0,
+        overflow: 0,
+        dealt: 0,
+        appliedAmount: 0,
+        destroyed: false,
+        prevented: true,
+      };
+    }
+
+    if (!target || target.destroyed) {
+      const dealt = this.applyAttack(this.enemy, modifier.amount);
+      return {
+        partName,
+        partDamage: 0,
+        overflow: modifier.amount,
+        dealt,
+        appliedAmount: modifier.amount,
+        destroyed: false,
+        prevented: false,
+      };
+    }
+
+    const before = target.hp;
+    const partDamage = Math.min(before, modifier.amount);
+    target.hp = Math.max(0, target.hp - modifier.amount);
+    const overflow = Math.max(0, modifier.amount - before);
+    let destroyed = false;
+    if (target.hp <= 0) {
+      target.hp = 0;
+      destroyed = this.destroyEnemyPart(target);
+    } else {
+      this.playPartDamageEffect(target.id);
+    }
+    const overflowDealt = overflow > 0 ? this.applyAttack(this.enemy, overflow) : 0;
+    return {
+      partName,
+      partDamage,
+      overflow,
+      dealt: partDamage + overflowDealt,
+      appliedAmount: modifier.amount,
+      destroyed,
+      prevented: false,
+    };
+  }
+
+  private applyActivePlayerDamageModifiers(raw: number, context?: PlayerDamageContext) {
+    if (context?.prevented) return { amount: 0, prevented: true };
     const shoes = this.getActiveEnemyPartByAbility("autoParryFirstHitPerTurn");
-    if (shoes && this.enemy.partRuntime.shoesNegateFirstHit) {
+    const shouldCheckShoes = !context || !context.shoesChecked;
+    if (shouldCheckShoes && shoes && this.enemy.partRuntime.shoesNegateFirstHit) {
       this.enemy.partRuntime.shoesNegateFirstHit = false;
+      if (context) {
+        context.shoesChecked = true;
+        context.prevented = true;
+      }
       this.highlightEnemyPart(shoes.id);
       this.flashLog(`${shoes.displayName} 효과! 첫 공격 무효`);
-      return { dealt: 0, appliedAmount: 0, prevented: true };
+      return { amount: 0, prevented: true };
     }
+    if (context && shouldCheckShoes) context.shoesChecked = true;
 
     let amount = Math.max(0, raw);
     const cape = this.getActiveEnemyPartByAbility("damageReductionPercent");
@@ -1437,9 +1526,7 @@ export class CardBattleSystem {
       amount = Math.max(0, Math.round(amount * (1 - cape.ability.value)));
       this.highlightEnemyPart(cape.id);
     }
-
-    const dealt = this.applyAttack(this.enemy, amount);
-    return { dealt, appliedAmount: amount, prevented: false };
+    return { amount, prevented: false };
   }
 
   private applyEnemyOutgoingDamagePassives(raw: number) {
@@ -1503,6 +1590,23 @@ export class CardBattleSystem {
 
   private getActiveEnemyPartByAbility(kind: PartAbility["kind"]) {
     return this.enemy.parts.find((part) => !part.destroyed && part.ability.kind === kind) ?? null;
+  }
+
+  private getEnemyPart(partId: PartId) {
+    return this.enemy.parts.find((part) => part.id === partId) ?? null;
+  }
+
+  private destroyEnemyPart(part: EnemyRuntimePart) {
+    if (part.destroyed) return false;
+    part.destroyed = true;
+    part.hp = 0;
+    if (!this.lastDestroyedPartIds.includes(part.id)) this.lastDestroyedPartIds.push(part.id);
+    if (part.id === "shoes") this.enemy.partRuntime.shoesNegateFirstHit = false;
+    if (part.id === "skirt") this.enemy.partRuntime.strongAttackNext = false;
+    this.playPartDestroyEffect(part.id);
+    this.refreshEnemyPartPanel();
+    this.refreshIntent();
+    return true;
   }
 
   private createTarotCard(cardId: CardId): TarotCardState {
@@ -1571,7 +1675,12 @@ export class CardBattleSystem {
 
   private sumFusionDamage(effects: FusionEffect[]) {
     return effects.reduce((sum, effect) => {
-      if (effect.kind === "attack" || effect.kind === "drain" || effect.kind === "partBonusAttack") {
+      if (
+        effect.kind === "attack" ||
+        effect.kind === "drain" ||
+        effect.kind === "partBonusAttack" ||
+        effect.kind === "partDamage"
+      ) {
         return sum + effect.amount;
       }
       return sum;
@@ -1960,17 +2069,21 @@ export class CardBattleSystem {
           fontStyle: "bold",
         })
         .setOrigin(1, 0.5);
+      const hpBg = this.scene.add.rectangle(0, u(5), panelW - u(26), u(4), 0x271620, 0.9);
+      const hpFill = this.scene.add
+        .rectangle(-(panelW - u(26)) / 2, u(5), panelW - u(26), u(3), 0x9ad0ff, 0.95)
+        .setOrigin(0, 0.5);
       const counterText = this.scene.add
-        .text(0, u(7), this.getPartCounterText(part), {
+        .text(0, u(11), this.getPartCounterText(part), {
           fontFamily: "serif",
           fontSize: px(6.5),
           color: "#ffd572",
           fontStyle: "bold",
         })
         .setOrigin(0.5);
-      row.add([rowBg, name, hpText, counterText]);
+      row.add([rowBg, name, hpText, hpBg, hpFill, counterText]);
       panel.add(row);
-      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpText, counterText };
+      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText };
     });
 
     this.enemyPartPanel = panel;
@@ -1983,12 +2096,15 @@ export class CardBattleSystem {
       const row = this.enemyPartRows[part.id];
       if (!row) continue;
       row.hpText.setText(`${part.hp}/${part.maxHp}`);
+      row.hpFill.width = (u(106) * Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1));
       row.counterText.setText(this.getPartCounterText(part));
       row.bg.setFillStyle(part.destroyed ? 0x2a2222 : 0x1b1420, part.destroyed ? 0.36 : 0.62);
+      row.hpFill.setFillStyle(part.destroyed ? 0x777777 : 0x9ad0ff, part.destroyed ? 0.5 : 0.95);
     }
   }
 
   private getPartCounterText(part: EnemyRuntimePart) {
+    if (part.destroyed) return "파괴됨";
     if (part.ability.kind === "periodicStrongAttack") {
       if (this.enemy.partRuntime.strongAttackNext) return "강공 준비";
       return `${this.enemy.partRuntime.skirtTurnCounter}/${part.ability.intervalTurns}`;
@@ -2331,6 +2447,46 @@ export class CardBattleSystem {
         row.bg.setAlpha(1);
         row.bg.setFillStyle(0x1b1420, 0.62);
         row.bg.setStrokeStyle(u(0.7), 0x8f6a34, 0.45);
+      },
+    });
+  }
+
+  private playPartDamageEffect(partId: PartId) {
+    const row = this.enemyPartRows[partId];
+    if (!row) return;
+    this.highlightEnemyPart(partId);
+    this.scene.tweens.add({
+      targets: row.container,
+      x: { from: row.container.x - u(4), to: row.container.x + u(4) },
+      yoyo: true,
+      repeat: 2,
+      duration: 45,
+      onComplete: () => {
+        if (row.container.scene) row.container.x = 0;
+      },
+    });
+  }
+
+  private playPartDestroyEffect(partId: PartId) {
+    const row = this.enemyPartRows[partId];
+    if (!row) return;
+    const burst = this.trackEffect(
+      this.scene.add
+        .rectangle(this.enemyPartPanel!.x + row.container.x, this.enemyPartPanel!.y + row.container.y, u(94), u(24), 0xff4d5f, 0.18)
+        .setStrokeStyle(u(3), 0xffd572, 0.95)
+        .setDepth(822)
+    );
+    this.overlay?.add(burst);
+    row.counterText.setText("파괴됨");
+    this.scene.tweens.add({
+      targets: burst,
+      scaleX: 1.35,
+      scaleY: 1.55,
+      alpha: 0,
+      duration: 520,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (burst.scene) burst.destroy();
       },
     });
   }
