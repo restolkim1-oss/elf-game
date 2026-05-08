@@ -466,6 +466,7 @@ export class CardBattleSystem {
     const stripW = width * 0.96;
 
     // -- Top: enemy strip (sits just below the progression pills) --
+    const legacyEnemyHud = this.scene.add.container(0, 0).setVisible(false).setAlpha(0);
     const enemyStripY = u(104);
     const enemyStripBg = this.scene.add
       .rectangle(width / 2, enemyStripY, stripW * 0.86, u(68), 0x000000, 0)
@@ -525,7 +526,7 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
 
-    this.overlay.add([
+    legacyEnemyHud.add([
       enemyStripBg,
       enemyName,
       this.enemyIntentText,
@@ -535,6 +536,7 @@ export class CardBattleSystem {
       this.enemyBlockText,
       this.enemyStatusText,
     ]);
+    this.overlay.add(legacyEnemyHud);
     this.scene.events.emit("enemy-energy-show", {
       label: part.label,
       hp: this.enemy.hp,
@@ -2132,12 +2134,13 @@ export class CardBattleSystem {
   }
 
   private drawEnemyPartPanel(width: number, height: number) {
+    void width;
     this.enemyPartPanel?.destroy();
     this.enemyPartRows = {};
-    const panelW = u(132);
-    const rowH = u(26);
-    const x = width - panelW / 2 - u(12);
-    const y = Math.min(height - u(415), u(246));
+    const panelW = u(146);
+    const rowH = u(30);
+    const x = panelW / 2 + u(12);
+    const y = Math.min(height - u(430), u(286));
     const panel = this.scene.add.container(x, y).setDepth(610);
     const bg = this.scene.add
       .rectangle(0, 0, panelW, rowH * this.enemy.parts.length + u(30), 0x07070d, 0.5)
@@ -2156,30 +2159,30 @@ export class CardBattleSystem {
       const rowY = -rowH * (this.enemy.parts.length - 1) * 0.5 + idx * rowH + u(10);
       const row = this.scene.add.container(0, rowY);
       const rowBg = this.scene.add
-        .rectangle(0, 0, panelW - u(12), u(22), 0x1b1420, 0.62)
+        .rectangle(0, 0, panelW - u(10), u(26), 0x1b1420, 0.62)
         .setStrokeStyle(u(0.7), 0x8f6a34, 0.45);
       const name = this.scene.add
-        .text(-panelW / 2 + u(13), -u(4), part.displayName, {
+        .text(-panelW / 2 + u(12), -u(5), part.displayName, {
           fontFamily: "serif",
-          fontSize: px(7.5),
+          fontSize: px(8),
           color: "#f3e6c9",
           fontStyle: "bold",
         })
         .setOrigin(0, 0.5);
       const hpText = this.scene.add
-        .text(panelW / 2 - u(13), -u(4), `${part.hp}/${part.maxHp}`, {
+        .text(panelW / 2 - u(12), -u(5), `${part.hp}/${part.maxHp}`, {
           fontFamily: "serif",
           fontSize: px(7),
           color: "#9ad0ff",
           fontStyle: "bold",
         })
         .setOrigin(1, 0.5);
-      const hpBg = this.scene.add.rectangle(0, u(5), panelW - u(26), u(4), 0x271620, 0.9);
+      const hpBg = this.scene.add.rectangle(0, u(5), panelW - u(24), u(5), 0x271620, 0.9);
       const hpFill = this.scene.add
-        .rectangle(-(panelW - u(26)) / 2, u(5), panelW - u(26), u(3), 0x9ad0ff, 0.95)
+        .rectangle(-(panelW - u(24)) / 2, u(5), panelW - u(24), u(4), 0x9ad0ff, 0.95)
         .setOrigin(0, 0.5);
       const counterText = this.scene.add
-        .text(0, u(11), this.getPartCounterText(part), {
+        .text(0, u(13), this.getPartCounterText(part), {
           fontFamily: "serif",
           fontSize: px(6.5),
           color: "#ffd572",
@@ -2188,7 +2191,7 @@ export class CardBattleSystem {
         .setOrigin(0.5);
       row.add([rowBg, name, hpText, hpBg, hpFill, counterText]);
       panel.add(row);
-      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, w: panelW - u(12), h: u(22) };
+      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, w: panelW - u(10), h: u(26) };
     });
 
     this.enemyPartPanel = panel;
@@ -2201,7 +2204,7 @@ export class CardBattleSystem {
       const row = this.enemyPartRows[part.id];
       if (!row) continue;
       row.hpText.setText(`${part.hp}/${part.maxHp}`);
-      row.hpFill.width = (u(106) * Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1));
+      row.hpFill.width = (u(122) * Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1));
       row.counterText.setText(this.getPartCounterText(part));
       row.bg.setFillStyle(part.destroyed ? 0x2a2222 : 0x1b1420, part.destroyed ? 0.36 : 0.62);
       row.hpFill.setFillStyle(part.destroyed ? 0x777777 : 0x9ad0ff, part.destroyed ? 0.5 : 0.95);
