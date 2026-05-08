@@ -169,11 +169,11 @@ export class UIScene extends Phaser.Scene {
     const barH = u(52);
     const titleH = u(86);
     this.add
-      .rectangle(width / 2, barH / 2, width, barH, 0xf8f6ef, 0.96)
+      .rectangle(width / 2, barH / 2, width, barH, 0x24172d, 0.92)
       .setDepth(1500)
-      .setStrokeStyle(u(1), COLORS.gild, 0.75);
+      .setStrokeStyle(u(1.2), COLORS.gild, 0.86);
     this.add
-      .rectangle(width / 2, barH + titleH / 2, width, titleH, 0x000000, 0.94)
+      .rectangle(width / 2, barH + titleH / 2, width, titleH, 0x000000, 0.58)
       .setDepth(1500);
 
     const resources = [
@@ -195,8 +195,10 @@ export class UIScene extends Phaser.Scene {
         .text(x + cellW * 0.05, barH / 2, item.text, {
           fontFamily: "serif",
           fontSize: px(15),
-          color: "#76562c",
+          color: "#f4d08c",
           fontStyle: "bold",
+          stroke: "#1b1020",
+          strokeThickness: u(1),
         })
         .setOrigin(0.5)
         .setDepth(1502);
@@ -204,7 +206,7 @@ export class UIScene extends Phaser.Scene {
         .text(x + cellW * 0.34, barH / 2, "+", {
           fontFamily: "serif",
           fontSize: px(17),
-          color: "#b8954f",
+          color: "#ffd572",
           fontStyle: "bold",
         })
         .setOrigin(0.5)
@@ -217,10 +219,10 @@ export class UIScene extends Phaser.Scene {
     const group = this.add.container(0, 0).setDepth(1503).setVisible(false);
     this.topEnemyGroup = group;
     const centerY = barH + titleH / 2;
-    const hpW = width * 0.62;
+    const hpW = width * 0.66;
     this.topEnemyHpMaxWidth = hpW;
     const name = this.add
-      .text(width * 0.19, centerY - u(22), "", {
+      .text(width * 0.19, centerY - u(26), "", {
         fontFamily: "serif",
         fontSize: px(13),
         color: COLORS.text,
@@ -228,25 +230,48 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5);
     const intent = this.add
-      .text(width * 0.81, centerY - u(22), "", {
+      .text(width * 0.81, centerY - u(26), "", {
         fontFamily: "serif",
         fontSize: px(11),
         color: COLORS.textHighlight,
         fontStyle: "bold",
       })
       .setOrigin(1, 0.5);
+    const crest = this.add
+      .circle(width / 2, centerY + u(8), u(37), 0x2d2018, 0.86)
+      .setStrokeStyle(u(1.4), 0xd4a656, 0.8);
+    const crestInner = this.add
+      .circle(width / 2, centerY + u(8), u(29), 0xead7a5, 0.22)
+      .setStrokeStyle(u(1), 0xf3d48a, 0.55);
     const hpBg = this.add
-      .rectangle(width / 2, centerY + u(10), hpW, u(24), 0x24182f, 0.96)
-      .setStrokeStyle(u(1.5), COLORS.gild, 0.9);
+      .rectangle(width / 2, centerY + u(11), hpW, u(25), 0x201016, 0.94)
+      .setStrokeStyle(u(1.6), 0xd4a656, 0.92);
+    const hpInner = this.add
+      .rectangle(width / 2, centerY + u(11), hpW - u(10), u(16), 0x4a111b, 0.82)
+      .setStrokeStyle(u(0.8), 0x8c5b32, 0.65);
     const hpFill = this.add
-      .rectangle(width / 2 - hpW / 2, centerY + u(10), hpW, u(20), 0xff5e7a, 0.95)
+      .rectangle(width / 2 - hpW / 2 + u(5), centerY + u(11), hpW - u(10), u(15), 0xa7192e, 0.96)
       .setOrigin(0, 0.5);
+    const leftCap = this.add
+      .circle(width / 2 - hpW / 2, centerY + u(11), u(15), 0x2d2018, 0.94)
+      .setStrokeStyle(u(1.2), 0xd4a656, 0.88);
+    const rightCap = this.add
+      .circle(width / 2 + hpW / 2, centerY + u(11), u(15), 0x2d2018, 0.94)
+      .setStrokeStyle(u(1.2), 0xd4a656, 0.88);
+    const leftGem = this.add
+      .rectangle(width / 2 - hpW / 2, centerY + u(11), u(10), u(10), 0xf3d48a, 0.82)
+      .setAngle(45);
+    const rightGem = this.add
+      .rectangle(width / 2 + hpW / 2, centerY + u(11), u(10), u(10), 0xf3d48a, 0.82)
+      .setAngle(45);
     const hpText = this.add
-      .text(width / 2, centerY + u(10), "", {
+      .text(width / 2, centerY + u(11), "", {
         fontFamily: "serif",
         fontSize: px(12),
         color: "#ffffff",
         fontStyle: "bold",
+        stroke: "#3a0b12",
+        strokeThickness: u(1),
       })
       .setOrigin(0.5);
 
@@ -254,7 +279,7 @@ export class UIScene extends Phaser.Scene {
     this.topEnemyIntent = intent;
     this.topEnemyHpFill = hpFill;
     this.topEnemyHpText = hpText;
-    group.add([name, intent, hpBg, hpFill, hpText]);
+    group.add([crest, crestInner, name, intent, hpBg, hpInner, hpFill, leftCap, rightCap, leftGem, rightGem, hpText]);
   }
 
   private showTopEnemyEnergy(payload: { label: string; hp: number; hpMax: number; intent?: string }) {
@@ -265,7 +290,7 @@ export class UIScene extends Phaser.Scene {
 
   private updateTopEnemyEnergy(payload: { hp: number; hpMax: number; intent?: string }) {
     const ratio = Phaser.Math.Clamp(payload.hp / Math.max(1, payload.hpMax), 0, 1);
-    if (this.topEnemyHpFill) this.topEnemyHpFill.width = this.topEnemyHpMaxWidth * ratio;
+    if (this.topEnemyHpFill) this.topEnemyHpFill.width = Math.max(0, this.topEnemyHpMaxWidth - u(10)) * ratio;
     this.topEnemyHpText?.setText(`${payload.hp} / ${payload.hpMax}`);
     if (payload.intent !== undefined) this.topEnemyIntent?.setText(payload.intent);
   }
@@ -281,7 +306,7 @@ export class UIScene extends Phaser.Scene {
       width,
       panelH,
       COLORS.panelMid,
-      0.96
+      0.7
     );
     const r2 = this.add.rectangle(
       width / 2,
@@ -289,7 +314,7 @@ export class UIScene extends Phaser.Scene {
       width,
       u(46),
       COLORS.panelDeep,
-      0.45
+      0.36
     );
     const r3 = this.add.rectangle(width / 2, height - panelH, width, u(1), COLORS.gild, 0.9);
     const r4 = this.add.rectangle(

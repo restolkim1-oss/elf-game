@@ -443,10 +443,10 @@ export class CardBattleSystem {
     const playerStripY = height - u(278);
     const playerPanelW = stripW * 0.98;
     const playerStripBg = this.scene.add
-      .rectangle(width / 2, playerStripY, playerPanelW, u(86), 0x08080d, 0.84)
+      .rectangle(width / 2, playerStripY, playerPanelW, u(86), 0x08080d, 0.6)
       .setStrokeStyle(u(1.4), 0xd4a656, 0.86);
     const playerStripInner = this.scene.add
-      .rectangle(width / 2, playerStripY, playerPanelW - u(10), u(74), 0x11131a, 0.48)
+      .rectangle(width / 2, playerStripY, playerPanelW - u(10), u(74), 0x11131a, 0.32)
       .setStrokeStyle(u(0.8), 0xf3d48a, 0.28);
     const playerName = this.scene.add
       .text(width / 2 - playerPanelW / 2 + u(18), playerStripY - u(30), "당신", {
@@ -579,7 +579,7 @@ export class CardBattleSystem {
         fontSize: px(12),
         color: "#f3e6c9",
         fontStyle: "bold",
-        backgroundColor: "rgba(20, 9, 26, 0.7)",
+        backgroundColor: "rgba(20, 9, 26, 0.5)",
         padding: { x: 10, y: 4 },
       })
       .setOrigin(0.5);
