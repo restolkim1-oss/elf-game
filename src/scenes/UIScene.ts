@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { MENU_ICONS, type PartDef, getPartsForStage } from "../data/parts";
+import { SHOP_GALLERY, type ShopArtId } from "../data/shop";
 import { UI_SCALE } from "../main";
 
 const COLORS = {
@@ -33,12 +34,16 @@ interface EconomyState {
   currency: number;
   affinity: number;
   affinityMax: number;
-  inventory: {
-    flower: number;
-    choco: number;
-    perfume: number;
-  };
+  inventory: Record<ShopArtId, number>;
   stageSet: 1 | 2 | 3;
+}
+
+interface ShopArtViewPayload {
+  id: ShopArtId;
+  label: string;
+  textureKey: string;
+  path: string;
+  cost: number;
 }
 
 export class UIScene extends Phaser.Scene {
@@ -49,7 +54,7 @@ export class UIScene extends Phaser.Scene {
   private hintText!: Phaser.GameObjects.Text;
   private statText!: Phaser.GameObjects.Text;
   private readonly defaultHint =
-    "파츠를 선택하고 카드 배틀로 점수를 내 코인과 호감도를 올려보세요.";
+    "파츠를 클리어해 금화를 모으고 상점에서 감상 이미지를 구매해보세요.";
 
   private clearMenu: Phaser.GameObjects.Container | null = null;
   private shopMenu: Phaser.GameObjects.Container | null = null;
@@ -57,6 +62,7 @@ export class UIScene extends Phaser.Scene {
   private bottomMenu: Phaser.GameObjects.Container | null = null;
   private bottomPanelGroup: Phaser.GameObjects.Container | null = null;
   private clearCelebration: Phaser.GameObjects.Container | null = null;
+  private galleryView: Phaser.GameObjects.Container | null = null;
   private topEnemyGroup: Phaser.GameObjects.Container | null = null;
   private topEnemyName: Phaser.GameObjects.Text | null = null;
   private topEnemyIntent: Phaser.GameObjects.Text | null = null;
@@ -85,6 +91,7 @@ export class UIScene extends Phaser.Scene {
     this.bottomMenu = null;
     this.bottomPanelGroup = null;
     this.clearCelebration = null;
+    this.galleryView = null;
     this.topEnemyGroup = null;
     this.topEnemyName = null;
     this.topEnemyIntent = null;
@@ -125,6 +132,13 @@ export class UIScene extends Phaser.Scene {
     game.events.on("shop-feedback", (payload: { text: string; color?: string }) => {
       this.flashHint(payload.text, payload.color ?? COLORS.textHighlight);
     });
+    game.events.on("economy-update", (state: EconomyState) => {
+      this.lastEconomy = state;
+      this.updateEconomy(state);
+    });
+    game.events.on("view-shop-art", (payload: ShopArtViewPayload) => {
+      this.showGalleryView(payload);
+    });
     game.events.on("viewing-mode", () => this.drawZoomControls(width, height));
     game.events.on("finale", () => this.onFinale());
     game.events.on("enemy-energy-show", (payload: { label: string; hp: number; hpMax: number; intent?: string }) => {
@@ -148,6 +162,7 @@ export class UIScene extends Phaser.Scene {
     });
 
     this.startIdlePillPulse();
+    game.events.emit("request-economy-sync");
   }
 
   private drawTopChrome(width: number) {
@@ -541,6 +556,7 @@ export class UIScene extends Phaser.Scene {
 
   private hideShopMenu() {
     if (!this.shopMenu) return;
+    this.hideGalleryView();
     const old = this.shopMenu;
     this.shopMenu = null;
     this.bottomMenu?.setVisible(!this.puzzleBusy);
@@ -602,7 +618,7 @@ export class UIScene extends Phaser.Scene {
         .text(
           width / 2,
           u(176),
-          `코인 ${state?.currency ?? 0}  |  호감도 ${state?.affinity ?? 0}/${state?.affinityMax ?? 100}`,
+          `금화 ${state?.currency ?? 0}  |  감상 ${this.getOwnedGalleryCount()} / ${SHOP_GALLERY.length}`,
           {
             fontFamily: "serif",
             fontSize: px(13),
@@ -624,70 +640,20 @@ export class UIScene extends Phaser.Scene {
       px(11)
     );
 
-    const items = [
-      {
-        id: "flower",
-        name: "꽃다발",
-        icon: "🌸",
-        cost: 18,
-        own: state?.inventory.flower ?? 0,
-        badge: "기본",
-      },
-      {
-        id: "choco",
-        name: "초콜릿",
-        icon: "🍫",
-        cost: 30,
-        own: state?.inventory.choco ?? 0,
-        badge: "인기",
-      },
-      {
-        id: "perfume",
-        name: "향수",
-        icon: "🧴",
-        cost: 44,
-        own: state?.inventory.perfume ?? 0,
-        badge: "고급",
-      },
-      {
-        id: "flower",
-        name: "꽃다발 묶음",
-        icon: "🌺",
-        cost: 36,
-        own: state?.inventory.flower ?? 0,
-        badge: "20% 할인",
-      },
-      {
-        id: "choco",
-        name: "초코 세트",
-        icon: "🍬",
-        cost: 60,
-        own: state?.inventory.choco ?? 0,
-        badge: "세트",
-      },
-      {
-        id: "perfume",
-        name: "향수 샘플",
-        icon: "✨",
-        cost: 24,
-        own: state?.inventory.perfume ?? 0,
-        badge: "한정",
-      },
-    ] as const;
-
-    const cols = 3;
-    const cardGap = u(10);
+    const cols = 2;
+    const cardGap = u(12);
     const sidePad = u(18);
     const cardW = (width - sidePad * 2 - cardGap * (cols - 1)) / cols;
-    const cardH = u(220);
+    const cardH = u(172);
     const startX = sidePad + cardW / 2;
-    const startY = topH + u(20) + cardH / 2;
+    const startY = topH + u(12) + cardH / 2;
 
-    items.forEach((item, idx) => {
+    SHOP_GALLERY.forEach((item, idx) => {
       const col = idx % cols;
       const row = Math.floor(idx / cols);
       const x = startX + col * (cardW + cardGap);
-      const y = startY + row * (cardH + u(12));
+      const y = startY + row * (cardH + u(10));
+      const owned = (state?.inventory[item.id] ?? 0) > 0;
 
       c.add(
         this.add
@@ -696,17 +662,17 @@ export class UIScene extends Phaser.Scene {
       );
       c.add(
         this.add
-          .text(x, y - cardH / 2 + u(10), item.badge, {
+          .text(x, y - cardH / 2 + u(8), owned ? "구매 완료" : "감상 상품", {
             fontFamily: "serif",
             fontSize: px(9.5),
-            color: "#8a2f2f",
+            color: owned ? "#2f6b3a" : "#8a2f2f",
             fontStyle: "bold",
           })
           .setOrigin(0.5, 0)
       );
       c.add(
         this.add
-          .text(x, y - cardH / 2 + u(30), item.name, {
+          .text(x, y - cardH / 2 + u(26), item.label, {
             fontFamily: "serif",
             fontSize: px(11),
             color: "#2f2520",
@@ -714,27 +680,26 @@ export class UIScene extends Phaser.Scene {
           })
           .setOrigin(0.5, 0)
       );
+      if (this.textures.exists(item.textureKey)) {
+        const thumb = this.add.image(x, y - u(13), item.textureKey);
+        const scale = Math.min((cardW - u(22)) / thumb.width, u(70) / thumb.height);
+        thumb.setScale(scale).setCrop(0, 0, thumb.width, thumb.height).setAlpha(0.98);
+        c.add(thumb);
+      } else {
+        c.add(
+          this.add
+            .text(x, y - u(13), "이미지", {
+              fontFamily: "serif",
+              fontSize: px(14),
+              color: "#4a3f34",
+              fontStyle: "bold",
+            })
+            .setOrigin(0.5)
+        );
+      }
       c.add(
         this.add
-          .text(x, y - u(20), item.icon, {
-            fontFamily: "serif",
-            fontSize: px(30),
-          })
-          .setOrigin(0.5)
-      );
-      c.add(
-        this.add
-          .text(x, y + u(16), `보유 ${item.own}`, {
-            fontFamily: "serif",
-            fontSize: px(9.5),
-            color: "#4a3f34",
-            fontStyle: "bold",
-          })
-          .setOrigin(0.5, 0.5)
-      );
-      c.add(
-        this.add
-          .text(x, y + u(38), `${item.cost} 코인`, {
+          .text(x, y + u(38), owned ? "다시 감상 가능" : `${item.cost} 금화`, {
             fontFamily: "serif",
             fontSize: px(11),
             color: "#2f2520",
@@ -746,10 +711,10 @@ export class UIScene extends Phaser.Scene {
       this.makeButton(
         c,
         x,
-        y + u(74),
+        y + u(64),
         cardW - u(18),
         u(30),
-        "구입",
+        owned ? "감상" : "구입",
         () => {
           gs.events.emit("buy-item", item.id);
         },
@@ -757,55 +722,81 @@ export class UIScene extends Phaser.Scene {
       );
     });
 
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+  }
+
+  private getOwnedGalleryCount() {
+    const state = this.lastEconomy;
+    if (!state) return 0;
+    return SHOP_GALLERY.filter((item) => (state.inventory[item.id] ?? 0) > 0).length;
+  }
+
+  private showGalleryView(item: ShopArtViewPayload) {
+    this.hideGalleryView();
+    const { width, height } = this.scale;
+    const c = this.add.container(0, 0).setDepth(2050);
+    this.galleryView = c;
+
     c.add(
       this.add
-        .text(width / 2, height - u(104), "빠른 선물", {
+        .rectangle(width / 2, height / 2, width, height, 0x050208, 0.92)
+        .setInteractive()
+    );
+    c.add(
+      this.add
+        .text(width / 2, u(42), item.label, {
           fontFamily: "serif",
-          fontSize: px(10.5),
+          fontSize: px(20),
           color: COLORS.textHighlight,
           fontStyle: "bold",
         })
-        .setOrigin(0.5, 0.5)
+        .setOrigin(0.5)
     );
-    this.makeButton(
-      c,
-      width / 2 - u(110),
-      height - u(68),
-      u(96),
-      u(34),
-      "꽃 선물",
-      () => {
-        gs.events.emit("gift-item", "flower");
-      },
-      px(9)
-    );
+
+    if (this.textures.exists(item.textureKey)) {
+      const img = this.add.image(width / 2, height / 2, item.textureKey);
+      const maxW = width * 0.92;
+      const maxH = height - u(210);
+      img.setScale(Math.min(maxW / img.width, maxH / img.height));
+      c.add(img);
+    } else {
+      c.add(
+        this.add
+          .text(width / 2, height / 2, "이미지를 찾을 수 없습니다.", {
+            fontFamily: "serif",
+            fontSize: px(15),
+            color: COLORS.text,
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5)
+      );
+    }
+
     this.makeButton(
       c,
       width / 2,
-      height - u(68),
-      u(96),
-      u(34),
-      "초코 선물",
-      () => {
-        gs.events.emit("gift-item", "choco");
-      },
-      px(9)
+      height - u(54),
+      u(176),
+      u(42),
+      "상점으로",
+      () => this.hideGalleryView(),
+      px(11)
     );
-    this.makeButton(
-      c,
-      width / 2 + u(110),
-      height - u(68),
-      u(96),
-      u(34),
-      "향수 선물",
-      () => {
-        gs.events.emit("gift-item", "perfume");
-      },
-      px(9)
-    );
-
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+  }
+
+  private hideGalleryView() {
+    if (!this.galleryView) return;
+    const old = this.galleryView;
+    this.galleryView = null;
+    this.tweens.add({
+      targets: old,
+      alpha: 0,
+      duration: 140,
+      onComplete: () => old.destroy(),
+    });
   }
 
   private makeButton(
@@ -849,7 +840,7 @@ export class UIScene extends Phaser.Scene {
 
   private updateEconomy(state: EconomyState) {
     this.statText.setText(
-      `코인 ${state.currency}  |  호감도 ${state.affinity} / ${state.affinityMax}  |  스테이지 ${state.stageSet}`
+      `금화 ${state.currency}  |  감상 ${this.getOwnedGalleryCount()} / ${SHOP_GALLERY.length}  |  스테이지 ${state.stageSet}`
     );
     if (this.shopMenu) {
       const old = this.shopMenu;

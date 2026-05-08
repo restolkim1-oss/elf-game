@@ -13,13 +13,12 @@ import {
   getPartsForStage,
   stageForRemoved,
 } from "../data/parts";
-
-const SHOP = {
-  flower: { label: "꽃", cost: 18, affinity: 10 },
-  choco: { label: "초콜릿", cost: 30, affinity: 10 },
-  perfume: { label: "향수", cost: 44, affinity: 10 },
-} as const;
-type ShopItemId = keyof typeof SHOP;
+import {
+  SHOP_GALLERY,
+  createEmptyGalleryInventory,
+  getShopGalleryItem,
+  type ShopArtId,
+} from "../data/shop";
 
 const AFFINITY_MAX = 100;
 const STAGE2_UNLOCK_AFFINITY = 40;
@@ -46,11 +45,7 @@ export class GameScene extends Phaser.Scene {
   private stage3StoryUnlocked = false;
   private currency = 0;
   private affinity = 0;
-  private inventory: Record<ShopItemId, number> = {
-    flower: 0,
-    choco: 0,
-    perfume: 0,
-  };
+  private inventory: Record<ShopArtId, number> = createEmptyGalleryInventory();
 
   private viewingMode = false;
   private activePointers: Phaser.Input.Pointer[] = [];
@@ -156,8 +151,7 @@ export class GameScene extends Phaser.Scene {
       this.switchStageSet(next)
     );
     this.events.on("next-stage", () => this.goToNextStage());
-    this.events.on("buy-item", (id: ShopItemId) => this.buyItem(id));
-    this.events.on("gift-item", (id: ShopItemId) => this.giftItem(id));
+    this.events.on("buy-item", (id: ShopArtId) => this.buyItem(id));
     this.events.on("request-economy-sync", () => this.emitEconomyState());
     this.events.on("abort-current-puzzle", () => this.abortCurrentPuzzle());
     this.events.emit("puzzle-busy", false);
@@ -337,12 +331,13 @@ export class GameScene extends Phaser.Scene {
     this.partSystem.removePart(part.id);
     if (alreadyCleared) return;
 
-    this.grantCoins(8 + part.difficulty * 4, `${part.label} 성공`);
+    this.grantCoins(35 + part.difficulty * 15, `${part.label} 클리어 보상`);
     this.removed.add(part.id);
     this.progressSystem.advance();
     this.events.emit("progress", this.progressSystem.getProgress());
 
     if (this.progressSystem.isFinished()) {
+      this.grantCoins(120, "스테이지 클리어 보너스");
       this.triggerFinale();
       return;
     }
@@ -453,7 +448,7 @@ export class GameScene extends Phaser.Scene {
       this.stageManager.hidePartLayer(part.id, 240);
       this.removed.add(part.id);
       this.progressSystem.advance();
-      this.grantCoins(5 + part.difficulty * 2);
+      this.grantCoins(25 + part.difficulty * 8);
     }
 
     this.events.emit("progress", this.progressSystem.getProgress());
@@ -548,50 +543,24 @@ export class GameScene extends Phaser.Scene {
     this.cardBattle.abortCurrent();
   }
 
-  private buyItem(id: ShopItemId) {
-    const entry = SHOP[id];
+  private buyItem(id: ShopArtId) {
+    const entry = getShopGalleryItem(id);
+    if (!entry) return;
+    if (this.inventory[id] > 0) {
+      this.feedback(`${entry.label} 감상 모드`);
+      this.events.emit("view-shop-art", entry);
+      return;
+    }
     if (this.currency < entry.cost) {
-      this.feedback(`${entry.label} 구입에 코인 ${entry.cost}개가 필요합니다.`);
+      this.feedback(`${entry.label} 구입에 금화 ${entry.cost}개가 필요합니다.`);
       return;
     }
     this.currency -= entry.cost;
-    this.inventory[id] += 1;
+    this.inventory[id] = 1;
     this.persistMetaState();
     this.emitEconomyState();
-    this.feedback(`${entry.label} 구입 완료`);
-  }
-
-  private giftItem(id: ShopItemId) {
-    const entry = SHOP[id];
-    if (this.inventory[id] <= 0) {
-      this.feedback(`${entry.label} 보유 수량이 없습니다.`);
-      return;
-    }
-    if (this.affinity >= AFFINITY_MAX) {
-      this.feedback("호감도는 이미 최대치(100)입니다.");
-      return;
-    }
-
-    const before = this.affinity;
-    this.inventory[id] -= 1;
-    this.affinity = Phaser.Math.Clamp(
-      this.affinity + entry.affinity,
-      0,
-      AFFINITY_MAX
-    );
-
-    this.persistMetaState();
-    this.emitEconomyState();
-    this.feedback(
-      `${entry.label} 선물 완료 · 호감도 +${this.affinity - before} (${this.affinity}/100)`
-    );
-
-    if (before < STAGE2_UNLOCK_AFFINITY && this.affinity >= STAGE2_UNLOCK_AFFINITY) {
-      this.feedback("2단계 포즈가 열렸습니다.");
-    }
-    if (before < STAGE3_UNLOCK_AFFINITY && this.affinity >= STAGE3_UNLOCK_AFFINITY) {
-      this.feedback("뒷모습 스테이지가 열렸습니다.");
-    }
+    this.feedback(`${entry.label} 구입 완료 · 바로 감상합니다.`);
+    this.events.emit("view-shop-art", entry);
   }
 
   private grantCoins(amount: number, reason?: string) {
@@ -599,7 +568,7 @@ export class GameScene extends Phaser.Scene {
     this.currency += amount;
     this.persistMetaState();
     this.emitEconomyState();
-    if (reason) this.feedback(`${reason} · 코인 +${amount}`);
+    if (reason) this.feedback(`${reason} · 금화 +${amount}`);
   }
 
   private canUseStage2() {
@@ -631,7 +600,7 @@ export class GameScene extends Phaser.Scene {
         stage2: STAGE2_UNLOCK_AFFINITY,
         stage3: STAGE3_UNLOCK_AFFINITY,
       },
-      shop: SHOP,
+      shop: SHOP_GALLERY,
     });
   }
 
@@ -652,11 +621,11 @@ export class GameScene extends Phaser.Scene {
       AFFINITY_MAX
     );
     if (inv && typeof inv === "object") {
-      this.inventory = {
-        flower: Number((inv as Record<string, unknown>).flower) || 0,
-        choco: Number((inv as Record<string, unknown>).choco) || 0,
-        perfume: Number((inv as Record<string, unknown>).perfume) || 0,
-      };
+      const nextInventory = createEmptyGalleryInventory();
+      SHOP_GALLERY.forEach((item) => {
+        nextInventory[item.id] = Number((inv as Record<string, unknown>)[item.id]) || 0;
+      });
+      this.inventory = nextInventory;
     }
     this.stage2StoryUnlocked = Boolean(stage2Unlocked);
     this.stage3StoryUnlocked = Boolean(stage3Unlocked);
