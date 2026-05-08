@@ -199,8 +199,8 @@ const CARDS: Record<string, CardDef> = {
 };
 
 const STARTER_DECK: BaseCardId[] = [
-  "attack", "attack", "attack", "attack",
-  "powerAttack", "powerAttack",
+  "attack", "attack", "attack", "attack", "attack", "attack",
+  "powerAttack", "powerAttack", "powerAttack",
   "defense", "defense", "defense", "defense",
   "heal", "heal",
   "parry", "parry", "parry",

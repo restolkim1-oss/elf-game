@@ -35,7 +35,7 @@ export const ENEMY_PART_CONFIG: Record<EnemyPartConfigKey, EnemyPart[]> = {
       id: "sweater",
       displayName: "스웨터",
       maxHp: 30,
-      ability: { kind: "healOnTurnStart", value: 3 },
+      ability: { kind: "healOnTurnStart", value: 2 },
     },
     {
       id: "skirt",
