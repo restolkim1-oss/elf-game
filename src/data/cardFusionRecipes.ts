@@ -8,7 +8,10 @@ export type FusionEffect =
   | { kind: "heal"; amount: number }
   | { kind: "energy"; amount: number }
   | { kind: "reflectNextAttack"; ratio: number }
-  | { kind: "weakenNextAttack"; ratio: number; maxTurns: number };
+  | { kind: "weakenNextAttack"; ratio: number; maxTurns: number }
+  | { kind: "autoParryNextAttack"; counterDamage: number; maxTurns: number }
+  | { kind: "dodgeFirstAttackOfNextEnemyTurn"; maxTurns: number }
+  | { kind: "dodgeNextAttack"; maxTurns: number };
 
 export interface FusionResultCard {
   id: `temp_${string}`;
@@ -121,6 +124,22 @@ export const CARD_FUSION_RECIPES: CardFusionRecipe[] = [
     },
   },
   {
+    id: "defense_parry_counter_stance",
+    roles: ["defense", "parry"],
+    result: {
+      id: "temp_counter_stance",
+      name: "카운터스탠스",
+      role: "defense",
+      cost: 2,
+      color: 0x2f9cc7,
+      description: "보호막 + 다음 공격\n자동 패링",
+      effects: [
+        { kind: "block", amount: 10 },
+        { kind: "autoParryNextAttack", counterDamage: 8, maxTurns: 2 },
+      ],
+    },
+  },
+  {
     id: "heal_heal_awaken",
     roles: ["heal", "heal"],
     result: {
@@ -134,6 +153,35 @@ export const CARD_FUSION_RECIPES: CardFusionRecipe[] = [
         { kind: "heal", amount: 14 },
         { kind: "energy", amount: 2 },
       ],
+    },
+  },
+  {
+    id: "heal_parry_swift_dodge",
+    roles: ["heal", "parry"],
+    result: {
+      id: "temp_swift_dodge",
+      name: "신속회피",
+      role: "heal",
+      cost: 2,
+      color: 0x63d8c8,
+      description: "회복 + 다음 첫 공격\n1회 회피",
+      effects: [
+        { kind: "heal", amount: 6 },
+        { kind: "dodgeFirstAttackOfNextEnemyTurn", maxTurns: 2 },
+      ],
+    },
+  },
+  {
+    id: "parry_parry_perfect_dodge",
+    roles: ["parry", "parry"],
+    result: {
+      id: "temp_perfect_dodge",
+      name: "완전회피",
+      role: "parry",
+      cost: 2,
+      color: 0x7bd8ff,
+      description: "다음 공격 1회\n완전 무효",
+      effects: [{ kind: "dodgeNextAttack", maxTurns: 2 }],
     },
   },
 ];

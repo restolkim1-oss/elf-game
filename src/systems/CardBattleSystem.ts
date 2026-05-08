@@ -35,6 +35,9 @@ type CardEffect =
   | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
   | { kind: "reflectNextAttack"; ratio: number }
   | { kind: "weakenNextAttack"; ratio: number; maxTurns: number }
+  | { kind: "autoParryNextAttack"; counterDamage: number; maxTurns: number }
+  | { kind: "dodgeFirstAttackOfNextEnemyTurn"; maxTurns: number }
+  | { kind: "dodgeNextAttack"; maxTurns: number }
   | { kind: "parry"; amount: number };
 
 interface CardDef {
@@ -215,6 +218,9 @@ interface SideState {
   weaken: { amount: number; turns: number } | null;
   reflectNextAttack: { ratio: number } | null;
   weakenNextAttack: { ratio: number; turnsLeft: number } | null;
+  autoParryNextAttack: { counterDamage: number; turnsLeft: number } | null;
+  dodgeFirstAttackOfNextEnemyTurn: { turnsLeft: number } | null;
+  dodgeNextAttack: { turnsLeft: number } | null;
 }
 
 type CardBattleResult = (success: boolean) => void;
@@ -360,6 +366,9 @@ export class CardBattleSystem {
       weaken: null,
       reflectNextAttack: null,
       weakenNextAttack: null,
+      autoParryNextAttack: null,
+      dodgeFirstAttackOfNextEnemyTurn: null,
+      dodgeNextAttack: null,
     };
     this.enemy = {
       hp: enemyHpMax,
@@ -369,6 +378,9 @@ export class CardBattleSystem {
       weaken: null,
       reflectNextAttack: null,
       weakenNextAttack: null,
+      autoParryNextAttack: null,
+      dodgeFirstAttackOfNextEnemyTurn: null,
+      dodgeNextAttack: null,
     };
     this.energy = ENERGY_MAX;
     this.turn = 1;
@@ -648,6 +660,7 @@ export class CardBattleSystem {
       this.flashLog("반격 대기 효과가 사라졌습니다");
     }
     this.tickWeakenNextAttackLifetime();
+    this.tickDefensiveReactionLifetimes();
     this.player.block = 0;
     this.energy = ENERGY_MAX;
     this.selectedCards = [];
@@ -748,6 +761,15 @@ export class CardBattleSystem {
   }
 
   private resolveEnemyAttackIntent(rawAmount: number) {
+    const prevention = this.resolveEnemyAttackPrevention(rawAmount);
+    if (prevention.prevented) {
+      return {
+        incoming: 0,
+        reflected: prevention.counterDamage,
+        log: prevention.log,
+      };
+    }
+
     const parts: string[] = [];
     let incoming = rawAmount;
 
@@ -783,6 +805,46 @@ export class CardBattleSystem {
       incoming,
       reflected,
       log: `적 공격 ${rawAmount} → ${incoming}${suffix}`,
+    };
+  }
+
+  private resolveEnemyAttackPrevention(rawAmount: number) {
+    if (this.player.autoParryNextAttack) {
+      const { counterDamage } = this.player.autoParryNextAttack;
+      this.player.autoParryNextAttack = null;
+      const dealt = this.applyAttack(this.enemy, counterDamage);
+      this.playAutoParryEffect(dealt);
+      return {
+        prevented: true,
+        counterDamage: dealt,
+        log: `자동 패링! 적 공격 ${rawAmount} 무효 · 반격 ${dealt}`,
+      };
+    }
+
+    if (this.player.dodgeNextAttack) {
+      this.player.dodgeNextAttack = null;
+      this.playDodgeTriggerEffect("완전회피");
+      return {
+        prevented: true,
+        counterDamage: 0,
+        log: `완전회피! 적 공격 ${rawAmount} 무효`,
+      };
+    }
+
+    if (this.player.dodgeFirstAttackOfNextEnemyTurn) {
+      this.player.dodgeFirstAttackOfNextEnemyTurn = null;
+      this.playDodgeTriggerEffect("회피");
+      return {
+        prevented: true,
+        counterDamage: 0,
+        log: `신속회피! 적 공격 ${rawAmount} 무효`,
+      };
+    }
+
+    return {
+      prevented: false,
+      counterDamage: 0,
+      log: "",
     };
   }
 
@@ -1034,6 +1096,28 @@ export class CardBattleSystem {
           };
           this.playDisarmReadyEffect();
           logParts.push(`다음 공격 약화 ${Math.round(effect.ratio * 100)}%`);
+          break;
+        case "autoParryNextAttack":
+          this.player.autoParryNextAttack = {
+            counterDamage: effect.counterDamage,
+            turnsLeft: effect.maxTurns,
+          };
+          this.playCounterStanceReadyEffect();
+          logParts.push(`자동 패링 대기`);
+          break;
+        case "dodgeFirstAttackOfNextEnemyTurn":
+          this.player.dodgeFirstAttackOfNextEnemyTurn = {
+            turnsLeft: effect.maxTurns,
+          };
+          this.playDodgeReadyEffect("신속회피");
+          logParts.push("신속회피 대기");
+          break;
+        case "dodgeNextAttack":
+          this.player.dodgeNextAttack = {
+            turnsLeft: effect.maxTurns,
+          };
+          this.playDodgeReadyEffect("완전회피");
+          logParts.push("완전회피 대기");
           break;
         case "parry":
           break;
@@ -1365,6 +1449,32 @@ export class CardBattleSystem {
     }
   }
 
+  private tickDefensiveReactionLifetimes() {
+    const expired: string[] = [];
+    if (this.player.autoParryNextAttack) {
+      this.player.autoParryNextAttack.turnsLeft -= 1;
+      if (this.player.autoParryNextAttack.turnsLeft <= 0) {
+        this.player.autoParryNextAttack = null;
+        expired.push("카운터스탠스");
+      }
+    }
+    if (this.player.dodgeFirstAttackOfNextEnemyTurn) {
+      this.player.dodgeFirstAttackOfNextEnemyTurn.turnsLeft -= 1;
+      if (this.player.dodgeFirstAttackOfNextEnemyTurn.turnsLeft <= 0) {
+        this.player.dodgeFirstAttackOfNextEnemyTurn = null;
+        expired.push("신속회피");
+      }
+    }
+    if (this.player.dodgeNextAttack) {
+      this.player.dodgeNextAttack.turnsLeft -= 1;
+      if (this.player.dodgeNextAttack.turnsLeft <= 0) {
+        this.player.dodgeNextAttack = null;
+        expired.push("완전회피");
+      }
+    }
+    if (expired.length > 0) this.flashLog(`${expired.join(", ")} 효과가 사라졌습니다`);
+  }
+
   private currentEnemyCard(): TarotBattleCard {
     const intent = this.intentPattern[this.intentIdx % this.intentPattern.length];
     const damage = intent.kind === "attack" ? intent.amount * 3 : Math.max(1, Math.ceil(intent.amount * 1.8));
@@ -1558,7 +1668,7 @@ export class CardBattleSystem {
     }
     if (intent.kind === "attack") {
       const shown = this.getPredictedEnemyAttackDamage(intent.amount);
-      this.enemyIntentText.setText(`다음: 공격 ${shown}`);
+      this.enemyIntentText.setText(`다음: 공격 ${shown}${this.getEnemyAttackPreventionLabel()}`);
       this.enemyIntentText.setColor("#ff8090");
     } else {
       this.enemyIntentText.setText(`다음: 보호막 +${intent.amount}`);
@@ -1580,15 +1690,29 @@ export class CardBattleSystem {
     if (!intent) return "";
     if (intent.kind === "attack") {
       const shown = this.getPredictedEnemyAttackDamage(intent.amount);
-      return `다음: 공격 ${shown}`;
+      return `다음: 공격 ${shown}${this.getEnemyAttackPreventionLabel()}`;
     }
     return `다음: 보호막 +${intent.amount}`;
+  }
+
+  private getEnemyAttackPreventionLabel() {
+    if (this.player.autoParryNextAttack) return " (자동 패링)";
+    if (this.player.dodgeNextAttack || this.player.dodgeFirstAttackOfNextEnemyTurn) return " (회피)";
+    return "";
+  }
+
+  private hasEnemyAttackPrevention() {
+    return (
+      this.player.autoParryNextAttack !== null ||
+      this.player.dodgeNextAttack !== null ||
+      this.player.dodgeFirstAttackOfNextEnemyTurn !== null
+    );
   }
 
   private getPredictedEnemyAttackDamage(rawAmount: number) {
     let shown = rawAmount;
     if (this.enemy.weaken) shown = Math.max(0, shown - this.enemy.weaken.amount);
-    if (this.enemy.weakenNextAttack) {
+    if (this.enemy.weakenNextAttack && !this.hasEnemyAttackPrevention()) {
       shown = Math.max(0, Math.round(shown * (1 - this.enemy.weakenNextAttack.ratio)));
     }
     return shown;
@@ -1609,6 +1733,9 @@ export class CardBattleSystem {
     if (this.player.reflectNextAttack) {
       playerParts.push(`반격 ${Math.round(this.player.reflectNextAttack.ratio * 100)}%`);
     }
+    if (this.player.autoParryNextAttack) playerParts.push("자동 패링");
+    if (this.player.dodgeNextAttack) playerParts.push("완전회피");
+    if (this.player.dodgeFirstAttackOfNextEnemyTurn) playerParts.push("신속회피");
     this.playerStatusText.setText(playerParts.join("  ·  "));
 
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
@@ -1936,6 +2063,114 @@ export class CardBattleSystem {
       ease: "Sine.easeOut",
       onComplete: () => {
         if (ring.scene) ring.destroy();
+      },
+    });
+  }
+
+  private playCounterStanceReadyEffect() {
+    const { width, height } = this.scene.scale;
+    const ring = this.trackEffect(
+      this.scene.add
+        .circle(width * 0.35, height * 0.5, u(44), 0x2f9cc7, 0.14)
+        .setStrokeStyle(u(4), 0x82ffe6, 0.9)
+        .setDepth(724)
+    );
+    this.overlay?.add(ring);
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 1.4,
+      scaleY: 1.4,
+      alpha: 0,
+      duration: 880,
+      ease: "Sine.easeOut",
+      onComplete: () => {
+        if (ring.scene) ring.destroy();
+      },
+    });
+  }
+
+  private playDodgeReadyEffect(label: string) {
+    const { width, height } = this.scene.scale;
+    const text = this.trackEffect(
+      this.scene.add
+        .text(width * 0.36, height * 0.47, label, {
+          fontFamily: "serif",
+          fontSize: px(14),
+          color: "#d8fff7",
+          fontStyle: "bold",
+          stroke: "#063238",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5)
+        .setDepth(724)
+    );
+    this.overlay?.add(text);
+    this.scene.tweens.add({
+      targets: text,
+      y: text.y - u(20),
+      alpha: 0,
+      duration: 860,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (text.scene) text.destroy();
+      },
+    });
+  }
+
+  private playDodgeTriggerEffect(label: string) {
+    const { width, height } = this.scene.scale;
+    const text = this.trackEffect(
+      this.scene.add
+        .text(width / 2, height * 0.42, `${label}!`, {
+          fontFamily: "serif",
+          fontSize: px(22),
+          color: "#ffffff",
+          fontStyle: "bold",
+          stroke: "#0b5862",
+          strokeThickness: u(3),
+        })
+        .setOrigin(0.5)
+        .setDepth(725)
+    );
+    this.overlay?.add(text);
+    this.scene.cameras.main.shake(130, 0.003);
+    this.scene.tweens.add({
+      targets: text,
+      y: text.y - u(30),
+      alpha: 0,
+      duration: 620,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (text.scene) text.destroy();
+      },
+    });
+  }
+
+  private playAutoParryEffect(amount: number) {
+    const { width } = this.scene.scale;
+    this.scene.cameras.main.shake(180, 0.006);
+    const text = this.trackEffect(
+      this.scene.add
+        .text(width / 2, u(150), `자동 패링 -${amount}`, {
+          fontFamily: "serif",
+          fontSize: px(18),
+          color: "#7bd8ff",
+          fontStyle: "bold",
+          stroke: "#082836",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5)
+        .setDepth(725)
+    );
+    this.overlay?.add(text);
+    this.scene.tweens.add({
+      targets: text,
+      y: text.y - u(34),
+      alpha: 0,
+      duration: 700,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (text.scene) text.destroy();
       },
     });
   }
