@@ -27,6 +27,7 @@ type BaseCardId = "attack" | "powerAttack" | "defense" | "heal" | "parry" | "poi
 type TempCardId = `temp_${string}`;
 type CardId = BaseCardId | TempCardId;
 type CardRole = FusionRole;
+type AttackVisualStyle = "normal" | "smash" | "drain" | "poison" | "counter";
 
 type CardEffect =
   | { kind: "attack"; amount: number }
@@ -335,6 +336,7 @@ export class CardBattleSystem {
         hpFill: Phaser.GameObjects.Rectangle;
         hpText: Phaser.GameObjects.Text;
         counterText: Phaser.GameObjects.Text;
+        abilityText: Phaser.GameObjects.Text;
         w: number;
         h: number;
       }
@@ -673,7 +675,7 @@ export class CardBattleSystem {
     this.playerStatusText = this.scene.add
       .text(width / 2 - playerPanelW / 2 + u(22), playerStripY + u(28), "", {
         fontFamily: "serif",
-        fontSize: px(9),
+        fontSize: px(12),
         color: "#ffaa66",
         fontStyle: "bold",
       })
@@ -747,6 +749,7 @@ export class CardBattleSystem {
     // Start of battle
     this.drawToFull(START_HAND);
     this.refreshAll();
+    this.playTurnAnnouncement();
   }
 
   // -- Game flow --
@@ -765,6 +768,7 @@ export class CardBattleSystem {
     this.selectedCards = [];
     this.drawToFull(TARGET_HAND);
     this.refreshAll();
+    this.playTurnAnnouncement();
   }
 
   private endPlayerTurn() {
@@ -1079,12 +1083,13 @@ export class CardBattleSystem {
     if (result.didAttack) this.maybeShowEnemySpeech();
 
     const settle = () => this.safeSettleAfterCardUse();
+    const visualStyle = this.getAttackVisualStyle(comboCards);
     if (result.didAttack) {
       this.busy = true;
       this.refreshButtons();
       this.armFlowWatchdog("dice-resolution", 3200, () => this.safeSettleAfterCardUse());
       try {
-        this.rollDiceAfterHit(result.damage, settle, runId);
+        this.rollDiceAfterHit(result.damage, settle, runId, visualStyle);
       } catch (err) {
         console.error("[BATTLE] rollDiceAfterHit threw", err);
         settle();
@@ -1157,6 +1162,15 @@ export class CardBattleSystem {
     if (didGuard) this.playGuardEffect("player");
     if (duel.didWin || !attemptedAttack) this.flashLog(`${def.roleLabel}${comboBonusText} 사용`);
     return { didAttack, damage: Math.max(1, resolvedAttackDamage) };
+  }
+
+  private getAttackVisualStyle(cards: TarotCardState[]): AttackVisualStyle {
+    const id = cards[0]?.cardId ?? "attack";
+    if (id === "temp_smash") return "smash";
+    if (id === "temp_lifesteal" || id === "temp_drain_poison") return "drain";
+    if (id === "temp_poison_arrow" || id === "temp_strong_poison") return "poison";
+    if (id === "temp_counter" || id === "temp_disarm") return "counter";
+    return "normal";
   }
 
   private applyTemporaryCardEffects(card: TarotCardState, def: CardDef, routedAttackPartId?: PartId) {
@@ -2006,9 +2020,14 @@ export class CardBattleSystem {
     });
   }
 
-  private rollDiceAfterHit(baseDamage: number, onComplete?: () => void, runId = this.battleRunId) {
+  private rollDiceAfterHit(
+    baseDamage: number,
+    onComplete?: () => void,
+    runId = this.battleRunId,
+    visualStyle: AttackVisualStyle = "normal"
+  ) {
     const { width } = this.scene.scale;
-    this.playAttackEffect("enemy", baseDamage);
+    this.playAttackEffect("enemy", baseDamage, visualStyle);
     let settled = false;
     const settle = (origin: string) => {
       void origin;
@@ -2028,7 +2047,7 @@ export class CardBattleSystem {
       if (roll.critical) {
         const criticalDamage = Math.max(4, Math.round(baseDamage * 0.85));
         this.applyDirectDamage(this.enemy, criticalDamage);
-        this.playAttackEffect("enemy", criticalDamage);
+        this.playAttackEffect("enemy", criticalDamage, visualStyle);
         this.flashLog(`Critical Hit! 추가 내구도 ${criticalDamage} 감소`);
         this.refreshAll();
         if (this.enemy.hp > 0) this.maybeShowEnemySpeech();
@@ -2212,13 +2231,13 @@ export class CardBattleSystem {
     void width;
     this.enemyPartPanel?.destroy();
     this.enemyPartRows = {};
-    const panelW = u(146);
-    const rowH = u(30);
+    const panelW = u(230);
+    const rowH = u(48);
     const x = panelW / 2 + u(12);
-    const y = Math.min(height - u(430), u(286));
+    const y = Math.min(height - u(500), u(308));
     const panel = this.scene.add.container(x, y).setDepth(610);
     const bg = this.scene.add
-      .rectangle(0, 0, panelW, rowH * this.enemy.parts.length + u(30), 0x07070d, 0.5)
+      .rectangle(0, 0, panelW, rowH * this.enemy.parts.length + u(46), 0x07070d, 0.58)
       .setStrokeStyle(u(1), 0xd4a656, 0.55);
     const title = this.scene.add
       .text(0, -rowH * this.enemy.parts.length * 0.5 - u(3), "파츠 능력", {
@@ -2231,7 +2250,7 @@ export class CardBattleSystem {
     this.enemyPoisonText = this.scene.add
       .text(0, -rowH * this.enemy.parts.length * 0.5 + u(10), "", {
         fontFamily: "serif",
-        fontSize: px(8),
+        fontSize: px(9),
         color: "#9df06a",
         fontStyle: "bold",
         stroke: "#102812",
@@ -2241,42 +2260,51 @@ export class CardBattleSystem {
     panel.add([bg, title, this.enemyPoisonText]);
 
     this.enemy.parts.forEach((part, idx) => {
-      const rowY = -rowH * (this.enemy.parts.length - 1) * 0.5 + idx * rowH + u(10);
+      const rowY = -rowH * (this.enemy.parts.length - 1) * 0.5 + idx * rowH + u(14);
       const row = this.scene.add.container(0, rowY);
       const rowBg = this.scene.add
-        .rectangle(0, 0, panelW - u(10), u(26), 0x1b1420, 0.62)
+        .rectangle(0, 0, panelW - u(14), u(42), 0x1b1420, 0.66)
         .setStrokeStyle(u(0.7), 0x8f6a34, 0.45);
+      const marker = this.scene.add.rectangle(-panelW / 2 + u(13), 0, u(4), u(31), this.getPartAccentColor(part), 0.96);
       const name = this.scene.add
-        .text(-panelW / 2 + u(12), -u(5), part.displayName, {
+        .text(-panelW / 2 + u(22), -u(10), part.displayName, {
           fontFamily: "serif",
-          fontSize: px(8),
+          fontSize: px(10),
           color: "#f3e6c9",
           fontStyle: "bold",
         })
         .setOrigin(0, 0.5);
-      const hpText = this.scene.add
-        .text(panelW / 2 - u(12), -u(5), `${part.hp}/${part.maxHp}`, {
+      const abilityText = this.scene.add
+        .text(-panelW / 2 + u(22), u(10), this.getPartAbilityText(part), {
           fontFamily: "serif",
-          fontSize: px(7),
+          fontSize: px(7.2),
+          color: "#bba37e",
+          fontStyle: "bold",
+        })
+        .setOrigin(0, 0.5);
+      const hpText = this.scene.add
+        .text(panelW / 2 - u(12), -u(11), `${part.hp}/${part.maxHp}`, {
+          fontFamily: "serif",
+          fontSize: px(8.5),
           color: "#9ad0ff",
           fontStyle: "bold",
         })
         .setOrigin(1, 0.5);
-      const hpBg = this.scene.add.rectangle(0, u(5), panelW - u(24), u(5), 0x271620, 0.9);
+      const hpBg = this.scene.add.rectangle(panelW / 2 - u(58), u(7), u(88), u(8), 0x271620, 0.9);
       const hpFill = this.scene.add
-        .rectangle(-(panelW - u(24)) / 2, u(5), panelW - u(24), u(4), 0x9ad0ff, 0.95)
+        .rectangle(panelW / 2 - u(102), u(7), u(88), u(7), 0x9ad0ff, 0.95)
         .setOrigin(0, 0.5);
       const counterText = this.scene.add
-        .text(0, u(13), this.getPartCounterText(part), {
+        .text(panelW / 2 - u(12), u(18), this.getPartCounterText(part), {
           fontFamily: "serif",
-          fontSize: px(6.5),
+          fontSize: px(7),
           color: "#ffd572",
           fontStyle: "bold",
         })
-        .setOrigin(0.5);
-      row.add([rowBg, name, hpText, hpBg, hpFill, counterText]);
+        .setOrigin(1, 0.5);
+      row.add([rowBg, marker, name, abilityText, hpText, hpBg, hpFill, counterText]);
       panel.add(row);
-      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, w: panelW - u(10), h: u(26) };
+      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, abilityText, w: panelW - u(14), h: u(42) };
     });
 
     this.enemyPartPanel = panel;
@@ -2289,10 +2317,13 @@ export class CardBattleSystem {
       const row = this.enemyPartRows[part.id];
       if (!row) continue;
       row.hpText.setText(`${part.hp}/${part.maxHp}`);
-      row.hpFill.width = (u(122) * Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1));
+      const hpRatio = Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1);
+      row.hpFill.width = u(88) * hpRatio;
       row.counterText.setText(this.getPartCounterText(part));
+      row.abilityText.setText(part.destroyed ? "파괴됨" : this.getPartAbilityText(part));
       row.bg.setFillStyle(part.destroyed ? 0x2a2222 : 0x1b1420, part.destroyed ? 0.36 : 0.62);
-      row.hpFill.setFillStyle(part.destroyed ? 0x777777 : 0x9ad0ff, part.destroyed ? 0.5 : 0.95);
+      const hpColor = hpRatio > 0.62 ? 0x58d68d : hpRatio > 0.32 ? 0xffd572 : 0xff5e7a;
+      row.hpFill.setFillStyle(part.destroyed ? 0x777777 : hpColor, part.destroyed ? 0.5 : 0.95);
     }
   }
 
@@ -2306,6 +2337,40 @@ export class CardBattleSystem {
       return "첫 타 무효";
     }
     return this.getPartAbilityLabel(part.ability);
+  }
+
+  private getPartAbilityText(part: EnemyRuntimePart) {
+    switch (part.ability.kind) {
+      case "shieldOnTurnStart":
+        return `보호막 +${part.ability.value}/턴`;
+      case "damageReductionPercent":
+        return `받는 데미지 -${Math.round(part.ability.value * 100)}%`;
+      case "healOnTurnStart":
+        return `매 턴 HP +${part.ability.value}`;
+      case "periodicStrongAttack":
+        return `${part.ability.intervalTurns}턴마다 강공 x${part.ability.value}`;
+      case "autoParryFirstHitPerTurn":
+        return "첫 공격 무효/턴";
+      case "berserkBelowHpRatio":
+        return `HP ${Math.round(part.ability.threshold * 100)}% 이하 광폭화`;
+    }
+  }
+
+  private getPartAccentColor(part: EnemyRuntimePart) {
+    switch (part.id) {
+      case "circlet":
+        return 0xffd572;
+      case "cape":
+        return 0xe06b4f;
+      case "sweater":
+        return 0x9ad0ff;
+      case "skirt":
+        return 0xd78cff;
+      case "shoes":
+        return 0x82ffe6;
+      case "underwear":
+        return 0xff8fb3;
+    }
   }
 
   private getPartAbilityLabel(ability: PartAbility) {
@@ -2631,6 +2696,59 @@ export class CardBattleSystem {
       alpha: 0.3,
       duration: 1200,
       delay: 800,
+    });
+  }
+
+  private playTurnAnnouncement() {
+    if (!this.overlay || this.finished) return;
+    const { width, height } = this.scene.scale;
+    // Top enemy HP/intent lives around y 95-125, so this sits below it.
+    const y = Math.max(u(158), height * 0.17);
+    const text = this.trackEffect(
+      this.scene.add
+        .text(width / 2, y, `${this.turn}턴`, {
+          fontFamily: "serif",
+          fontSize: `${Math.round(width * 0.12)}px`,
+          color: "#fff3b0",
+          fontStyle: "bold",
+          stroke: "#3b1b08",
+          strokeThickness: u(4),
+          shadow: {
+            offsetX: 0,
+            offsetY: u(4),
+            color: "#000000",
+            blur: u(10),
+            fill: true,
+          },
+        })
+        .setOrigin(0.5)
+        .setAlpha(0)
+        .setScale(0.78)
+        .setDepth(900)
+    );
+    this.overlay.add(text);
+    this.scene.tweens.add({
+      targets: text,
+      alpha: { from: 0, to: 1 },
+      scale: { from: 0.78, to: 1.08 },
+      y: y - u(8),
+      duration: 260,
+      ease: "Back.Out",
+      yoyo: true,
+      hold: 850,
+      onComplete: () => {
+        if (!text.scene) return;
+        this.scene.tweens.add({
+          targets: text,
+          alpha: 0,
+          y: text.y - u(16),
+          duration: 360,
+          ease: "Cubic.easeIn",
+          onComplete: () => {
+            if (text.scene) text.destroy();
+          },
+        });
+      },
     });
   }
 
@@ -2971,54 +3089,72 @@ export class CardBattleSystem {
     });
   }
 
-  private playAttackEffect(target: "enemy" | "player", amount = 0) {
+  private playAttackEffect(target: "enemy" | "player", amount = 0, style: AttackVisualStyle = "normal") {
     const { width, height } = this.scene.scale;
-    const y = target === "enemy" ? u(180) : height - u(280);
+    const y = target === "enemy" ? Math.max(u(190), height * 0.38) : height - u(280);
     const x = width / 2;
-    const color = target === "enemy" ? 0xff5e7a : 0xffd572;
-    this.scene.cameras.main.shake(target === "enemy" ? 150 : 220, target === "enemy" ? 0.006 : 0.009);
+    const color = target === "enemy" ? this.getAttackEffectColor(style) : 0xffd572;
+    const strong = amount >= 20 || style !== "normal";
+    const lineWidth = style === "normal" ? u(8) : u(14);
+    if (target === "player" || amount >= 25) {
+      this.scene.cameras.main.shake(target === "enemy" ? 170 : 220, target === "enemy" ? 0.005 : 0.009);
+    }
 
     const slash = this.trackEffect(this.scene.add.graphics().setDepth(720));
-    slash.lineStyle(u(8), color, 0.95);
+    slash.lineStyle(lineWidth, color, 0.95);
     slash.beginPath();
-    slash.moveTo(x - u(150), y - u(52));
-    slash.lineTo(x + u(150), y + u(52));
+    slash.moveTo(x - u(strong ? 190 : 150), y - u(strong ? 66 : 52));
+    slash.lineTo(x + u(strong ? 190 : 150), y + u(strong ? 66 : 52));
     slash.strokePath();
-    slash.lineStyle(u(3), 0xffffff, 0.9);
+    slash.lineStyle(style === "normal" ? u(3) : u(5), 0xffffff, 0.9);
     slash.beginPath();
-    slash.moveTo(x - u(112), y - u(34));
-    slash.lineTo(x + u(112), y + u(34));
+    slash.moveTo(x - u(strong ? 146 : 112), y - u(strong ? 46 : 34));
+    slash.lineTo(x + u(strong ? 146 : 112), y + u(strong ? 46 : 34));
     slash.strokePath();
     this.overlay?.add(slash);
 
-    const burst = this.trackEffect(this.scene.add.circle(x, y, u(18), color, 0.35).setDepth(721));
+    const flash = this.trackEffect(this.scene.add.ellipse(x, y, u(210), u(300), 0xffffff, strong ? 0.24 : 0.14).setDepth(719));
+    const burst = this.trackEffect(this.scene.add.circle(x, y, u(strong ? 34 : 18), color, strong ? 0.5 : 0.35).setDepth(721));
+    const shock = this.trackEffect(
+      this.scene.add
+        .circle(x, y, u(strong ? 52 : 28), 0xffffff, 0)
+        .setStrokeStyle(u(strong ? 5 : 3), color, strong ? 0.95 : 0.65)
+        .setDepth(721)
+    );
+    this.overlay?.add([flash, shock]);
     this.overlay?.add(burst);
     if (amount > 0) {
+      const bigHit = amount >= 20;
       const damage = this.trackEffect(
         this.scene.add
-          .text(x, y - u(54), `-${amount}`, {
+          .text(x + Phaser.Math.Between(-u(18), u(18)), y - u(54), `-${amount}`, {
             fontFamily: "serif",
-            fontSize: px(20),
-            color: "#ffffff",
+            fontSize: px(bigHit ? 28 : 20),
+            color: bigHit ? "#ffd572" : "#ffffff",
             fontStyle: "bold",
-            stroke: "#5a1018",
-            strokeThickness: u(2),
+            stroke: bigHit ? "#7a1212" : "#5a1018",
+            strokeThickness: u(bigHit ? 3 : 2),
           })
           .setOrigin(0.5)
+          .setAngle(Phaser.Math.Between(-7, 7))
           .setDepth(722)
       );
       this.overlay?.add(damage);
       this.scene.tweens.add({
         targets: damage,
         y: damage.y - u(36),
+        scale: { from: bigHit ? 1.22 : 1.05, to: 0.92 },
         alpha: 0,
-        duration: 520,
+        duration: bigHit ? 680 : 520,
         ease: "Cubic.easeOut",
         onComplete: () => {
           if (damage.scene) damage.destroy();
         },
       });
     }
+
+    if (style === "drain") this.playReturnLightEffect(0xff5e7a);
+    if (style === "poison") this.playPoisonBurstTrail(x, y);
 
     this.scene.tweens.add({
       targets: slash,
@@ -3039,6 +3175,77 @@ export class CardBattleSystem {
       ease: "Cubic.easeOut",
       onComplete: () => {
         if (burst.scene) burst.destroy();
+      },
+    });
+    this.scene.tweens.add({
+      targets: flash,
+      alpha: 0,
+      duration: 150,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        if (flash.scene) flash.destroy();
+      },
+    });
+    this.scene.tweens.add({
+      targets: shock,
+      alpha: 0,
+      scaleX: 1.45,
+      scaleY: 1.45,
+      duration: 360,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (shock.scene) shock.destroy();
+      },
+    });
+  }
+
+  private getAttackEffectColor(style: AttackVisualStyle) {
+    switch (style) {
+      case "smash":
+        return 0xffd572;
+      case "drain":
+        return 0xff5e7a;
+      case "poison":
+        return 0x8cff66;
+      case "counter":
+        return 0x82ffe6;
+      case "normal":
+        return 0xff5e7a;
+    }
+  }
+
+  private playReturnLightEffect(color: number) {
+    const { width, height } = this.scene.scale;
+    const beam = this.trackEffect(this.scene.add.graphics().setDepth(723));
+    beam.lineStyle(u(4), color, 0.78);
+    beam.beginPath();
+    beam.moveTo(width / 2, Math.max(u(190), height * 0.38));
+    beam.lineTo(width * 0.38, height - u(280));
+    beam.strokePath();
+    this.overlay?.add(beam);
+    this.scene.tweens.add({
+      targets: beam,
+      alpha: 0,
+      duration: 520,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (beam.scene) beam.destroy();
+      },
+    });
+  }
+
+  private playPoisonBurstTrail(x: number, y: number) {
+    const haze = this.trackEffect(this.scene.add.circle(x + u(24), y + u(8), u(40), 0x5abf4a, 0.18).setDepth(720));
+    this.overlay?.add(haze);
+    this.scene.tweens.add({
+      targets: haze,
+      alpha: 0,
+      scaleX: 1.8,
+      scaleY: 1.5,
+      duration: 520,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (haze.scene) haze.destroy();
       },
     });
   }

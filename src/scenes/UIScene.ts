@@ -351,11 +351,11 @@ export class UIScene extends Phaser.Scene {
 
   private drawSideIconDock(width: number, _height: number) {
     const c = this.add.container(0, 0).setDepth(1650);
-    const size = u(58);
+    const size = u(75);
     const topSize = size * 1.5;
-    const gap = u(14);
-    const x = width - u(52);
-    const topY = u(190);
+    const gap = u(18);
+    const x = width - u(66);
+    const topY = u(210);
     const childIcons = MENU_ICONS.slice(1, 5);
     const childEntries: Array<{ setVisible: (visible: boolean) => unknown }> = [];
     const setChildVisible = (visible: boolean) => {
@@ -387,7 +387,7 @@ export class UIScene extends Phaser.Scene {
       const label = this.add
         .text(x, y + diameter * 0.48, icon.label, {
           fontFamily: "serif",
-          fontSize: px(8),
+          fontSize: px(10.5),
           color: COLORS.text,
           fontStyle: "bold",
         })
