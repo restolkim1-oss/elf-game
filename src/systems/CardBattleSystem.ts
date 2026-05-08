@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import type { PartDef } from "../data/parts";
+import { findFusionRecipe, type CardFusionRecipe, type FusionEffect, type FusionRole } from "../data/cardFusionRecipes";
 import { DiceRoller } from "./Dice";
 import { UI_SCALE } from "../main";
 
@@ -20,13 +21,18 @@ const ENEMY_REACTION_LINES = [
   "생각보다 강하네?",
 ];
 
-type CardId = "attack" | "powerAttack" | "defense" | "heal" | "parry";
-type CardRole = "attack" | "defense" | "heal" | "parry";
+type BaseCardId = "attack" | "powerAttack" | "defense" | "heal" | "parry";
+type TempCardId = `temp_${string}`;
+type CardId = BaseCardId | TempCardId;
+type CardRole = FusionRole;
 
 type CardEffect =
   | { kind: "attack"; amount: number }
   | { kind: "block"; amount: number }
   | { kind: "heal"; amount: number }
+  | { kind: "energy"; amount: number }
+  | { kind: "drain"; amount: number }
+  | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
   | { kind: "parry"; amount: number };
 
 interface CardDef {
@@ -46,6 +52,9 @@ interface CardDef {
   psyche: number;
   damage: number;
   risk: number;
+  isTemporary?: boolean;
+  fusionRecipeId?: string;
+  cannotFuse?: boolean;
 }
 
 interface TarotCardState {
@@ -59,6 +68,9 @@ interface TarotCardState {
   power: number;
   damage: number;
   risk: number;
+  isTemporary?: boolean;
+  fusionRecipeId?: string;
+  cannotFuse?: boolean;
 }
 
 interface TarotBattleCard {
@@ -86,7 +98,7 @@ function calculateCardPower(card: Pick<CardDef, "level" | "attack" | "defense" |
   return card.level * 5 + card.attack * 2 + card.defense + card.psyche;
 }
 
-const CARDS: Record<CardId, CardDef> = {
+const CARDS: Record<string, CardDef> = {
   attack: {
     id: "attack",
     characterName: "엘리",
@@ -179,7 +191,7 @@ const CARDS: Record<CardId, CardDef> = {
   },
 };
 
-const STARTER_DECK: CardId[] = [
+const STARTER_DECK: BaseCardId[] = [
   "attack", "attack", "attack", "attack",
   "powerAttack", "powerAttack",
   "defense", "defense", "defense", "defense",
@@ -221,6 +233,7 @@ export class CardBattleSystem {
   private cancelled = false;
   private finished = false;
   private busy = false;
+  private activePartId = "";
 
   private player!: SideState;
   private enemy!: SideState;
@@ -351,6 +364,7 @@ export class CardBattleSystem {
     };
     this.energy = ENERGY_MAX;
     this.turn = 1;
+    this.activePartId = part.id;
     this.deck = shuffle(STARTER_DECK.map((cardId) => this.createTarotCard(cardId)));
     this.hand = [];
     this.discard = [];
@@ -630,6 +644,7 @@ export class CardBattleSystem {
 
   private endPlayerTurn() {
     if (this.busy || this.finished) return;
+    this.removeTemporaryCardsFromHand(true);
     this.busy = true;
     this.refreshButtons();
     this.armFlowWatchdog("enemy-turn", 3200, () => {
@@ -766,6 +781,18 @@ export class CardBattleSystem {
       this.refreshAll();
       return;
     }
+    if (card.isTemporary && this.selectedCards.length > 0) {
+      this.selectedCards = [card];
+      this.flashLog(`${def.roleLabel} 임시 카드 선택`);
+      this.refreshAll();
+      return;
+    }
+    if (this.selectedCards.some((c) => c.isTemporary)) {
+      this.selectedCards = [card];
+      this.flashLog(`${def.roleLabel} 카드 선택`);
+      this.refreshAll();
+      return;
+    }
     if (this.selectedCards.length > 0) {
       const role = CARDS[this.selectedCards[0].cardId].role;
       if (def.role !== role) {
@@ -801,7 +828,7 @@ export class CardBattleSystem {
     this.selectedCards = [];
     this.energy -= comboCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
-    this.discard.push(...comboCards);
+    this.discard.push(...comboCards.filter((card) => !card.isTemporary));
     let result: { didAttack: boolean; damage: number };
     try {
       result = this.applyCardEffects(comboCards);
@@ -838,6 +865,9 @@ export class CardBattleSystem {
   private applyCardEffects(cards: TarotCardState[]) {
     const card = cards[0];
     const def = CARDS[card.cardId];
+    if (card.isTemporary) {
+      return this.applyTemporaryCardEffects(card, def);
+    }
     const role = def.role;
     const comboMultiplier = 1 + Math.max(0, cards.length - 1) * (role === "defense" ? 0.25 : 0.35);
     const totalEffect = this.sumComboEffect(cards);
@@ -887,6 +917,65 @@ export class CardBattleSystem {
     if (didGuard) this.playGuardEffect("player");
     if (duel.didWin || !attemptedAttack) this.flashLog(`${def.roleLabel}${comboBonusText} 사용`);
     return { didAttack, damage: duel.damage };
+  }
+
+  private applyTemporaryCardEffects(card: TarotCardState, def: CardDef) {
+    let didAttack = false;
+    let didGuard = false;
+    let totalDamage = 0;
+    const logParts: string[] = [];
+
+    for (const effect of def.effects) {
+      switch (effect.kind) {
+        case "attack": {
+          const dealt = this.applyAttack(this.enemy, effect.amount);
+          didAttack = true;
+          totalDamage += effect.amount;
+          logParts.push(`피해 ${dealt}`);
+          break;
+        }
+        case "partBonusAttack": {
+          if (effect.partIds.includes(this.activePartId)) {
+            const dealt = this.applyAttack(this.enemy, effect.amount);
+            didAttack = true;
+            totalDamage += effect.amount;
+            logParts.push(`${effect.label} ${dealt}`);
+          }
+          break;
+        }
+        case "drain": {
+          const dealt = this.applyAttack(this.enemy, effect.amount);
+          const before = this.player.hp;
+          this.player.hp = Math.min(this.player.hpMax, this.player.hp + dealt);
+          didAttack = true;
+          totalDamage += effect.amount;
+          logParts.push(`흡혈 ${dealt}`);
+          if (this.player.hp > before) logParts.push(`회복 +${this.player.hp - before}`);
+          break;
+        }
+        case "block":
+          this.player.block += effect.amount;
+          didGuard = true;
+          logParts.push(`보호막 +${effect.amount}`);
+          break;
+        case "heal": {
+          const before = this.player.hp;
+          this.player.hp = Math.min(this.player.hpMax, this.player.hp + effect.amount);
+          logParts.push(`회복 +${this.player.hp - before}`);
+          break;
+        }
+        case "energy":
+          this.energy = Math.min(ENERGY_MAX, this.energy + effect.amount);
+          logParts.push(`기력 +${effect.amount}`);
+          break;
+        case "parry":
+          break;
+      }
+    }
+
+    if (didGuard) this.playGuardEffect("player");
+    this.flashLog(`${def.roleLabel} 사용 · ${logParts.join(" · ")}`);
+    return { didAttack, damage: Math.max(1, totalDamage || card.damage) };
   }
 
   private settleAfterCardUse() {
@@ -990,7 +1079,7 @@ export class CardBattleSystem {
   private highlightMergeTarget(source: TarotCardState, pointerX?: number, pointerY?: number) {
     if (this.busy || this.finished) return;
     this.handObjs.forEach((slot) => {
-      if (slot.card === source || slot.card.cardId !== source.cardId) {
+      if (slot.card === source || !this.canFuseCards(source, slot.card)) {
         slot.dropGlow.setAlpha(0);
         return;
       }
@@ -1006,33 +1095,42 @@ export class CardBattleSystem {
     this.handObjs.forEach((slot) => slot.dropGlow.setAlpha(0));
   }
 
+  private canFuseCards(a: TarotCardState, b: TarotCardState) {
+    if (a.cannotFuse || b.cannotFuse || a.isTemporary || b.isTemporary) return false;
+    return findFusionRecipe(CARDS[a.cardId].role, CARDS[b.cardId].role) !== null;
+  }
+
   private tryMergeDraggedCard(source: TarotCardState, pointerX: number, pointerY: number) {
     const targetSlot = this.handObjs.find(
       (slot) =>
         slot.card !== source &&
-        slot.card.cardId === source.cardId &&
         this.isPointInsideSlot(pointerX, pointerY, slot)
     );
     if (!targetSlot) return false;
 
     const target = targetSlot.card;
-    target.level += 1;
-    target.attack += Math.max(1, Math.ceil(source.attack * 0.45));
-    target.defense += Math.max(1, Math.ceil(source.defense * 0.45));
-    target.psyche += Math.max(1, Math.ceil(source.psyche * 0.45));
-    target.damage += Math.max(1, Math.ceil(source.damage * 0.5));
-    target.risk = Math.max(1, Math.ceil((target.risk + source.risk) * 0.45));
-    target.power = calculateCardPower({
-      level: target.level,
-      attack: target.attack,
-      defense: target.defense,
-      psyche: target.psyche,
-    });
+    if (source.cannotFuse || target.cannotFuse || source.isTemporary || target.isTemporary) {
+      this.playBlockedMergeEffect(targetSlot);
+      this.flashLog("임시 카드는 재합성할 수 없습니다");
+      return false;
+    }
 
-    this.hand = this.hand.filter((card) => card !== source);
-    this.selectedCards = this.selectedCards.filter((card) => card !== source);
+    const sourceDef = CARDS[source.cardId];
+    const targetDef = CARDS[target.cardId];
+    const recipe = findFusionRecipe(sourceDef.role, targetDef.role);
+    if (!recipe) {
+      this.playBlockedMergeEffect(targetSlot);
+      this.flashLog("아직 발견되지 않은 조합입니다");
+      return false;
+    }
+
+    const fusedCard = this.createFusionCard(recipe, source, target);
+    const targetIndex = this.hand.indexOf(target);
+    this.hand = this.hand.filter((card) => card !== source && card !== target);
+    this.hand.splice(Math.max(0, targetIndex), 0, fusedCard);
+    this.selectedCards = this.selectedCards.filter((card) => card !== source && card !== target);
     this.playMergeEffect(targetSlot);
-    this.flashLog(`${CARDS[target.cardId].roleLabel} 카드 합성! 전투력 ${target.power}`);
+    this.flashLog(`${recipe.result.name} 임시 카드 생성!`);
     this.refreshAll();
     return true;
   }
@@ -1067,7 +1165,29 @@ export class CardBattleSystem {
     });
   }
 
+  private playBlockedMergeEffect(slot: HandCard) {
+    const ring = this.trackEffect(
+      this.scene.add
+        .rectangle(slot.container.x, slot.container.y, slot.cardW + u(16), slot.cardH + u(16), 0xffffff, 0)
+        .setStrokeStyle(u(4), 0xff4d5f, 0.95)
+        .setDepth(821)
+    );
+    this.overlay?.add(ring);
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      alpha: 0,
+      duration: 260,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        if (ring.scene) ring.destroy();
+      },
+    });
+  }
+
   private applyAttack(target: SideState, raw: number) {
+    const beforeHp = target.hp;
     let remaining = raw;
     if (target.block > 0) {
       const absorbed = Math.min(target.block, remaining);
@@ -1077,6 +1197,7 @@ export class CardBattleSystem {
     if (remaining > 0) {
       target.hp = Math.max(0, target.hp - remaining);
     }
+    return Math.max(0, beforeHp - target.hp);
   }
 
   private applyDirectDamage(target: SideState, amount: number) {
@@ -1098,6 +1219,74 @@ export class CardBattleSystem {
       damage: Math.max(1, Math.round(power / 5)),
       risk: Math.max(def.risk, Math.round((power - def.defense) / 7)),
     };
+  }
+
+  private createFusionCard(
+    recipe: CardFusionRecipe,
+    source: TarotCardState,
+    target: TarotCardState
+  ): TarotCardState {
+    const attack = Math.max(1, Math.round((source.attack + target.attack) * 0.78));
+    const defense = Math.max(1, Math.round((source.defense + target.defense) * 0.78));
+    const psyche = Math.max(1, Math.round((source.psyche + target.psyche) * 0.78));
+    const level = Math.max(source.level, target.level);
+    const power = calculateCardPower({ level, attack, defense, psyche });
+    const damage = Math.max(1, this.sumFusionDamage(recipe.result.effects));
+    const tempDef: CardDef = {
+      id: recipe.result.id,
+      characterName: "합성",
+      role: recipe.result.role,
+      roleLabel: recipe.result.name,
+      name: recipe.result.name,
+      cost: recipe.result.cost,
+      description: recipe.result.description,
+      effects: recipe.result.effects,
+      color: recipe.result.color,
+      isReversed: false,
+      level,
+      attack,
+      defense,
+      psyche,
+      damage,
+      risk: 1,
+    };
+    CARDS[recipe.result.id] = tempDef;
+    return {
+      uid: this.nextCardUid++,
+      cardId: recipe.result.id,
+      isReversed: false,
+      level,
+      attack,
+      defense,
+      psyche,
+      power,
+      damage,
+      risk: 1,
+      isTemporary: true,
+      fusionRecipeId: recipe.id,
+      cannotFuse: true,
+    };
+  }
+
+  private sumFusionDamage(effects: FusionEffect[]) {
+    return effects.reduce((sum, effect) => {
+      if (effect.kind === "attack" || effect.kind === "drain" || effect.kind === "partBonusAttack") {
+        return sum + effect.amount;
+      }
+      return sum;
+    }, 0);
+  }
+
+  private removeTemporaryCardsFromHand(showFeedback = false) {
+    const before = this.hand.length;
+    this.hand = this.hand.filter((card) => !card.isTemporary);
+    this.selectedCards = this.selectedCards.filter((card) => !card.isTemporary);
+    const removed = before - this.hand.length;
+    if (removed > 0 && showFeedback) {
+      this.flashLog("사용하지 않은 임시 카드는 사라졌습니다");
+      this.refreshAll();
+    }
+    return removed;
   }
 
   private currentEnemyCard(): TarotBattleCard {
@@ -1380,17 +1569,27 @@ export class CardBattleSystem {
   ): HandCard {
     const def = CARDS[card.cardId];
     const selected = this.selectedCards.includes(card);
+    const temporary = card.isTemporary === true;
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
     const sameRole =
       this.selectedCards.length === 0 ||
       CARDS[this.selectedCards[0].cardId].role === def.role ||
       selected;
-    const playable = sameRole && selectedCost + (selected ? 0 : def.cost) <= this.energy && !this.busy && !this.finished;
+    const playable =
+      sameRole &&
+      selectedCost + (selected ? 0 : def.cost) <= this.energy &&
+      !this.busy &&
+      !this.finished &&
+      (!temporary || this.selectedCards.length === 0 || selected);
 
-    const cardFill = selected ? 0xffe8aa : playable ? 0xefe0bd : 0x5f5446;
+    const cardFill = temporary ? 0x172a32 : selected ? 0xffe8aa : playable ? 0xefe0bd : 0x5f5446;
     const bg = this.scene.add
       .rectangle(0, 0, cardW, cardH, cardFill, playable ? 1 : 0.84)
-      .setStrokeStyle(u(selected ? 4 : 2), selected ? 0xfff0a8 : 0x8f6a34, playable ? 1 : 0.62)
+      .setStrokeStyle(
+        u(selected ? 4 : 2),
+        temporary ? 0x82ffe6 : selected ? 0xfff0a8 : 0x8f6a34,
+        playable ? 1 : 0.62
+      )
       .setInteractive({ useHandCursor: true });
     const selectionAura = this.scene.add
       .rectangle(0, 0, cardW + u(10), cardH + u(10), 0xffffff, 0)
@@ -1402,7 +1601,7 @@ export class CardBattleSystem {
       .rectangle(0, u(8), cardW - u(14), cardH - u(20), 0xffffff, 0)
       .setStrokeStyle(u(1), 0x7b5b34, playable ? 0.75 : 0.4);
     const accent = this.scene.add
-      .rectangle(0, -cardH / 2 + u(17), cardW - u(8), u(34), def.color, playable ? 0.95 : 0.62)
+      .rectangle(0, -cardH / 2 + u(17), cardW - u(8), u(34), temporary ? 0x166d79 : def.color, playable ? 0.95 : 0.62)
       .setStrokeStyle(u(1), 0xffd572, 0.55);
     const headerLine = this.scene.add.rectangle(0, -cardH / 2 + u(36), cardW - u(22), u(2), 0xffd572, 0.7);
     const costCircle = this.scene.add
@@ -1427,9 +1626,9 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const reverseBadge = this.scene.add
-      .text(cardW / 2 - u(20), -cardH / 2 + u(17), `C${def.cost}`, {
+      .text(cardW / 2 - u(20), -cardH / 2 + u(17), temporary ? "TEMP" : `C${def.cost}`, {
         fontFamily: "serif",
-        fontSize: px(9),
+        fontSize: px(temporary ? 7 : 9),
         color: "#fdf3d4",
         fontStyle: "bold",
         stroke: "#1a0f22",
@@ -1456,13 +1655,13 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     const descBg = this.scene.add
-      .rectangle(0, u(43), cardW - u(26), u(58), 0xfff7df, playable ? 0.7 : 0.16)
-      .setStrokeStyle(u(0.8), 0xa5793e, playable ? 0.55 : 0.22);
+      .rectangle(0, u(43), cardW - u(26), u(58), temporary ? 0xd8fff7 : 0xfff7df, playable ? 0.7 : 0.16)
+      .setStrokeStyle(u(0.8), temporary ? 0x82ffe6 : 0xa5793e, playable ? 0.55 : 0.22);
     const descText = this.scene.add
       .text(0, u(43), `${def.description}\n같은 역할 선택\n합체`, {
         fontFamily: "serif",
         fontSize: px(7.8),
-        color: playable ? "#2f2520" : "#cfc0b0",
+        color: temporary ? "#08282c" : playable ? "#2f2520" : "#cfc0b0",
         fontStyle: "bold",
         align: "center",
         wordWrap: { width: cardW - u(22) },
@@ -1481,10 +1680,14 @@ export class CardBattleSystem {
     const cornerRb = this.scene.add
       .rectangle(cardW / 2 - u(9), cardH / 2 - u(9), cornerSize, cornerSize, 0xffd572, 0.82)
       .setAngle(45);
+    const tempGlow = this.scene.add
+      .rectangle(0, 0, cardW + u(7), cardH + u(7), 0xffffff, 0)
+      .setStrokeStyle(u(2), 0x82ffe6, temporary ? 0.8 : 0);
 
     const container = this.scene.add
       .container(x, y, [
         dropGlow,
+        tempGlow,
         selectionAura,
         bg,
         innerFrame,
