@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import type { PartDef } from "../data/parts";
 import { findFusionRecipe, type CardFusionRecipe, type FusionEffect, type FusionRole } from "../data/cardFusionRecipes";
+import { ENEMY_PART_CONFIG, type EnemyPart, type PartAbility, type PartId } from "../data/enemyParts";
 import { DiceRoller } from "./Dice";
 import { UI_SCALE } from "../main";
 
@@ -210,6 +211,21 @@ interface Intent {
   amount: number;
 }
 
+interface EnemyRuntimePart {
+  id: PartId;
+  displayName: string;
+  hp: number;
+  maxHp: number;
+  destroyed: boolean;
+  ability: PartAbility;
+}
+
+interface EnemyPartRuntimeState {
+  skirtTurnCounter: number;
+  strongAttackNext: boolean;
+  shoesNegateFirstHit: boolean;
+}
+
 interface SideState {
   hp: number;
   hpMax: number;
@@ -221,6 +237,8 @@ interface SideState {
   autoParryNextAttack: { counterDamage: number; turnsLeft: number } | null;
   dodgeFirstAttackOfNextEnemyTurn: { turnsLeft: number } | null;
   dodgeNextAttack: { turnsLeft: number } | null;
+  parts: EnemyRuntimePart[];
+  partRuntime: EnemyPartRuntimeState;
 }
 
 type CardBattleResult = (success: boolean) => void;
@@ -276,6 +294,18 @@ export class CardBattleSystem {
   private handObjs: HandCard[] = [];
   private endTurnBg!: Phaser.GameObjects.Rectangle;
   private useCardsBg!: Phaser.GameObjects.Rectangle;
+  private enemyPartPanel: Phaser.GameObjects.Container | null = null;
+  private enemyPartRows: Partial<
+    Record<
+      PartId,
+      {
+        container: Phaser.GameObjects.Container;
+        bg: Phaser.GameObjects.Rectangle;
+        hpText: Phaser.GameObjects.Text;
+        counterText: Phaser.GameObjects.Text;
+      }
+    >
+  > = {};
 
   private handAreaY = 0;
   private handAreaWidth = 0;
@@ -294,6 +324,25 @@ export class CardBattleSystem {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+  }
+
+  private createPartRuntimeState(): EnemyPartRuntimeState {
+    return {
+      skirtTurnCounter: 0,
+      strongAttackNext: false,
+      shoesNegateFirstHit: false,
+    };
+  }
+
+  private createEnemyParts(configKey: keyof typeof ENEMY_PART_CONFIG): EnemyRuntimePart[] {
+    return ENEMY_PART_CONFIG[configKey].map((part: EnemyPart) => ({
+      id: part.id,
+      displayName: part.displayName,
+      hp: part.maxHp,
+      maxHp: part.maxHp,
+      destroyed: false,
+      ability: { ...part.ability },
+    }));
   }
 
   start(part: PartDef, done: CardBattleResult) {
@@ -338,6 +387,9 @@ export class CardBattleSystem {
     this.killTrackedEffectTweens();
     this.speechBubble?.destroy();
     this.speechBubble = null;
+    this.enemyPartPanel?.destroy();
+    this.enemyPartPanel = null;
+    this.enemyPartRows = {};
     this.lastSpeechAt = 0;
     this.overlay?.destroy();
     this.overlay = null;
@@ -369,6 +421,8 @@ export class CardBattleSystem {
       autoParryNextAttack: null,
       dodgeFirstAttackOfNextEnemyTurn: null,
       dodgeNextAttack: null,
+      parts: [],
+      partRuntime: this.createPartRuntimeState(),
     };
     this.enemy = {
       hp: enemyHpMax,
@@ -381,6 +435,8 @@ export class CardBattleSystem {
       autoParryNextAttack: null,
       dodgeFirstAttackOfNextEnemyTurn: null,
       dodgeNextAttack: null,
+      parts: this.createEnemyParts("default"),
+      partRuntime: this.createPartRuntimeState(),
     };
     this.energy = ENERGY_MAX;
     this.turn = 1;
@@ -472,6 +528,7 @@ export class CardBattleSystem {
       hpMax: this.enemy.hpMax,
       intent: this.getEnemyIntentLabel(),
     });
+    this.drawEnemyPartPanel(width, height);
 
     // -- Bottom: player command panel (status, hand and actions) --
     const playerStripY = height - u(278);
@@ -661,6 +718,7 @@ export class CardBattleSystem {
     }
     this.tickWeakenNextAttackLifetime();
     this.tickDefensiveReactionLifetimes();
+    this.prepareEnemyPartsForPlayerTurn();
     this.player.block = 0;
     this.energy = ENERGY_MAX;
     this.selectedCards = [];
@@ -683,6 +741,8 @@ export class CardBattleSystem {
   private runEnemyTurn() {
     if (this.finished) return;
     const runId = this.battleRunId;
+    this.applyEnemyPartTurnStartPassives();
+    this.refreshAll();
     // Burn ticks on enemy at start of enemy turn
     if (this.enemy.burn) {
       const dmg = this.enemy.burn.dmg;
@@ -761,17 +821,18 @@ export class CardBattleSystem {
   }
 
   private resolveEnemyAttackIntent(rawAmount: number) {
-    const prevention = this.resolveEnemyAttackPrevention(rawAmount);
+    const { amount: poweredAmount, labels: powerLabels } = this.applyEnemyOutgoingDamagePassives(rawAmount);
+    const prevention = this.resolveEnemyAttackPrevention(poweredAmount);
     if (prevention.prevented) {
       return {
         incoming: 0,
         reflected: prevention.counterDamage,
-        log: prevention.log,
+        log: powerLabels.length > 0 ? `${prevention.log} (${powerLabels.join(" · ")})` : prevention.log,
       };
     }
 
-    const parts: string[] = [];
-    let incoming = rawAmount;
+    const parts: string[] = [...powerLabels];
+    let incoming = poweredAmount;
 
     if (this.enemy.weaken) {
       incoming = Math.max(0, incoming - this.enemy.weaken.amount);
@@ -998,13 +1059,15 @@ export class CardBattleSystem {
     let attemptedAttack = false;
     let didAttack = false;
     let didGuard = false;
+    let resolvedAttackDamage = duel.damage;
 
     switch (role) {
       case "attack":
         attemptedAttack = true;
         if (duel.didWin) {
-          this.applyAttack(this.enemy, duel.damage);
-          didAttack = true;
+          const result = this.applyPlayerDamageToEnemy(duel.damage);
+          didAttack = !result.prevented;
+          resolvedAttackDamage = result.appliedAmount;
         } else {
           this.applyDirectDamage(this.player, duel.backlash);
           this.playAttackEffect("player", duel.backlash);
@@ -1024,15 +1087,16 @@ export class CardBattleSystem {
         didGuard = true;
         if (duel.didWin) {
           const counter = Math.max(1, Math.round(duel.damage * 0.7));
-          this.applyAttack(this.enemy, counter);
-          didAttack = true;
+          const result = this.applyPlayerDamageToEnemy(counter);
+          didAttack = !result.prevented;
+          resolvedAttackDamage = result.appliedAmount;
         }
         break;
       }
     }
     if (didGuard) this.playGuardEffect("player");
     if (duel.didWin || !attemptedAttack) this.flashLog(`${def.roleLabel}${comboBonusText} 사용`);
-    return { didAttack, damage: duel.damage };
+    return { didAttack, damage: Math.max(1, resolvedAttackDamage) };
   }
 
   private applyTemporaryCardEffects(card: TarotCardState, def: CardDef) {
@@ -1044,27 +1108,30 @@ export class CardBattleSystem {
     for (const effect of def.effects) {
       switch (effect.kind) {
         case "attack": {
-          const dealt = this.applyAttack(this.enemy, effect.amount);
-          didAttack = true;
-          totalDamage += effect.amount;
+          const result = this.applyPlayerDamageToEnemy(effect.amount);
+          const dealt = result.dealt;
+          didAttack = didAttack || !result.prevented;
+          totalDamage += result.appliedAmount;
           logParts.push(`피해 ${dealt}`);
           break;
         }
         case "partBonusAttack": {
           if (effect.partIds.includes(this.activePartId)) {
-            const dealt = this.applyAttack(this.enemy, effect.amount);
-            didAttack = true;
-            totalDamage += effect.amount;
+            const result = this.applyPlayerDamageToEnemy(effect.amount);
+            const dealt = result.dealt;
+            didAttack = didAttack || !result.prevented;
+            totalDamage += result.appliedAmount;
             logParts.push(`${effect.label} ${dealt}`);
           }
           break;
         }
         case "drain": {
-          const dealt = this.applyAttack(this.enemy, effect.amount);
+          const result = this.applyPlayerDamageToEnemy(effect.amount);
+          const dealt = result.dealt;
           const before = this.player.hp;
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + dealt);
-          didAttack = true;
-          totalDamage += effect.amount;
+          didAttack = didAttack || !result.prevented;
+          totalDamage += result.appliedAmount;
           logParts.push(`흡혈 ${dealt}`);
           if (this.player.hp > before) logParts.push(`회복 +${this.player.hp - before}`);
           break;
@@ -1355,6 +1422,89 @@ export class CardBattleSystem {
     target.hp = Math.max(0, target.hp - amount);
   }
 
+  private applyPlayerDamageToEnemy(raw: number) {
+    const shoes = this.getActiveEnemyPartByAbility("autoParryFirstHitPerTurn");
+    if (shoes && this.enemy.partRuntime.shoesNegateFirstHit) {
+      this.enemy.partRuntime.shoesNegateFirstHit = false;
+      this.highlightEnemyPart(shoes.id);
+      this.flashLog(`${shoes.displayName} 효과! 첫 공격 무효`);
+      return { dealt: 0, appliedAmount: 0, prevented: true };
+    }
+
+    let amount = Math.max(0, raw);
+    const cape = this.getActiveEnemyPartByAbility("damageReductionPercent");
+    if (cape && cape.ability.kind === "damageReductionPercent") {
+      amount = Math.max(0, Math.round(amount * (1 - cape.ability.value)));
+      this.highlightEnemyPart(cape.id);
+    }
+
+    const dealt = this.applyAttack(this.enemy, amount);
+    return { dealt, appliedAmount: amount, prevented: false };
+  }
+
+  private applyEnemyOutgoingDamagePassives(raw: number) {
+    let amount = Math.max(0, raw);
+    const labels: string[] = [];
+    const underwear = this.getActiveEnemyPartByAbility("berserkBelowHpRatio");
+    if (
+      underwear &&
+      underwear.ability.kind === "berserkBelowHpRatio" &&
+      this.enemy.hp / Math.max(1, this.enemy.hpMax) <= underwear.ability.threshold
+    ) {
+      amount = Math.max(0, Math.round(amount * underwear.ability.value));
+      labels.push("광폭화");
+      this.highlightEnemyPart(underwear.id);
+    }
+
+    const skirt = this.getActiveEnemyPartByAbility("periodicStrongAttack");
+    if (skirt && skirt.ability.kind === "periodicStrongAttack" && this.enemy.partRuntime.strongAttackNext) {
+      amount = Math.max(0, Math.round(amount * skirt.ability.value));
+      this.enemy.partRuntime.strongAttackNext = false;
+      labels.push("강공");
+      this.highlightEnemyPart(skirt.id);
+    }
+
+    return { amount, labels };
+  }
+
+  private applyEnemyPartTurnStartPassives() {
+    for (const part of this.enemy.parts) {
+      if (part.destroyed) continue;
+      switch (part.ability.kind) {
+        case "shieldOnTurnStart":
+          this.enemy.block += part.ability.value;
+          this.highlightEnemyPart(part.id);
+          break;
+        case "healOnTurnStart":
+          this.enemy.hp = Math.min(this.enemy.hpMax, this.enemy.hp + part.ability.value);
+          this.highlightEnemyPart(part.id);
+          break;
+        case "periodicStrongAttack":
+          this.enemy.partRuntime.skirtTurnCounter += 1;
+          if (this.enemy.partRuntime.skirtTurnCounter >= part.ability.intervalTurns) {
+            this.enemy.partRuntime.skirtTurnCounter = 0;
+            this.enemy.partRuntime.strongAttackNext = true;
+            this.highlightEnemyPart(part.id);
+          }
+          break;
+        case "damageReductionPercent":
+        case "autoParryFirstHitPerTurn":
+        case "berserkBelowHpRatio":
+          break;
+      }
+    }
+  }
+
+  private prepareEnemyPartsForPlayerTurn() {
+    const shoes = this.getActiveEnemyPartByAbility("autoParryFirstHitPerTurn");
+    this.enemy.partRuntime.shoesNegateFirstHit = shoes !== null;
+    if (shoes) this.highlightEnemyPart(shoes.id);
+  }
+
+  private getActiveEnemyPartByAbility(kind: PartAbility["kind"]) {
+    return this.enemy.parts.find((part) => !part.destroyed && part.ability.kind === kind) ?? null;
+  }
+
   private createTarotCard(cardId: CardId): TarotCardState {
     const def = CARDS[cardId];
     const power = calculateCardPower(def);
@@ -1642,6 +1792,7 @@ export class CardBattleSystem {
     this.refreshHpBars();
     this.refreshIntent();
     this.refreshStatus();
+    this.refreshEnemyPartPanel();
     this.refreshHandRender();
     this.refreshButtons();
     this.emitEnemyEnergyUpdate();
@@ -1696,9 +1847,11 @@ export class CardBattleSystem {
   }
 
   private getEnemyAttackPreventionLabel() {
-    if (this.player.autoParryNextAttack) return " (자동 패링)";
-    if (this.player.dodgeNextAttack || this.player.dodgeFirstAttackOfNextEnemyTurn) return " (회피)";
-    return "";
+    const labels: string[] = [];
+    if (this.enemy.partRuntime.strongAttackNext) labels.push("강공");
+    if (this.player.autoParryNextAttack) labels.push("자동 패링");
+    else if (this.player.dodgeNextAttack || this.player.dodgeFirstAttackOfNextEnemyTurn) labels.push("회피");
+    return labels.length > 0 ? ` (${labels.join(" · ")})` : "";
   }
 
   private hasEnemyAttackPrevention() {
@@ -1710,10 +1863,27 @@ export class CardBattleSystem {
   }
 
   private getPredictedEnemyAttackDamage(rawAmount: number) {
-    let shown = rawAmount;
+    let shown = this.predictEnemyOutgoingDamagePassives(rawAmount);
     if (this.enemy.weaken) shown = Math.max(0, shown - this.enemy.weaken.amount);
     if (this.enemy.weakenNextAttack && !this.hasEnemyAttackPrevention()) {
       shown = Math.max(0, Math.round(shown * (1 - this.enemy.weakenNextAttack.ratio)));
+    }
+    return shown;
+  }
+
+  private predictEnemyOutgoingDamagePassives(rawAmount: number) {
+    let shown = Math.max(0, rawAmount);
+    const underwear = this.getActiveEnemyPartByAbility("berserkBelowHpRatio");
+    if (
+      underwear &&
+      underwear.ability.kind === "berserkBelowHpRatio" &&
+      this.enemy.hp / Math.max(1, this.enemy.hpMax) <= underwear.ability.threshold
+    ) {
+      shown = Math.max(0, Math.round(shown * underwear.ability.value));
+    }
+    const skirt = this.getActiveEnemyPartByAbility("periodicStrongAttack");
+    if (skirt && skirt.ability.kind === "periodicStrongAttack" && this.enemy.partRuntime.strongAttackNext) {
+      shown = Math.max(0, Math.round(shown * skirt.ability.value));
     }
     return shown;
   }
@@ -1745,6 +1915,105 @@ export class CardBattleSystem {
     this.energyText.setText(`기력 ${this.energy} / ${ENERGY_MAX}${selectedCost > 0 ? ` · 선택 ${selectedCost}` : ""}`);
     this.turnText.setText(`턴 ${this.turn} / ${MAX_TURNS}`);
     this.deckCountText.setText(`덱 ${this.deck.length} · 버림 ${this.discard.length}`);
+  }
+
+  private drawEnemyPartPanel(width: number, height: number) {
+    this.enemyPartPanel?.destroy();
+    this.enemyPartRows = {};
+    const panelW = u(132);
+    const rowH = u(26);
+    const x = width - panelW / 2 - u(12);
+    const y = Math.min(height - u(415), u(246));
+    const panel = this.scene.add.container(x, y).setDepth(610);
+    const bg = this.scene.add
+      .rectangle(0, 0, panelW, rowH * this.enemy.parts.length + u(30), 0x07070d, 0.5)
+      .setStrokeStyle(u(1), 0xd4a656, 0.55);
+    const title = this.scene.add
+      .text(0, -rowH * this.enemy.parts.length * 0.5 - u(3), "파츠 능력", {
+        fontFamily: "serif",
+        fontSize: px(9),
+        color: "#f3e6c9",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    panel.add([bg, title]);
+
+    this.enemy.parts.forEach((part, idx) => {
+      const rowY = -rowH * (this.enemy.parts.length - 1) * 0.5 + idx * rowH + u(10);
+      const row = this.scene.add.container(0, rowY);
+      const rowBg = this.scene.add
+        .rectangle(0, 0, panelW - u(12), u(22), 0x1b1420, 0.62)
+        .setStrokeStyle(u(0.7), 0x8f6a34, 0.45);
+      const name = this.scene.add
+        .text(-panelW / 2 + u(13), -u(4), part.displayName, {
+          fontFamily: "serif",
+          fontSize: px(7.5),
+          color: "#f3e6c9",
+          fontStyle: "bold",
+        })
+        .setOrigin(0, 0.5);
+      const hpText = this.scene.add
+        .text(panelW / 2 - u(13), -u(4), `${part.hp}/${part.maxHp}`, {
+          fontFamily: "serif",
+          fontSize: px(7),
+          color: "#9ad0ff",
+          fontStyle: "bold",
+        })
+        .setOrigin(1, 0.5);
+      const counterText = this.scene.add
+        .text(0, u(7), this.getPartCounterText(part), {
+          fontFamily: "serif",
+          fontSize: px(6.5),
+          color: "#ffd572",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
+      row.add([rowBg, name, hpText, counterText]);
+      panel.add(row);
+      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpText, counterText };
+    });
+
+    this.enemyPartPanel = panel;
+    this.overlay?.add(panel);
+    this.refreshEnemyPartPanel();
+  }
+
+  private refreshEnemyPartPanel() {
+    for (const part of this.enemy.parts) {
+      const row = this.enemyPartRows[part.id];
+      if (!row) continue;
+      row.hpText.setText(`${part.hp}/${part.maxHp}`);
+      row.counterText.setText(this.getPartCounterText(part));
+      row.bg.setFillStyle(part.destroyed ? 0x2a2222 : 0x1b1420, part.destroyed ? 0.36 : 0.62);
+    }
+  }
+
+  private getPartCounterText(part: EnemyRuntimePart) {
+    if (part.ability.kind === "periodicStrongAttack") {
+      if (this.enemy.partRuntime.strongAttackNext) return "강공 준비";
+      return `${this.enemy.partRuntime.skirtTurnCounter}/${part.ability.intervalTurns}`;
+    }
+    if (part.ability.kind === "autoParryFirstHitPerTurn" && this.enemy.partRuntime.shoesNegateFirstHit) {
+      return "첫 타 무효";
+    }
+    return this.getPartAbilityLabel(part.ability);
+  }
+
+  private getPartAbilityLabel(ability: PartAbility) {
+    switch (ability.kind) {
+      case "shieldOnTurnStart":
+        return `보호막 +${ability.value}`;
+      case "damageReductionPercent":
+        return `피해 -${Math.round(ability.value * 100)}%`;
+      case "healOnTurnStart":
+        return `회복 +${ability.value}`;
+      case "periodicStrongAttack":
+        return `강공 x${ability.value}`;
+      case "autoParryFirstHitPerTurn":
+        return "첫 타 무효";
+      case "berserkBelowHpRatio":
+        return `광폭 x${ability.value}`;
+    }
   }
 
   private refreshHandRender() {
@@ -2042,6 +2311,27 @@ export class CardBattleSystem {
       alpha: 0.3,
       duration: 1200,
       delay: 800,
+    });
+  }
+
+  private highlightEnemyPart(partId: PartId) {
+    const row = this.enemyPartRows[partId];
+    if (!row) return;
+    this.scene.tweens.killTweensOf(row.bg);
+    row.bg.setFillStyle(0x4a3317, 0.9);
+    row.bg.setStrokeStyle(u(1.2), 0xffd572, 0.95);
+    this.scene.tweens.add({
+      targets: row.bg,
+      alpha: { from: 1, to: 0.65 },
+      duration: 220,
+      yoyo: true,
+      repeat: 1,
+      onComplete: () => {
+        if (!row.bg.scene) return;
+        row.bg.setAlpha(1);
+        row.bg.setFillStyle(0x1b1420, 0.62);
+        row.bg.setStrokeStyle(u(0.7), 0x8f6a34, 0.45);
+      },
     });
   }
 
