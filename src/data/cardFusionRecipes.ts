@@ -1,6 +1,6 @@
 import type { PartId } from "./enemyParts";
 
-export type FusionRole = "attack" | "defense" | "heal" | "parry";
+export type FusionRole = "attack" | "defense" | "heal" | "parry" | "poison";
 
 export type FusionEffect =
   | { kind: "attack"; amount: number }
@@ -10,6 +10,7 @@ export type FusionEffect =
   | { kind: "block"; amount: number }
   | { kind: "heal"; amount: number }
   | { kind: "energy"; amount: number }
+  | { kind: "applyPoison"; amount: number }
   | { kind: "reflectNextAttack"; ratio: number }
   | { kind: "weakenNextAttack"; ratio: number; maxTurns: number }
   | { kind: "autoParryNextAttack"; counterDamage: number; maxTurns: number }
@@ -96,6 +97,51 @@ export const CARD_FUSION_RECIPES: CardFusionRecipe[] = [
       color: 0xb83268,
       description: "피해를 주고\n그만큼 회복",
       effects: [{ kind: "drain", amount: 9 }],
+    },
+  },
+  {
+    id: "poison_poison_strong_poison",
+    roles: ["poison", "poison"],
+    result: {
+      id: "temp_strong_poison",
+      name: "맹독",
+      role: "poison",
+      cost: 2,
+      color: 0x54b848,
+      description: "적에게 독 스택 +7",
+      effects: [{ kind: "applyPoison", amount: 7 }],
+    },
+  },
+  {
+    id: "attack_poison_poison_arrow",
+    roles: ["attack", "poison"],
+    result: {
+      id: "temp_poison_arrow",
+      name: "독화살",
+      role: "attack",
+      cost: 2,
+      color: 0x78c83b,
+      description: "데미지 5 + 독 스택 +3",
+      effects: [
+        { kind: "attack", amount: 5 },
+        { kind: "applyPoison", amount: 3 },
+      ],
+    },
+  },
+  {
+    id: "heal_poison_drain_poison",
+    roles: ["heal", "poison"],
+    result: {
+      id: "temp_drain_poison",
+      name: "흡독",
+      role: "poison",
+      cost: 2,
+      color: 0x6fc06a,
+      description: "독 스택 +4\nHP +5",
+      effects: [
+        { kind: "applyPoison", amount: 4 },
+        { kind: "heal", amount: 5 },
+      ],
     },
   },
   {

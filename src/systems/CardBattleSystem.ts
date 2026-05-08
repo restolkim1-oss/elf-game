@@ -14,6 +14,7 @@ const START_HAND = 5;
 const TARGET_HAND = 5;
 const HAND_LIMIT = 7;
 const MAX_TURNS = 12;
+const POISON_STACK_CAP = 99;
 const ENEMY_REACTION_LINES = [
   "제법인데?",
   "이럴수가! 잘하네?",
@@ -22,7 +23,7 @@ const ENEMY_REACTION_LINES = [
   "생각보다 강하네?",
 ];
 
-type BaseCardId = "attack" | "powerAttack" | "defense" | "heal" | "parry";
+type BaseCardId = "attack" | "powerAttack" | "defense" | "heal" | "parry" | "poison";
 type TempCardId = `temp_${string}`;
 type CardId = BaseCardId | TempCardId;
 type CardRole = FusionRole;
@@ -32,6 +33,7 @@ type CardEffect =
   | { kind: "block"; amount: number }
   | { kind: "heal"; amount: number }
   | { kind: "energy"; amount: number }
+  | { kind: "applyPoison"; amount: number }
   | { kind: "drain"; amount: number }
   | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
   | { kind: "partDamage"; partId: PartId; amount: number }
@@ -178,6 +180,24 @@ const CARDS: Record<string, CardDef> = {
     damage: 1,
     risk: 3,
   },
+  poison: {
+    id: "poison",
+    characterName: "벨라돈나",
+    role: "poison",
+    roleLabel: "독",
+    name: "독",
+    cost: 1,
+    description: "적에게 독 스택 +3",
+    effects: [{ kind: "applyPoison", amount: 3 }],
+    color: 0x5abf4a,
+    isReversed: false,
+    level: 1,
+    attack: 4,
+    defense: 3,
+    psyche: 10,
+    damage: 1,
+    risk: 3,
+  },
   parry: {
     id: "parry",
     characterName: "미르",
@@ -204,6 +224,7 @@ const STARTER_DECK: BaseCardId[] = [
   "defense", "defense", "defense", "defense",
   "heal", "heal",
   "parry", "parry", "parry",
+  "poison", "poison",
 ];
 
 type IntentKind = "attack" | "block";
@@ -237,6 +258,7 @@ interface SideState {
   hp: number;
   hpMax: number;
   block: number;
+  poisonStacks: number;
   burn: { dmg: number; turns: number } | null;
   weaken: { amount: number; turns: number } | null;
   reflectNextAttack: { ratio: number } | null;
@@ -295,6 +317,7 @@ export class CardBattleSystem {
   private enemyBlockText!: Phaser.GameObjects.Text;
   private enemyIntentText!: Phaser.GameObjects.Text;
   private enemyStatusText!: Phaser.GameObjects.Text;
+  private enemyPoisonText: Phaser.GameObjects.Text | null = null;
   private energyText!: Phaser.GameObjects.Text;
   private turnText!: Phaser.GameObjects.Text;
   private deckCountText!: Phaser.GameObjects.Text;
@@ -403,6 +426,7 @@ export class CardBattleSystem {
     this.enemyPartPanel?.destroy();
     this.enemyPartPanel = null;
     this.enemyPartRows = {};
+    this.enemyPoisonText = null;
     this.lastSpeechAt = 0;
     this.overlay?.destroy();
     this.overlay = null;
@@ -427,6 +451,7 @@ export class CardBattleSystem {
       hp: PLAYER_HP_MAX,
       hpMax: PLAYER_HP_MAX,
       block: 0,
+      poisonStacks: 0,
       burn: null,
       weaken: null,
       reflectNextAttack: null,
@@ -441,6 +466,7 @@ export class CardBattleSystem {
       hp: enemyHpMax,
       hpMax: enemyHpMax,
       block: 0,
+      poisonStacks: 0,
       burn: null,
       weaken: null,
       reflectNextAttack: null,
@@ -756,7 +782,15 @@ export class CardBattleSystem {
   private runEnemyTurn() {
     if (this.finished) return;
     const runId = this.battleRunId;
-    this.applyEnemyPartTurnStartPassives();
+    this.applyEnemyPartEarlyTurnStartPassives();
+    if (this.processPoisonTick()) {
+      this.refreshAll();
+      this.scene.time.delayedCall(420, () => {
+        if (this.isCurrentRun(runId)) this.finish(true);
+      });
+      return;
+    }
+    this.applyEnemyPartLateTurnStartPassives();
     this.refreshAll();
     // Burn ticks on enemy at start of enemy turn
     if (this.enemy.burn) {
@@ -1104,6 +1138,9 @@ export class CardBattleSystem {
       case "heal":
         this.player.hp = Math.min(this.player.hpMax, this.player.hp + totalEffect);
         break;
+      case "poison":
+        this.applyPoisonToEnemy(totalEffect);
+        break;
       case "parry": {
         const guard = Math.max(1, Math.round(totalEffect * comboMultiplier));
         this.player.block += guard;
@@ -1181,6 +1218,10 @@ export class CardBattleSystem {
         case "energy":
           this.energy = Math.min(ENERGY_MAX, this.energy + effect.amount);
           logParts.push(`기력 +${effect.amount}`);
+          break;
+        case "applyPoison":
+          this.applyPoisonToEnemy(effect.amount);
+          logParts.push(`독 +${effect.amount}`);
           break;
         case "reflectNextAttack":
           this.player.reflectNextAttack = { ratio: effect.ratio };
@@ -1545,6 +1586,23 @@ export class CardBattleSystem {
     target.hp = Math.max(0, target.hp - amount);
   }
 
+  private applyPoisonToEnemy(amount: number) {
+    const applied = Math.max(0, Math.round(amount));
+    if (applied <= 0) return 0;
+    this.enemy.poisonStacks = Math.min(POISON_STACK_CAP, this.enemy.poisonStacks + applied);
+    return applied;
+  }
+
+  private processPoisonTick() {
+    if (this.enemy.poisonStacks <= 0) return false;
+    const damage = this.enemy.poisonStacks;
+    this.applyDirectDamage(this.enemy, damage);
+    this.enemy.poisonStacks = Math.max(0, this.enemy.poisonStacks - 1);
+    this.playPoisonEffect(damage);
+    this.flashLog(`독 ${damage}`);
+    return this.enemy.hp <= 0;
+  }
+
   private createPlayerDamageContext(routedAttackPartId?: PartId): PlayerDamageContext {
     return { shoesChecked: false, prevented: false, routedAttackPartId };
   }
@@ -1661,7 +1719,7 @@ export class CardBattleSystem {
     return { amount, labels };
   }
 
-  private applyEnemyPartTurnStartPassives() {
+  private applyEnemyPartEarlyTurnStartPassives() {
     for (const part of this.enemy.parts) {
       if (part.destroyed) continue;
       switch (part.ability.kind) {
@@ -1674,6 +1732,19 @@ export class CardBattleSystem {
           this.highlightEnemyPart(part.id);
           break;
         case "periodicStrongAttack":
+        case "damageReductionPercent":
+        case "autoParryFirstHitPerTurn":
+        case "berserkBelowHpRatio":
+          break;
+      }
+    }
+  }
+
+  private applyEnemyPartLateTurnStartPassives() {
+    for (const part of this.enemy.parts) {
+      if (part.destroyed) continue;
+      switch (part.ability.kind) {
+        case "periodicStrongAttack":
           this.enemy.partRuntime.skirtTurnCounter += 1;
           if (this.enemy.partRuntime.skirtTurnCounter >= part.ability.intervalTurns) {
             this.enemy.partRuntime.skirtTurnCounter = 0;
@@ -1681,6 +1752,8 @@ export class CardBattleSystem {
             this.highlightEnemyPart(part.id);
           }
           break;
+        case "shieldOnTurnStart":
+        case "healOnTurnStart":
         case "damageReductionPercent":
         case "autoParryFirstHitPerTurn":
         case "berserkBelowHpRatio":
@@ -2113,6 +2186,8 @@ export class CardBattleSystem {
     }
     this.enemyStatusText.setText(enemyParts.join("  ·  "));
 
+    this.enemyPoisonText?.setText(this.enemy.poisonStacks > 0 ? `독 ${this.enemy.poisonStacks}` : "");
+
     const playerParts: string[] = [];
     if (this.player.burn) playerParts.push(`화상 ${this.player.burn.dmg} × ${this.player.burn.turns}턴`);
     if (this.player.weaken) playerParts.push(`약화 -${this.player.weaken.amount}`);
@@ -2153,7 +2228,17 @@ export class CardBattleSystem {
         fontStyle: "bold",
       })
       .setOrigin(0.5);
-    panel.add([bg, title]);
+    this.enemyPoisonText = this.scene.add
+      .text(0, -rowH * this.enemy.parts.length * 0.5 + u(10), "", {
+        fontFamily: "serif",
+        fontSize: px(8),
+        color: "#9df06a",
+        fontStyle: "bold",
+        stroke: "#102812",
+        strokeThickness: u(1),
+      })
+      .setOrigin(0.5);
+    panel.add([bg, title, this.enemyPoisonText]);
 
     this.enemy.parts.forEach((part, idx) => {
       const rowY = -rowH * (this.enemy.parts.length - 1) * 0.5 + idx * rowH + u(10);
@@ -2633,6 +2718,48 @@ export class CardBattleSystem {
       },
     });
     this.highlightEnemyPart(partId);
+  }
+
+  private playPoisonEffect(amount: number) {
+    const { width } = this.scene.scale;
+    const x = width / 2 + u(52);
+    const y = u(190);
+    const cloud = this.trackEffect(this.scene.add.circle(x, y, u(30), 0x5abf4a, 0.28).setDepth(721));
+    const text = this.trackEffect(
+      this.scene.add
+        .text(x, y - u(36), `독 -${amount}`, {
+          fontFamily: "serif",
+          fontSize: px(18),
+          color: "#b8ff8a",
+          fontStyle: "bold",
+          stroke: "#123814",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5)
+        .setDepth(722)
+    );
+    this.overlay?.add([cloud, text]);
+    this.scene.tweens.add({
+      targets: cloud,
+      alpha: 0,
+      scaleX: 1.8,
+      scaleY: 1.8,
+      duration: 540,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (cloud.scene) cloud.destroy();
+      },
+    });
+    this.scene.tweens.add({
+      targets: text,
+      y: text.y - u(30),
+      alpha: 0,
+      duration: 620,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (text.scene) text.destroy();
+      },
+    });
   }
 
   private playCounterReadyEffect() {
