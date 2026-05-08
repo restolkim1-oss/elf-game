@@ -230,6 +230,7 @@ interface EnemyPartRuntimeState {
 interface PlayerDamageContext {
   shoesChecked: boolean;
   prevented: boolean;
+  routedAttackPartId?: PartId;
 }
 
 interface SideState {
@@ -311,6 +312,8 @@ export class CardBattleSystem {
         hpFill: Phaser.GameObjects.Rectangle;
         hpText: Phaser.GameObjects.Text;
         counterText: Phaser.GameObjects.Text;
+        w: number;
+        h: number;
       }
     >
   > = {};
@@ -1001,35 +1004,41 @@ export class CardBattleSystem {
 
   private playSelectedCards() {
     if (this.busy || this.finished) return;
-    const runId = this.battleRunId;
     if (this.selectedCards.length === 0) {
       this.flashLog("사용할 카드를 선택하세요");
       return;
     }
-    const comboCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
-    if (comboCost > this.energy) {
-      this.flashLog(`기력 부족 (${comboCost} / ${this.energy})`);
-      return;
-    }
     const comboCards = [...this.selectedCards];
     this.selectedCards = [];
-    this.energy -= comboCost;
+    this.playCardGroup(comboCards);
+  }
+
+  private playCardGroup(comboCards: TarotCardState[], routedAttackPartId?: PartId) {
+    if (this.busy || this.finished) return false;
+    const runId = this.battleRunId;
+    const actualCost = comboCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    if (actualCost > this.energy) {
+      this.flashLog(`기력 부족 (${actualCost} / ${this.energy})`);
+      return false;
+    }
+    this.energy -= actualCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
+    this.selectedCards = this.selectedCards.filter((c) => !comboCards.includes(c));
     this.discard.push(...comboCards.filter((card) => !card.isTemporary));
     let result: { didAttack: boolean; damage: number };
     try {
-      result = this.applyCardEffects(comboCards);
+      result = this.applyCardEffects(comboCards, routedAttackPartId);
     } catch (err) {
       console.error("[BATTLE] applyCardEffects threw", err);
       this.busy = false;
       this.refreshAll();
-      return;
+      return false;
     }
     this.refreshAll();
     if (this.enemy.hp <= 0) {
       this.busy = true;
       this.finish(true);
-      return;
+      return true;
     }
     if (result.didAttack) this.maybeShowEnemySpeech();
 
@@ -1047,13 +1056,14 @@ export class CardBattleSystem {
     } else {
       settle();
     }
+    return true;
   }
 
-  private applyCardEffects(cards: TarotCardState[]) {
+  private applyCardEffects(cards: TarotCardState[], routedAttackPartId?: PartId) {
     const card = cards[0];
     const def = CARDS[card.cardId];
     if (card.isTemporary) {
-      return this.applyTemporaryCardEffects(card, def);
+      return this.applyTemporaryCardEffects(card, def, routedAttackPartId);
     }
     const role = def.role;
     const comboMultiplier = 1 + Math.max(0, cards.length - 1) * (role === "defense" ? 0.25 : 0.35);
@@ -1070,7 +1080,7 @@ export class CardBattleSystem {
     let didAttack = false;
     let didGuard = false;
     let resolvedAttackDamage = duel.damage;
-    const damageContext = this.createPlayerDamageContext();
+    const damageContext = this.createPlayerDamageContext(routedAttackPartId);
 
     switch (role) {
       case "attack":
@@ -1110,12 +1120,12 @@ export class CardBattleSystem {
     return { didAttack, damage: Math.max(1, resolvedAttackDamage) };
   }
 
-  private applyTemporaryCardEffects(card: TarotCardState, def: CardDef) {
+  private applyTemporaryCardEffects(card: TarotCardState, def: CardDef, routedAttackPartId?: PartId) {
     let didAttack = false;
     let didGuard = false;
     let totalDamage = 0;
     const logParts: string[] = [];
-    const damageContext = this.createPlayerDamageContext();
+    const damageContext = this.createPlayerDamageContext(routedAttackPartId);
 
     for (const effect of def.effects) {
       switch (effect.kind) {
@@ -1332,6 +1342,98 @@ export class CardBattleSystem {
     this.handObjs.forEach((slot) => slot.dropGlow.setAlpha(0));
   }
 
+  private highlightPartDropTargets(source: TarotCardState, pointerX?: number, pointerY?: number) {
+    if (this.busy || this.finished) return;
+    const overCard = pointerX !== undefined && pointerY !== undefined && this.getHandSlotAt(pointerX, pointerY, source) !== null;
+    const canRoute = this.cardHasRoutableAttack(source);
+    for (const part of this.enemy.parts) {
+      const row = this.enemyPartRows[part.id];
+      if (!row) continue;
+      const hovered = !overCard && pointerX !== undefined && pointerY !== undefined && this.isPointInsidePartRow(pointerX, pointerY, part.id);
+      const available = canRoute && !part.destroyed;
+      if (!available) {
+        row.bg.setStrokeStyle(u(0.7), part.destroyed ? 0x666666 : 0x8f6a34, part.destroyed ? 0.35 : 0.45);
+        if (hovered) row.counterText.setText(part.destroyed ? "파괴됨" : "드롭 불가");
+        continue;
+      }
+      row.bg.setStrokeStyle(u(hovered ? 1.7 : 1), hovered ? 0x82ffe6 : 0xffd572, hovered ? 1 : 0.72);
+      if (hovered) row.counterText.setText(this.getRoutedDamagePreview(source));
+    }
+  }
+
+  private clearPartDropHighlights() {
+    this.refreshEnemyPartPanel();
+  }
+
+  private getHandSlotAt(x: number, y: number, source?: TarotCardState) {
+    return (
+      this.handObjs.find((slot) => slot.card !== source && this.isPointInsideSlot(x, y, slot)) ?? null
+    );
+  }
+
+  private getEnemyPartAt(x: number, y: number) {
+    return (
+      this.enemy.parts.find((part) => this.isPointInsidePartRow(x, y, part.id)) ?? null
+    );
+  }
+
+  private isPointInsidePartRow(x: number, y: number, partId: PartId) {
+    const row = this.enemyPartRows[partId];
+    if (!row || !this.enemyPartPanel) return false;
+    const cx = this.enemyPartPanel.x + row.container.x;
+    const cy = this.enemyPartPanel.y + row.container.y;
+    return x >= cx - row.w / 2 && x <= cx + row.w / 2 && y >= cy - row.h / 2 && y <= cy + row.h / 2;
+  }
+
+  private cardHasRoutableAttack(card: TarotCardState) {
+    return CARDS[card.cardId].effects.some((effect) => effect.kind === "attack" || effect.kind === "drain");
+  }
+
+  private getRoutableAttackAmount(card: TarotCardState) {
+    return CARDS[card.cardId].effects.reduce((sum, effect) => {
+      if (effect.kind === "attack" || effect.kind === "drain") return sum + effect.amount;
+      return sum;
+    }, 0);
+  }
+
+  private getRoutedDamagePreview(card: TarotCardState) {
+    const shoes = this.getActiveEnemyPartByAbility("autoParryFirstHitPerTurn");
+    if (shoes && this.enemy.partRuntime.shoesNegateFirstHit) return "데미지 0 (신발 무효)";
+    let amount = this.getRoutableAttackAmount(card);
+    const cape = this.getActiveEnemyPartByAbility("damageReductionPercent");
+    if (cape && cape.ability.kind === "damageReductionPercent") {
+      amount = Math.max(0, Math.round(amount * (1 - cape.ability.value)));
+    }
+    return `데미지 ${amount}`;
+  }
+
+  private handleDraggedCardDrop(card: TarotCardState, pointerX: number, pointerY: number) {
+    const cardSlot = this.getHandSlotAt(pointerX, pointerY, card);
+    if (cardSlot) {
+      return this.tryMergeDraggedCard(card, pointerX, pointerY);
+    }
+
+    const targetPart = this.getEnemyPartAt(pointerX, pointerY);
+    if (targetPart) {
+      if (!this.cardHasRoutableAttack(card) || targetPart.destroyed) {
+        const sourceSlot = this.handObjs.find((slot) => slot.card === card);
+        if (sourceSlot) this.playBlockedMergeEffect(sourceSlot);
+        this.flashLog(targetPart.destroyed ? "파괴된 파츠에는 드롭할 수 없습니다" : "공격 효과가 있는 카드만 타겟팅할 수 있습니다");
+        return false;
+      }
+      return this.playCardOnEnemyPart(card, targetPart.id);
+    }
+
+    return false;
+  }
+
+  private playCardOnEnemyPart(card: TarotCardState, partId: PartId) {
+    if (!this.hand.includes(card) || this.busy || this.finished) return false;
+    const played = this.playCardGroup([card], partId);
+    if (played) this.playPartTargetingEffect(partId);
+    return played;
+  }
+
   private canFuseCards(a: TarotCardState, b: TarotCardState) {
     if (a.cannotFuse || b.cannotFuse || a.isTemporary || b.isTemporary) return false;
     return findFusionRecipe(CARDS[a.cardId].role, CARDS[b.cardId].role) !== null;
@@ -1441,11 +1543,14 @@ export class CardBattleSystem {
     target.hp = Math.max(0, target.hp - amount);
   }
 
-  private createPlayerDamageContext(): PlayerDamageContext {
-    return { shoesChecked: false, prevented: false };
+  private createPlayerDamageContext(routedAttackPartId?: PartId): PlayerDamageContext {
+    return { shoesChecked: false, prevented: false, routedAttackPartId };
   }
 
   private applyPlayerDamageToEnemy(raw: number, context?: PlayerDamageContext) {
+    if (context?.routedAttackPartId) {
+      return this.applyPlayerPartDamage(context.routedAttackPartId, raw, context);
+    }
     const modifier = this.applyActivePlayerDamageModifiers(raw, context);
     if (modifier.prevented) return { dealt: 0, appliedAmount: 0, prevented: true };
     const dealt = this.applyAttack(this.enemy, modifier.amount);
@@ -2083,7 +2188,7 @@ export class CardBattleSystem {
         .setOrigin(0.5);
       row.add([rowBg, name, hpText, hpBg, hpFill, counterText]);
       panel.add(row);
-      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText };
+      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, w: panelW - u(12), h: u(22) };
     });
 
     this.enemyPartPanel = panel;
@@ -2354,6 +2459,7 @@ export class CardBattleSystem {
       if (moved <= u(12)) return;
       container.setPosition(pointer.x, pointer.y);
       this.highlightMergeTarget(card, pointer.x, pointer.y);
+      this.highlightPartDropTargets(card, pointer.x, pointer.y);
     });
     bg.on("pointerup", (pointer: Phaser.Input.Pointer) => {
       const moved =
@@ -2361,7 +2467,8 @@ export class CardBattleSystem {
           ? Math.abs(pointer.x - this.dragStart.x) + Math.abs(pointer.y - this.dragStart.y)
           : 0;
       if (moved > u(24)) {
-        if (!this.tryMergeDraggedCard(card, pointer.x, pointer.y)) {
+        const handled = this.handleDraggedCardDrop(card, pointer.x, pointer.y);
+        if (!handled) {
           this.scene.tweens.add({
             targets: container,
             x,
@@ -2371,10 +2478,12 @@ export class CardBattleSystem {
           });
         }
         this.clearMergeHighlights();
+        this.clearPartDropHighlights();
         this.dragStart = null;
         return;
       }
       this.dragStart = null;
+      this.clearPartDropHighlights();
       const idx = this.handObjs.findIndex((o) => o === slot);
       if (idx >= 0) this.tryPlayCard(idx);
     });
@@ -2383,11 +2492,18 @@ export class CardBattleSystem {
     // `pointerupoutside` instead — without this, dragStart can stay set
     // and the container stays at the elevated depth, leaving the hand
     // visually stuck after the first interaction.
-    bg.on("pointerupoutside", () => {
+    bg.on("pointerupoutside", (pointer: Phaser.Input.Pointer) => {
       if (this.dragStart && this.dragStart.card === card) {
+        const handled = this.handleDraggedCardDrop(card, pointer.x, pointer.y);
         this.dragStart = null;
+        if (handled) {
+          this.clearMergeHighlights();
+          this.clearPartDropHighlights();
+          return;
+        }
       }
       this.clearMergeHighlights();
+      this.clearPartDropHighlights();
       this.scene.tweens.add({
         targets: container,
         x,
@@ -2489,6 +2605,31 @@ export class CardBattleSystem {
         if (burst.scene) burst.destroy();
       },
     });
+  }
+
+  private playPartTargetingEffect(partId: PartId) {
+    const row = this.enemyPartRows[partId];
+    if (!row || !this.enemyPartPanel) return;
+    const targetX = this.enemyPartPanel.x + row.container.x;
+    const targetY = this.enemyPartPanel.y + row.container.y;
+    const { width, height } = this.scene.scale;
+    const beam = this.trackEffect(this.scene.add.graphics().setDepth(824));
+    beam.lineStyle(u(3), 0x82ffe6, 0.9);
+    beam.beginPath();
+    beam.moveTo(width / 2, height - u(150));
+    beam.lineTo(targetX, targetY);
+    beam.strokePath();
+    this.overlay?.add(beam);
+    this.scene.tweens.add({
+      targets: beam,
+      alpha: 0,
+      duration: 320,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (beam.scene) beam.destroy();
+      },
+    });
+    this.highlightEnemyPart(partId);
   }
 
   private playCounterReadyEffect() {
