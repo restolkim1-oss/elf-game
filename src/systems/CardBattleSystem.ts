@@ -2017,7 +2017,7 @@ export class CardBattleSystem {
     this.speechBubble?.destroy();
 
     const x = width * 0.72;
-    const y = height * 0.18;
+    const y = height * 0.13;
     const bubbleW = u(200);
     const bubbleH = u(68);
     const c = this.trackEffect(this.scene.add.container(x, y).setDepth(790));
@@ -2035,11 +2035,11 @@ export class CardBattleSystem {
       -u(24),
       bubbleH / 2 - u(8),
       -u(70),
-      bubbleH / 2 + u(28)
+      bubbleH / 2 + u(12)
     );
     bg.lineStyle(u(2), 0xd4a656, 0.9);
-    bg.lineBetween(-u(58), bubbleH / 2 - u(8), -u(70), bubbleH / 2 + u(28));
-    bg.lineBetween(-u(70), bubbleH / 2 + u(28), -u(24), bubbleH / 2 - u(8));
+    bg.lineBetween(-u(58), bubbleH / 2 - u(8), -u(70), bubbleH / 2 + u(12));
+    bg.lineBetween(-u(70), bubbleH / 2 + u(12), -u(24), bubbleH / 2 - u(8));
 
     const text = this.scene.add
       .text(0, -u(2), line, {
