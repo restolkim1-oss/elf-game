@@ -352,6 +352,7 @@ export class CardBattleSystem {
   private enemyPartPanel: Phaser.GameObjects.Container | null = null;
   private enemyPartTooltip: Phaser.GameObjects.Container | null = null;
   private activeTooltipPartId: PartId | null = null;
+  private enemyPartTooltipPinned = false;
   private enemyPartRows: Partial<
     Record<
       PartId,
@@ -360,7 +361,7 @@ export class CardBattleSystem {
         bg: Phaser.GameObjects.Rectangle;
         hpFill: Phaser.GameObjects.Rectangle;
         hpText: Phaser.GameObjects.Text;
-        counterText: Phaser.GameObjects.Text;
+        dropText: Phaser.GameObjects.Text;
         w: number;
         h: number;
       }
@@ -375,6 +376,9 @@ export class CardBattleSystem {
   private enemyHpBarLeft = 0;
   private dragStart: { x: number; y: number; card: TarotCardState } | null = null;
   private speechBubble: Phaser.GameObjects.Container | null = null;
+  private cardPreview: Phaser.GameObjects.Container | null = null;
+  private cardPreviewTimer: Phaser.Time.TimerEvent | null = null;
+  private cardPreviewPointer: { cardUid: number; x: number; y: number; shown: boolean } | null = null;
   private lastSpeechAt = 0;
   private flowWatchdog: Phaser.Time.TimerEvent | null = null;
   private battleRunId = 0;
@@ -452,7 +456,9 @@ export class CardBattleSystem {
     this.enemyPartTooltip?.destroy();
     this.enemyPartTooltip = null;
     this.activeTooltipPartId = null;
+    this.enemyPartTooltipPinned = false;
     this.enemyPartRows = {};
+    this.clearCardPreview();
     this.enemyPoisonText = null;
     this.playerEnergyOrbs = [];
     this.playerEnergyOrbStates = [];
@@ -1441,15 +1447,16 @@ export class CardBattleSystem {
     for (const part of this.enemy.parts) {
       const row = this.enemyPartRows[part.id];
       if (!row) continue;
+      row.dropText.setText(part.destroyed ? "파괴됨" : "");
       const hovered = !overCard && pointerX !== undefined && pointerY !== undefined && this.isPointInsidePartRow(pointerX, pointerY, part.id);
       const available = canRoute && !part.destroyed;
       if (!available) {
         row.bg.setStrokeStyle(u(0.7), part.destroyed ? 0x666666 : 0x8f6a34, part.destroyed ? 0.35 : 0.45);
-        if (hovered) row.counterText.setText(part.destroyed ? "파괴됨" : "드롭 불가");
+        if (hovered) row.dropText.setText(part.destroyed ? "파괴됨" : "드롭 불가");
         continue;
       }
       row.bg.setStrokeStyle(u(hovered ? 1.7 : 1), hovered ? 0x82ffe6 : 0xffd572, hovered ? 1 : 0.72);
-      if (hovered) row.counterText.setText(this.getRoutedDamagePreview(source));
+      if (hovered) row.dropText.setText(this.getRoutedDamagePreview(source));
     }
   }
 
@@ -2309,6 +2316,7 @@ export class CardBattleSystem {
     this.enemyPartTooltip?.destroy();
     this.enemyPartTooltip = null;
     this.activeTooltipPartId = null;
+    this.enemyPartTooltipPinned = false;
     this.enemyPartRows = {};
     const panelW = u(176);
     const rowH = u(40);
@@ -2346,15 +2354,15 @@ export class CardBattleSystem {
         .setStrokeStyle(u(0.7), 0x8f6a34, 0.45);
       rowBg.setInteractive({ useHandCursor: true });
       rowBg.on("pointerover", () => {
-        if (!this.dragStart) this.showEnemyPartTooltip(part.id);
+        if (!this.dragStart) this.showEnemyPartTooltip(part.id, false);
       });
       rowBg.on("pointerout", () => {
-        if (this.activeTooltipPartId === part.id) this.hideEnemyPartTooltip();
+        if (!this.enemyPartTooltipPinned && this.activeTooltipPartId === part.id) this.hideEnemyPartTooltip();
       });
       rowBg.on("pointerdown", () => {
         if (this.dragStart) return;
         if (this.activeTooltipPartId === part.id) this.hideEnemyPartTooltip();
-        else this.showEnemyPartTooltip(part.id);
+        else this.showEnemyPartTooltip(part.id, true);
       });
       const marker = this.scene.add.rectangle(-panelW / 2 + u(12), 0, u(4), u(25), this.getPartAccentColor(part), 0.96);
       const name = this.scene.add
@@ -2377,17 +2385,17 @@ export class CardBattleSystem {
       const hpFill = this.scene.add
         .rectangle(panelW / 2 - u(83), u(8), u(72), u(6), 0x9ad0ff, 0.95)
         .setOrigin(0, 0.5);
-      const counterText = this.scene.add
-        .text(-panelW / 2 + u(22), u(10), this.getPartCounterText(part), {
+      const dropText = this.scene.add
+        .text(-panelW / 2 + u(22), u(10), part.destroyed ? "파괴됨" : "", {
           fontFamily: "serif",
           fontSize: px(7),
           color: "#ffd572",
           fontStyle: "bold",
         })
         .setOrigin(0, 0.5);
-      row.add([rowBg, marker, name, hpText, hpBg, hpFill, counterText]);
+      row.add([rowBg, marker, name, hpText, hpBg, hpFill, dropText]);
       panel.add(row);
-      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, w: panelW - u(12), h: u(40) };
+      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, dropText, w: panelW - u(12), h: u(40) };
     });
 
     this.enemyPartPanel = panel;
@@ -2402,24 +2410,25 @@ export class CardBattleSystem {
       row.hpText.setText(`${part.hp}/${part.maxHp}`);
       const hpRatio = Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1);
       row.hpFill.width = u(72) * hpRatio;
-      row.counterText.setText(this.getPartCounterText(part));
+      row.dropText.setText(part.destroyed ? "파괴됨" : "");
       row.bg.setFillStyle(part.destroyed ? 0x2a2222 : 0x1b1420, part.destroyed ? 0.36 : 0.62);
       const hpColor = hpRatio > 0.62 ? 0x58d68d : hpRatio > 0.32 ? 0xffd572 : 0xff5e7a;
       row.hpFill.setFillStyle(part.destroyed ? 0x777777 : hpColor, part.destroyed ? 0.5 : 0.95);
     }
   }
 
-  private showEnemyPartTooltip(partId: PartId) {
+  private showEnemyPartTooltip(partId: PartId, pinned: boolean) {
     if (!this.enemyPartPanel) return;
     const part = this.getEnemyPart(partId);
     const row = this.enemyPartRows[partId];
     if (!part || !row) return;
     this.enemyPartTooltip?.destroy();
     this.activeTooltipPartId = partId;
+    this.enemyPartTooltipPinned = pinned;
 
     const panelW = u(176);
-    const tooltipW = u(156);
-    const tooltipH = u(48);
+    const tooltipW = u(178);
+    const tooltipH = u(62);
     const x = this.enemyPartPanel.x + panelW / 2 + tooltipW / 2 + u(10);
     const y = this.enemyPartPanel.y + row.container.y;
     const tip = this.scene.add.container(x, y).setDepth(835);
@@ -2435,9 +2444,9 @@ export class CardBattleSystem {
       })
       .setOrigin(0, 0.5);
     const body = this.scene.add
-      .text(-tooltipW / 2 + u(10), u(9), part.destroyed ? "파괴됨" : this.getPartAbilityText(part), {
+      .text(-tooltipW / 2 + u(10), u(12), part.destroyed ? "파괴됨" : this.getPartTooltipText(part), {
         fontFamily: "serif",
-        fontSize: px(7.8),
+        fontSize: px(7.6),
         color: part.destroyed ? "#999999" : "#ffd572",
         fontStyle: "bold",
         wordWrap: { width: tooltipW - u(20) },
@@ -2461,6 +2470,7 @@ export class CardBattleSystem {
     const tip = this.enemyPartTooltip;
     this.enemyPartTooltip = null;
     this.activeTooltipPartId = null;
+    this.enemyPartTooltipPinned = false;
     if (!tip) return;
     this.scene.tweens.killTweensOf(tip);
     this.scene.tweens.add({
@@ -2474,16 +2484,23 @@ export class CardBattleSystem {
     });
   }
 
-  private getPartCounterText(part: EnemyRuntimePart) {
+  private getPartTooltipText(part: EnemyRuntimePart) {
+    const base = this.getPartAbilityText(part);
+    const state = this.getPartDynamicStatusText(part);
+    return state ? `${base} (${state})` : `${base} (활성)`;
+  }
+
+  private getPartDynamicStatusText(part: EnemyRuntimePart) {
     if (part.destroyed) return "파괴됨";
     if (part.ability.kind === "periodicStrongAttack") {
-      if (this.enemy.partRuntime.strongAttackNext) return "강공 준비";
-      return `${this.enemy.partRuntime.skirtTurnCounter}/${part.ability.intervalTurns}`;
+      if (this.enemy.partRuntime.strongAttackNext) return "다음 공격 강공";
+      const left = Math.max(1, part.ability.intervalTurns - this.enemy.partRuntime.skirtTurnCounter);
+      return `다음 강공까지 ${left}턴`;
     }
     if (part.ability.kind === "autoParryFirstHitPerTurn" && this.enemy.partRuntime.shoesNegateFirstHit) {
-      return "첫 타 무효";
+      return "이번 턴 활성";
     }
-    return this.getPartAbilityLabel(part.ability);
+    return "활성";
   }
 
   private getPartAbilityText(part: EnemyRuntimePart) {
@@ -2520,24 +2537,9 @@ export class CardBattleSystem {
     }
   }
 
-  private getPartAbilityLabel(ability: PartAbility) {
-    switch (ability.kind) {
-      case "shieldOnTurnStart":
-        return `보호막 +${ability.value}`;
-      case "damageReductionPercent":
-        return `피해 -${Math.round(ability.value * 100)}%`;
-      case "healOnTurnStart":
-        return `회복 +${ability.value}`;
-      case "periodicStrongAttack":
-        return `강공 x${ability.value}`;
-      case "autoParryFirstHitPerTurn":
-        return "첫 타 무효";
-      case "berserkBelowHpRatio":
-        return `광폭 x${ability.value}`;
-    }
-  }
-
   private refreshHandRender() {
+    this.clearCardPreview();
+
     // Destroy old hand visuals
     for (const c of this.handObjs) {
       this.killTweensForObjectTree(c.container);
@@ -2730,6 +2732,7 @@ export class CardBattleSystem {
 
     bg.on("pointerover", () => {
       if (this.busy || this.finished) return;
+      this.startCardPreviewTimer(card, x, y);
       this.highlightMergeTarget(card);
       this.scene.tweens.add({
         targets: container,
@@ -2740,6 +2743,7 @@ export class CardBattleSystem {
       });
     });
     bg.on("pointerout", () => {
+      this.clearCardPreview();
       dropGlow.setAlpha(0);
       this.scene.tweens.add({
         targets: container,
@@ -2750,18 +2754,38 @@ export class CardBattleSystem {
       });
     });
     bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      this.clearCardPreview();
       this.dragStart = { x: pointer.x, y: pointer.y, card };
+      this.startCardPreviewTimer(card, pointer.x, pointer.y);
       container.setDepth(800);
     });
     bg.on("pointermove", (pointer: Phaser.Input.Pointer) => {
       if (!this.dragStart || this.dragStart.card !== card) return;
       const moved = Math.abs(pointer.x - this.dragStart.x) + Math.abs(pointer.y - this.dragStart.y);
+      if (moved > u(5)) this.clearCardPreview();
       if (moved <= u(12)) return;
       container.setPosition(pointer.x, pointer.y);
       this.highlightMergeTarget(card, pointer.x, pointer.y);
       this.highlightPartDropTargets(card, pointer.x, pointer.y);
     });
     bg.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+      if (this.cardPreviewPointer?.cardUid === card.uid && this.cardPreviewPointer.shown) {
+        this.clearCardPreview();
+        this.dragStart = null;
+        this.clearMergeHighlights();
+        this.clearPartDropHighlights();
+        this.scene.tweens.add({
+          targets: container,
+          x,
+          y: selected ? y - u(18) : y,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 140,
+          ease: "Quad.easeOut",
+        });
+        return;
+      }
+      this.cancelCardPreviewTimer();
       const moved =
         this.dragStart && this.dragStart.card === card
           ? Math.abs(pointer.x - this.dragStart.x) + Math.abs(pointer.y - this.dragStart.y)
@@ -2793,6 +2817,7 @@ export class CardBattleSystem {
     // and the container stays at the elevated depth, leaving the hand
     // visually stuck after the first interaction.
     bg.on("pointerupoutside", (pointer: Phaser.Input.Pointer) => {
+      this.clearCardPreview();
       if (this.dragStart && this.dragStart.card === card) {
         const handled = this.handleDraggedCardDrop(card, pointer.x, pointer.y);
         this.dragStart = null;
@@ -2826,6 +2851,187 @@ export class CardBattleSystem {
       cardH,
     };
     return slot;
+  }
+
+  private startCardPreviewTimer(card: TarotCardState, x: number, y: number) {
+    if (this.busy || this.finished) return;
+    this.cancelCardPreviewTimer();
+    this.cardPreviewPointer = { cardUid: card.uid, x, y, shown: false };
+    this.cardPreviewTimer = this.scene.time.delayedCall(500, () => {
+      if (!this.cardPreviewPointer || this.cardPreviewPointer.cardUid !== card.uid) return;
+      this.cardPreviewPointer.shown = true;
+      this.showCardPreview(card);
+    });
+  }
+
+  private cancelCardPreviewTimer() {
+    this.cardPreviewTimer?.remove(false);
+    this.cardPreviewTimer = null;
+    if (this.cardPreviewPointer && !this.cardPreviewPointer.shown) {
+      this.cardPreviewPointer = null;
+    }
+  }
+
+  private clearCardPreview() {
+    this.cardPreviewTimer?.remove(false);
+    this.cardPreviewTimer = null;
+    this.cardPreviewPointer = null;
+    if (!this.cardPreview) return;
+    this.scene.tweens.killTweensOf(this.cardPreview);
+    this.cardPreview.destroy();
+    this.cardPreview = null;
+  }
+
+  private showCardPreview(card: TarotCardState) {
+    this.cardPreview?.destroy();
+    const def = CARDS[card.cardId];
+    const { width, height } = this.scene.scale;
+    const previewW = Math.min(u(270), width * 0.74);
+    const previewH = Math.min(u(360), height * 0.58);
+    const x = width / 2;
+    const y = height * 0.43;
+    const temporary = card.isTemporary === true;
+    const effectSummary = this.getCardEffectSummary(def);
+    const preview = this.scene.add.container(x, y).setDepth(950);
+    const bg = this.scene.add
+      .rectangle(0, 0, previewW, previewH, temporary ? 0x10262b : 0x17101e, 0.94)
+      .setStrokeStyle(u(2), temporary ? 0x82ffe6 : 0xffd572, 0.95);
+    const glow = this.scene.add
+      .rectangle(0, 0, previewW + u(12), previewH + u(12), 0xffffff, 0)
+      .setStrokeStyle(u(3), temporary ? 0x82ffe6 : 0xffd572, 0.38);
+    const header = this.scene.add.rectangle(0, -previewH / 2 + u(32), previewW - u(18), u(48), temporary ? 0x166d79 : def.color, 0.92);
+    const cost = this.scene.add
+      .circle(-previewW / 2 + u(28), -previewH / 2 + u(32), u(16), 0x120b17, 0.98)
+      .setStrokeStyle(u(1.2), 0xffd572, 0.95);
+    const costText = this.scene.add
+      .text(cost.x, cost.y, String(def.cost), {
+        fontFamily: "serif",
+        fontSize: px(13),
+        color: "#ffd572",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    const title = this.scene.add
+      .text(0, -previewH / 2 + u(31), def.roleLabel, {
+        fontFamily: "serif",
+        fontSize: px(19),
+        color: "#fdf3d4",
+        fontStyle: "bold",
+        stroke: "#1a0f22",
+        strokeThickness: u(1.5),
+      })
+      .setOrigin(0.5);
+    const badge = this.scene.add
+      .text(previewW / 2 - u(34), -previewH / 2 + u(32), temporary ? "임시" : `C${def.cost}`, {
+        fontFamily: "serif",
+        fontSize: px(10),
+        color: "#fdf3d4",
+        fontStyle: "bold",
+        stroke: "#1a0f22",
+        strokeThickness: u(1),
+      })
+      .setOrigin(0.5);
+    const name = this.scene.add
+      .text(0, -previewH / 2 + u(82), def.name, {
+        fontFamily: "serif",
+        fontSize: px(16),
+        color: "#ffe9b0",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    const stat = this.scene.add
+      .text(0, -previewH / 2 + u(112), `전투력 ${card.power}  |  Lv.${card.level}`, {
+        fontFamily: "serif",
+        fontSize: px(10.5),
+        color: "#d8ecff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    const descBox = this.scene.add
+      .rectangle(0, u(8), previewW - u(34), previewH - u(168), 0xfff6df, 0.92)
+      .setStrokeStyle(u(1), temporary ? 0x82ffe6 : 0xa5793e, 0.75);
+    const desc = this.scene.add
+      .text(0, -u(22), def.description, {
+        fontFamily: "serif",
+        fontSize: px(12),
+        color: "#2d231f",
+        fontStyle: "bold",
+        align: "center",
+        wordWrap: { width: previewW - u(52) },
+      })
+      .setOrigin(0.5);
+    const effects = this.scene.add
+      .text(0, u(58), effectSummary, {
+        fontFamily: "serif",
+        fontSize: px(10.4),
+        color: "#4b3325",
+        fontStyle: "bold",
+        align: "center",
+        wordWrap: { width: previewW - u(52) },
+      })
+      .setOrigin(0.5);
+    const hint = this.scene.add
+      .text(0, previewH / 2 - u(24), "손을 떼면 미리보기 닫기", {
+        fontFamily: "serif",
+        fontSize: px(8.5),
+        color: "#d6c5a1",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    preview.add([glow, bg, header, cost, costText, title, badge, name, stat, descBox, desc, effects, hint]);
+    preview.setScale(0.92).setAlpha(0);
+    this.overlay?.add(preview);
+    this.cardPreview = preview;
+    this.scene.tweens.add({
+      targets: preview,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 150,
+      ease: "Back.easeOut",
+    });
+  }
+
+  private getCardEffectSummary(def: CardDef) {
+    const parts = def.effects.map((effect) => {
+      switch (effect.kind) {
+        case "attack":
+          return `데미지 ${effect.amount}`;
+        case "block":
+          return `보호막 +${effect.amount}`;
+        case "heal":
+          return `HP +${effect.amount}`;
+        case "energy":
+          return `기력 +${effect.amount}`;
+        case "applyCharge":
+          return `충전 +${effect.amount}`;
+        case "applyPoison":
+          return `독 +${effect.amount}`;
+        case "drain":
+          return `흡혈 ${effect.amount}`;
+        case "partBonusAttack":
+          return `${effect.label} +${effect.amount}`;
+        case "partDamage":
+          return `${this.getPartDisplayName(effect.partId)} 피해 ${effect.amount}`;
+        case "reflectNextAttack":
+          return `다음 공격 반사 ${Math.round(effect.ratio * 100)}%`;
+        case "weakenNextAttack":
+          return `적 다음 공격 약화 ${Math.round(effect.ratio * 100)}%`;
+        case "autoParryNextAttack":
+          return `자동 패링 + 반격 ${effect.counterDamage}`;
+        case "dodgeFirstAttackOfNextEnemyTurn":
+          return "다음 적 턴 첫 공격 회피";
+        case "dodgeNextAttack":
+          return "다음 공격 완전 회피";
+        case "parry":
+          return `패링 반격 ${effect.amount}`;
+      }
+    });
+    return parts.length > 0 ? parts.join("  |  ") : "특수 효과 없음";
+  }
+
+  private getPartDisplayName(partId: PartId) {
+    return this.enemy.parts.find((part) => part.id === partId)?.displayName ?? partId;
   }
 
   private refreshButtons() {
@@ -2946,7 +3152,7 @@ export class CardBattleSystem {
         .setDepth(822)
     );
     this.overlay?.add(burst);
-    row.counterText.setText("파괴됨");
+    row.dropText.setText("파괴됨");
     this.scene.tweens.add({
       targets: burst,
       scaleX: 1.35,
