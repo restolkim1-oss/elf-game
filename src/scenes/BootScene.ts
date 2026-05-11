@@ -5,7 +5,7 @@ import {
   MENU_ICONS,
   STAGE_LAYERS,
 } from "../data/parts";
-import { SHOP_GALLERY } from "../data/shop";
+import { POSES } from "../data/posesData";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -21,8 +21,8 @@ export class BootScene extends Phaser.Scene {
     this.load.image("bg2", "/assets/bg2.png");
     this.load.image("bg3", "/assets/bg3.png");
     this.load.image("E1_clear", "/assets/E1_clear.png");
-    SHOP_GALLERY.forEach((item) => {
-      this.load.image(item.textureKey, item.path);
+    POSES.forEach((pose) => {
+      this.load.image(pose.textureKey, pose.imagePath);
     });
     MENU_ICONS.forEach((icon) => {
       this.load.image(icon.key, icon.path);

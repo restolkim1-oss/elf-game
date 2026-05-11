@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { MENU_ICONS, type PartDef, getPartsForStage } from "../data/parts";
 import { SHOP_GALLERY, type ShopArtId } from "../data/shop";
+import { POSES, type PoseData } from "../data/posesData";
 import { PART_STORIES } from "../data/partStories";
 import type { PartId } from "../data/enemyParts";
 import { UI_SCALE } from "../main";
@@ -36,7 +37,9 @@ interface EconomyState {
   currency: number;
   affinity: number;
   affinityMax: number;
-  inventory: Record<ShopArtId, number>;
+  inventory?: Record<ShopArtId, number>;
+  unlockedPoses: string[];
+  poses: PoseData[];
   stageSet: 1 | 2 | 3;
 }
 
@@ -74,6 +77,7 @@ export class UIScene extends Phaser.Scene {
   private bottomPanelGroup: Phaser.GameObjects.Container | null = null;
   private clearCelebration: Phaser.GameObjects.Container | null = null;
   private galleryView: Phaser.GameObjects.Container | null = null;
+  private posePreview: Phaser.GameObjects.Container | null = null;
   private rewardModal: Phaser.GameObjects.Container | null = null;
   private topCoinText: Phaser.GameObjects.Text | null = null;
   private displayedCoins = 0;
@@ -88,6 +92,7 @@ export class UIScene extends Phaser.Scene {
   private lastEconomy: EconomyState | null = null;
   private puzzleBusy = false;
   private sideIconExpanded = false;
+  private shopTab: "shop" | "gallery" = "shop";
 
   constructor() {
     super("UIScene");
@@ -107,6 +112,7 @@ export class UIScene extends Phaser.Scene {
     this.bottomPanelGroup = null;
     this.clearCelebration = null;
     this.galleryView = null;
+    this.posePreview = null;
     this.rewardModal = null;
     this.topCoinText = null;
     this.displayedCoins = 0;
@@ -120,10 +126,13 @@ export class UIScene extends Phaser.Scene {
     this.finaleTweens = [];
     this.puzzleBusy = false;
     this.sideIconExpanded = false;
+    this.shopTab = "shop";
     void this.updateEconomy;
     void this.drawActLabel;
     void this.drawProgressPills;
     void this.drawRemovalOrder;
+    void this.drawShopMenu;
+    void this.showGalleryView;
 
     const { width, height } = this.scale;
     this.drawTopChrome(width);
@@ -154,9 +163,6 @@ export class UIScene extends Phaser.Scene {
     game.events.on("economy-update", (state: EconomyState) => {
       this.lastEconomy = state;
       this.updateEconomy(state);
-    });
-    game.events.on("view-shop-art", (payload: ShopArtViewPayload) => {
-      this.showGalleryView(payload);
     });
     game.events.on("battle-reward-show", (payload: BattleRewardPayload) => {
       this.showBattleRewardModal(payload);
@@ -638,12 +644,12 @@ export class UIScene extends Phaser.Scene {
       this.hideShopMenu();
       return;
     }
-    this.drawShopMenu();
+    this.drawPoseShopMenu();
   }
 
   private hideShopMenu() {
     if (!this.shopMenu) return;
-    this.hideGalleryView();
+    this.hidePosePreview();
     const old = this.shopMenu;
     this.shopMenu = null;
     this.bottomMenu?.setVisible(!this.puzzleBusy);
@@ -740,7 +746,7 @@ export class UIScene extends Phaser.Scene {
       const row = Math.floor(idx / cols);
       const x = startX + col * (cardW + cardGap);
       const y = startY + row * (cardH + u(10));
-      const owned = (state?.inventory[item.id] ?? 0) > 0;
+      const owned = (state?.inventory?.[item.id] ?? 0) > 0;
 
       c.add(
         this.add
@@ -816,7 +822,7 @@ export class UIScene extends Phaser.Scene {
   private getOwnedGalleryCount() {
     const state = this.lastEconomy;
     if (!state) return 0;
-    return SHOP_GALLERY.filter((item) => (state.inventory[item.id] ?? 0) > 0).length;
+    return state.unlockedPoses?.length ?? 0;
   }
 
   private showGalleryView(item: ShopArtViewPayload) {
@@ -884,6 +890,193 @@ export class UIScene extends Phaser.Scene {
       duration: 140,
       onComplete: () => old.destroy(),
     });
+  }
+
+  private drawPoseShopMenu() {
+    const { width, height } = this.scale;
+    const c = this.add.container(0, 0).setDepth(2300);
+    this.shopMenu = c;
+    this.bottomMenu?.setVisible(false);
+
+    const state = this.lastEconomy;
+    const poses = state?.poses ?? POSES;
+    const unlocked = new Set(state?.unlockedPoses ?? ["s1"]);
+    const panelW = width * 0.94;
+    const panelH = height * 0.82;
+    const panelX = width / 2;
+    const panelY = height / 2;
+
+    c.add(this.add.rectangle(width / 2, height / 2, width, height, 0x050208, 0.78).setInteractive());
+    c.add(this.add.rectangle(panelX, panelY, panelW, panelH, COLORS.panelMid, 0.98).setStrokeStyle(u(2), COLORS.gild, 0.92));
+    c.add(
+      this.add
+        .text(panelX, panelY - panelH / 2 + u(18), "포즈 상점", {
+          fontFamily: "serif",
+          fontSize: px(22),
+          color: COLORS.textHighlight,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - panelH / 2 + u(56), `코인 ${this.formatCoins(state?.currency ?? 0)}  |  해금 ${unlocked.size} / ${poses.length}`, {
+          fontFamily: "serif",
+          fontSize: px(13),
+          color: COLORS.text,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+    );
+    this.makeButton(c, panelX + panelW / 2 - u(48), panelY - panelH / 2 + u(34), u(64), u(36), "닫기", () => this.hideShopMenu(), px(10));
+    this.makeButton(c, panelX - u(74), panelY - panelH / 2 + u(96), u(132), u(38), "상점", () => {
+      this.shopTab = "shop";
+      this.redrawPoseShopMenu();
+    }, px(11));
+    this.makeButton(c, panelX + u(74), panelY - panelH / 2 + u(96), u(132), u(38), "갤러리", () => {
+      this.shopTab = "gallery";
+      this.redrawPoseShopMenu();
+    }, px(11));
+
+    const visiblePoses = this.shopTab === "shop" ? poses : poses.filter((pose) => unlocked.has(pose.id));
+    if (visiblePoses.length === 0) {
+      c.add(
+        this.add
+          .text(panelX, panelY, "아직 잠금해제된 포즈가 없습니다.\n상점에서 포즈를 구매해보세요.", {
+            fontFamily: "serif",
+            fontSize: px(15),
+            color: COLORS.text,
+            fontStyle: "bold",
+            align: "center",
+          })
+          .setOrigin(0.5)
+      );
+    }
+
+    const cols = 3;
+    const gap = u(10);
+    const cardW = (panelW - u(40) - gap * (cols - 1)) / cols;
+    const cardH = u(156);
+    const startX = panelX - (cardW + gap);
+    const startY = panelY - panelH / 2 + u(174);
+    visiblePoses.forEach((pose, idx) => {
+      const x = startX + (idx % cols) * (cardW + gap);
+      const y = startY + Math.floor(idx / cols) * (cardH + u(12));
+      this.drawPoseCell(c, pose, x, y, cardW, cardH, unlocked.has(pose.id));
+    });
+
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+  }
+
+  private redrawPoseShopMenu() {
+    if (!this.shopMenu) return;
+    this.shopMenu.destroy();
+    this.shopMenu = null;
+    this.drawPoseShopMenu();
+  }
+
+  private drawPoseCell(container: Phaser.GameObjects.Container, pose: PoseData, x: number, y: number, w: number, h: number, owned: boolean) {
+    container.add(this.add.rectangle(x, y, w, h, 0xefe1c4, 0.99).setStrokeStyle(u(2), 0x4d3a2f, 0.95));
+    container.add(
+      this.add
+        .text(x, y - h / 2 + u(8), owned ? "구매됨" : "잠김", {
+          fontFamily: "serif",
+          fontSize: px(9.5),
+          color: owned ? "#2f6b3a" : "#8a2f2f",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0)
+    );
+    container.add(
+      this.add
+        .text(x, y - h / 2 + u(26), pose.displayName, {
+          fontFamily: "serif",
+          fontSize: px(11),
+          color: "#2f2520",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0)
+    );
+    if (this.textures.exists(pose.textureKey)) {
+      const thumb = this.add.image(x, y - u(12), pose.textureKey);
+      thumb.setScale(Math.min((w - u(22)) / thumb.width, u(72) / thumb.height)).setAlpha(0.98);
+      container.add(thumb);
+    } else {
+      container.add(this.add.text(x, y - u(12), "이미지 없음", { fontFamily: "serif", fontSize: px(12), color: "#4a3f34", fontStyle: "bold" }).setOrigin(0.5));
+    }
+    if (!owned) container.add(this.add.rectangle(x, y - u(12), w - u(20), u(78), 0x000000, 0.32));
+    container.add(this.add.text(x, y + u(39), owned ? "감상 가능" : `${pose.price} 코인`, { fontFamily: "serif", fontSize: px(11), color: "#2f2520", fontStyle: "bold" }).setOrigin(0.5));
+    const hit = this.add.rectangle(x, y, w, h, 0xffffff, 0).setInteractive({ useHandCursor: true });
+    hit.on("pointerdown", () => this.showPosePreview(pose, this.shopTab === "shop"));
+    container.add(hit);
+    this.makeButton(container, x, y + u(64), w - u(18), u(30), owned ? "미리보기" : "구매", () => {
+      if (owned) this.showPosePreview(pose, false);
+      else this.confirmPosePurchase(pose);
+    }, px(9.5));
+  }
+
+  private showPosePreview(pose: PoseData, allowPurchase: boolean) {
+    this.hidePosePreview();
+    const { width, height } = this.scale;
+    const unlocked = new Set(this.lastEconomy?.unlockedPoses ?? ["s1"]);
+    const canBuy = allowPurchase && !unlocked.has(pose.id);
+    const c = this.add.container(0, 0).setDepth(2400);
+    this.posePreview = c;
+    c.add(this.add.rectangle(width / 2, height / 2, width, height, 0x050208, 0.82).setInteractive());
+    c.add(this.add.text(width / 2, u(42), pose.displayName, { fontFamily: "serif", fontSize: px(20), color: COLORS.textHighlight, fontStyle: "bold" }).setOrigin(0.5));
+    if (this.textures.exists(pose.textureKey)) {
+      const img = this.add.image(width / 2, height / 2, pose.textureKey);
+      img.setScale(Math.min((width * 0.8) / img.width, (height - u(canBuy ? 230 : 160)) / img.height));
+      c.add(img);
+    } else {
+      c.add(this.add.text(width / 2, height / 2, "이미지를 찾을 수 없습니다.", { fontFamily: "serif", fontSize: px(15), color: COLORS.text, fontStyle: "bold" }).setOrigin(0.5));
+    }
+    if (canBuy) {
+      this.makeButton(c, width / 2, height - u(106), u(196), u(42), `${pose.price} 코인에 구매`, () => this.confirmPosePurchase(pose), px(11));
+    }
+    this.makeButton(c, width / 2, height - u(54), u(176), u(42), "닫기", () => this.hidePosePreview(), px(11));
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+  }
+
+  private hidePosePreview() {
+    if (!this.posePreview) return;
+    const old = this.posePreview;
+    this.posePreview = null;
+    this.tweens.add({ targets: old, alpha: 0, duration: 140, onComplete: () => old.destroy() });
+  }
+
+  private confirmPosePurchase(pose: PoseData) {
+    if ((this.lastEconomy?.unlockedPoses ?? []).includes(pose.id)) {
+      this.flashHint("이미 구매한 포즈입니다.", COLORS.textHighlight);
+      return;
+    }
+    if ((this.lastEconomy?.currency ?? 0) < pose.price) {
+      this.flashHint("코인이 부족합니다.", COLORS.danger);
+      return;
+    }
+    this.showConfirmDialog(`${pose.displayName}을 ${pose.price} 코인에 구매하시겠습니까?`, () => {
+      this.scene.get("GameScene").events.emit("buy-pose", pose.id);
+      this.hidePosePreview();
+    });
+  }
+
+  private showConfirmDialog(message: string, onYes: () => void) {
+    const { width, height } = this.scale;
+    const c = this.add.container(0, 0).setDepth(2500);
+    c.add(this.add.rectangle(width / 2, height / 2, width, height, 0x050208, 0.48).setInteractive());
+    const panelW = width * 0.78;
+    const panelY = height / 2;
+    c.add(this.add.rectangle(width / 2, panelY, panelW, u(170), COLORS.panelMid, 0.98).setStrokeStyle(u(2), COLORS.gild, 0.92));
+    c.add(this.add.text(width / 2, panelY - u(42), message, { fontFamily: "serif", fontSize: px(13), color: COLORS.text, fontStyle: "bold", align: "center", wordWrap: { width: panelW - u(42) } }).setOrigin(0.5));
+    this.makeButton(c, width / 2 - u(64), panelY + u(46), u(104), u(38), "예", () => {
+      c.destroy();
+      onYes();
+    }, px(11));
+    this.makeButton(c, width / 2 + u(64), panelY + u(46), u(104), u(38), "아니오", () => c.destroy(), px(11));
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 130 });
   }
 
   private showBattleRewardModal(payload: BattleRewardPayload) {
@@ -1081,13 +1274,13 @@ export class UIScene extends Phaser.Scene {
   private updateEconomy(state: EconomyState) {
     this.updateTopCoinText(state.currency);
     this.statText.setText(
-      `금화 ${state.currency}  |  감상 ${this.getOwnedGalleryCount()} / ${SHOP_GALLERY.length}  |  스테이지 ${state.stageSet}`
+      `금화 ${state.currency}  |  감상 ${this.getOwnedGalleryCount()} / ${POSES.length}  |  스테이지 ${state.stageSet}`
     );
     if (this.shopMenu) {
       const old = this.shopMenu;
       old.destroy();
       this.shopMenu = null;
-      this.drawShopMenu();
+      this.drawPoseShopMenu();
     }
   }
 

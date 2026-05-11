@@ -13,18 +13,15 @@ import {
   getPartsForStage,
   stageForRemoved,
 } from "../data/parts";
-import {
-  SHOP_GALLERY,
-  createEmptyGalleryInventory,
-  getShopGalleryItem,
-  type ShopArtId,
-} from "../data/shop";
+import { POSES, getPose } from "../data/posesData";
 import type { PartId } from "../data/enemyParts";
 
 const AFFINITY_MAX = 100;
 const STAGE2_UNLOCK_AFFINITY = 40;
 const STAGE3_UNLOCK_AFFINITY = 100;
 const BATTLE_WIN_COIN_REWARD = 100;
+const STORAGE_COINS_KEY = "elf_coins";
+const STORAGE_UNLOCKED_POSES_KEY = "elf_unlockedPoses";
 
 export class GameScene extends Phaser.Scene {
   private partSystem!: PartSystem;
@@ -47,7 +44,7 @@ export class GameScene extends Phaser.Scene {
   private stage3StoryUnlocked = false;
   private coins = 0;
   private affinity = 0;
-  private inventory: Record<ShopArtId, number> = createEmptyGalleryInventory();
+  private unlockedPoses = new Set<string>(["s1"]);
 
   private viewingMode = false;
   private activePointers: Phaser.Input.Pointer[] = [];
@@ -153,7 +150,7 @@ export class GameScene extends Phaser.Scene {
       this.switchStageSet(next)
     );
     this.events.on("next-stage", () => this.goToNextStage());
-    this.events.on("buy-item", (id: ShopArtId) => this.buyItem(id));
+    this.events.on("buy-pose", (id: string) => this.buyPose(id));
     this.events.on("request-economy-sync", () => this.emitEconomyState());
     this.events.on("abort-current-puzzle", () => this.abortCurrentPuzzle());
     this.events.emit("puzzle-busy", false);
@@ -625,24 +622,22 @@ export class GameScene extends Phaser.Scene {
     this.cardBattle.abortCurrent();
   }
 
-  private buyItem(id: ShopArtId) {
-    const entry = getShopGalleryItem(id);
-    if (!entry) return;
-    if (this.inventory[id] > 0) {
-      this.feedback(`${entry.label} 감상 모드`);
-      this.events.emit("view-shop-art", entry);
+  private buyPose(id: string) {
+    const pose = getPose(id);
+    if (!pose) return;
+    if (this.unlockedPoses.has(pose.id)) {
+      this.feedback(`${pose.displayName}은 이미 구매했습니다.`);
       return;
     }
-    if (this.coins < entry.cost) {
-      this.feedback(`${entry.label} 구입에 금화 ${entry.cost}개가 필요합니다.`);
+    if (this.coins < pose.price) {
+      this.feedback("코인이 부족합니다.", "#e0868b");
       return;
     }
-    this.coins -= entry.cost;
-    this.inventory[id] = 1;
+    this.coins = Math.max(0, this.coins - pose.price);
+    this.unlockedPoses.add(pose.id);
     this.persistMetaState();
     this.emitEconomyState();
-    this.feedback(`${entry.label} 구입 완료 · 바로 감상합니다.`);
-    this.events.emit("view-shop-art", entry);
+    this.feedback(`${pose.displayName} 구매 완료`, "#86e08d");
   }
 
   private grantCoins(amount: number) {
@@ -671,7 +666,7 @@ export class GameScene extends Phaser.Scene {
       currency: this.coins,
       affinity: this.affinity,
       affinityMax: AFFINITY_MAX,
-      inventory: { ...this.inventory },
+      unlockedPoses: [...this.unlockedPoses],
       stageSet: this.stageSet,
       stageUnlocks: {
         stage2: this.canUseStage2(),
@@ -681,7 +676,7 @@ export class GameScene extends Phaser.Scene {
         stage2: STAGE2_UNLOCK_AFFINITY,
         stage3: STAGE3_UNLOCK_AFFINITY,
       },
-      shop: SHOP_GALLERY,
+      poses: POSES,
     });
   }
 
@@ -692,22 +687,16 @@ export class GameScene extends Phaser.Scene {
   private loadMetaState() {
     const c = this.registry.get("meta-currency");
     const a = this.registry.get("meta-affinity");
-    const inv = this.registry.get("meta-inventory");
+    const unlocked = this.registry.get("meta-unlocked-poses");
     const stage2Unlocked = this.registry.get("meta-stage2-unlocked");
     const stage3Unlocked = this.registry.get("meta-stage3-unlocked");
-    this.coins = Number.isFinite(c) ? Number(c) : 0;
+    this.coins = this.readStoredCoins(Number.isFinite(c) ? Number(c) : 0);
     this.affinity = Phaser.Math.Clamp(
       Number.isFinite(a) ? Number(a) : 0,
       0,
       AFFINITY_MAX
     );
-    if (inv && typeof inv === "object") {
-      const nextInventory = createEmptyGalleryInventory();
-      SHOP_GALLERY.forEach((item) => {
-        nextInventory[item.id] = Number((inv as Record<string, unknown>)[item.id]) || 0;
-      });
-      this.inventory = nextInventory;
-    }
+    this.unlockedPoses = this.readStoredUnlockedPoses(Array.isArray(unlocked) ? unlocked.map(String) : ["s1"]);
     this.stage2StoryUnlocked = Boolean(stage2Unlocked);
     this.stage3StoryUnlocked = Boolean(stage3Unlocked);
   }
@@ -715,8 +704,42 @@ export class GameScene extends Phaser.Scene {
   private persistMetaState() {
     this.registry.set("meta-currency", this.coins);
     this.registry.set("meta-affinity", this.affinity);
-    this.registry.set("meta-inventory", { ...this.inventory });
+    this.registry.set("meta-unlocked-poses", [...this.unlockedPoses]);
     this.registry.set("meta-stage2-unlocked", this.stage2StoryUnlocked);
     this.registry.set("meta-stage3-unlocked", this.stage3StoryUnlocked);
+    this.writeMetaStorage();
+  }
+
+  private readStoredCoins(fallback: number) {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_COINS_KEY);
+      const parsed = raw === null ? fallback : Number(raw);
+      return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private readStoredUnlockedPoses(fallback: string[]) {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_UNLOCKED_POSES_KEY);
+      const parsed = raw ? JSON.parse(raw) : fallback;
+      const list = Array.isArray(parsed) ? parsed.map(String) : fallback;
+      const valid = new Set<string>(POSES.map((pose) => pose.id));
+      const next = new Set(list.filter((id) => valid.has(id)));
+      next.add("s1");
+      return next;
+    } catch {
+      return new Set(["s1"]);
+    }
+  }
+
+  private writeMetaStorage() {
+    try {
+      window.localStorage.setItem(STORAGE_COINS_KEY, String(Math.max(0, Math.floor(this.coins))));
+      window.localStorage.setItem(STORAGE_UNLOCKED_POSES_KEY, JSON.stringify([...this.unlockedPoses]));
+    } catch {
+      // localStorage can fail in private browsing; in-memory state remains valid.
+    }
   }
 }
