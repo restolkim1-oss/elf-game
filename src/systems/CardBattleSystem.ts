@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 import type { PartDef } from "../data/parts";
 import { findFusionRecipe, type CardFusionRecipe, type FusionEffect, type FusionRole } from "../data/cardFusionRecipes";
 import { ENEMY_PART_CONFIG, type EnemyPart, type PartAbility, type PartId } from "../data/enemyParts";
@@ -350,6 +350,8 @@ export class CardBattleSystem {
   private endTurnBg!: Phaser.GameObjects.Rectangle;
   private useCardsBg!: Phaser.GameObjects.Rectangle;
   private enemyPartPanel: Phaser.GameObjects.Container | null = null;
+  private enemyPartTooltip: Phaser.GameObjects.Container | null = null;
+  private activeTooltipPartId: PartId | null = null;
   private enemyPartRows: Partial<
     Record<
       PartId,
@@ -359,7 +361,6 @@ export class CardBattleSystem {
         hpFill: Phaser.GameObjects.Rectangle;
         hpText: Phaser.GameObjects.Text;
         counterText: Phaser.GameObjects.Text;
-        abilityText: Phaser.GameObjects.Text;
         w: number;
         h: number;
       }
@@ -448,6 +449,9 @@ export class CardBattleSystem {
     this.speechBubble = null;
     this.enemyPartPanel?.destroy();
     this.enemyPartPanel = null;
+    this.enemyPartTooltip?.destroy();
+    this.enemyPartTooltip = null;
+    this.activeTooltipPartId = null;
     this.enemyPartRows = {};
     this.enemyPoisonText = null;
     this.playerEnergyOrbs = [];
@@ -675,15 +679,17 @@ export class CardBattleSystem {
       this.playerEnergyOrbStates.push(true);
     }
     this.playerChargeText = this.scene.add
-      .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(16), orbY, "", {
+      .text(width / 2, playerHpY - u(24), "", {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(12),
         color: "#ffd572",
         fontStyle: "bold",
         stroke: "#2a1605",
-        strokeThickness: u(1.2),
+        strokeThickness: u(1.5),
+        backgroundColor: "rgba(28, 14, 5, 0.56)",
+        padding: { x: 8, y: 3 },
       })
-      .setOrigin(0, 0.5);
+      .setOrigin(0.5);
     this.playerBlockText = this.scene.add
       .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(12), playerHpY, "", {
         fontFamily: "serif",
@@ -2300,14 +2306,17 @@ export class CardBattleSystem {
   private drawEnemyPartPanel(width: number, height: number) {
     void width;
     this.enemyPartPanel?.destroy();
+    this.enemyPartTooltip?.destroy();
+    this.enemyPartTooltip = null;
+    this.activeTooltipPartId = null;
     this.enemyPartRows = {};
-    const panelW = u(230);
-    const rowH = u(48);
+    const panelW = u(176);
+    const rowH = u(40);
     const x = panelW / 2 + u(12);
-    const y = Math.min(height - u(500), u(308));
+    const y = Math.min(height - u(462), u(292));
     const panel = this.scene.add.container(x, y).setDepth(610);
     const bg = this.scene.add
-      .rectangle(0, 0, panelW, rowH * this.enemy.parts.length + u(46), 0x07070d, 0.58)
+      .rectangle(0, 0, panelW, rowH * this.enemy.parts.length + u(40), 0x07070d, 0.56)
       .setStrokeStyle(u(1), 0xd4a656, 0.55);
     const title = this.scene.add
       .text(0, -rowH * this.enemy.parts.length * 0.5 - u(3), "파츠 능력", {
@@ -2330,51 +2339,55 @@ export class CardBattleSystem {
     panel.add([bg, title, this.enemyPoisonText]);
 
     this.enemy.parts.forEach((part, idx) => {
-      const rowY = -rowH * (this.enemy.parts.length - 1) * 0.5 + idx * rowH + u(14);
+      const rowY = -rowH * (this.enemy.parts.length - 1) * 0.5 + idx * rowH + u(12);
       const row = this.scene.add.container(0, rowY);
       const rowBg = this.scene.add
-        .rectangle(0, 0, panelW - u(14), u(42), 0x1b1420, 0.66)
+        .rectangle(0, 0, panelW - u(12), u(34), 0x1b1420, 0.66)
         .setStrokeStyle(u(0.7), 0x8f6a34, 0.45);
-      const marker = this.scene.add.rectangle(-panelW / 2 + u(13), 0, u(4), u(31), this.getPartAccentColor(part), 0.96);
+      rowBg.setInteractive({ useHandCursor: true });
+      rowBg.on("pointerover", () => {
+        if (!this.dragStart) this.showEnemyPartTooltip(part.id);
+      });
+      rowBg.on("pointerout", () => {
+        if (this.activeTooltipPartId === part.id) this.hideEnemyPartTooltip();
+      });
+      rowBg.on("pointerdown", () => {
+        if (this.dragStart) return;
+        if (this.activeTooltipPartId === part.id) this.hideEnemyPartTooltip();
+        else this.showEnemyPartTooltip(part.id);
+      });
+      const marker = this.scene.add.rectangle(-panelW / 2 + u(12), 0, u(4), u(25), this.getPartAccentColor(part), 0.96);
       const name = this.scene.add
-        .text(-panelW / 2 + u(22), -u(10), part.displayName, {
+        .text(-panelW / 2 + u(22), -u(7), part.displayName, {
           fontFamily: "serif",
           fontSize: px(10),
           color: "#f3e6c9",
           fontStyle: "bold",
         })
         .setOrigin(0, 0.5);
-      const abilityText = this.scene.add
-        .text(-panelW / 2 + u(22), u(10), this.getPartAbilityText(part), {
-          fontFamily: "serif",
-          fontSize: px(7.2),
-          color: "#bba37e",
-          fontStyle: "bold",
-        })
-        .setOrigin(0, 0.5);
       const hpText = this.scene.add
-        .text(panelW / 2 - u(12), -u(11), `${part.hp}/${part.maxHp}`, {
+        .text(panelW / 2 - u(10), -u(8), `${part.hp}/${part.maxHp}`, {
           fontFamily: "serif",
-          fontSize: px(8.5),
+          fontSize: px(7.8),
           color: "#9ad0ff",
           fontStyle: "bold",
         })
         .setOrigin(1, 0.5);
-      const hpBg = this.scene.add.rectangle(panelW / 2 - u(58), u(7), u(88), u(8), 0x271620, 0.9);
+      const hpBg = this.scene.add.rectangle(panelW / 2 - u(47), u(8), u(72), u(7), 0x271620, 0.9);
       const hpFill = this.scene.add
-        .rectangle(panelW / 2 - u(102), u(7), u(88), u(7), 0x9ad0ff, 0.95)
+        .rectangle(panelW / 2 - u(83), u(8), u(72), u(6), 0x9ad0ff, 0.95)
         .setOrigin(0, 0.5);
       const counterText = this.scene.add
-        .text(panelW / 2 - u(12), u(18), this.getPartCounterText(part), {
+        .text(-panelW / 2 + u(22), u(10), this.getPartCounterText(part), {
           fontFamily: "serif",
           fontSize: px(7),
           color: "#ffd572",
           fontStyle: "bold",
         })
-        .setOrigin(1, 0.5);
-      row.add([rowBg, marker, name, abilityText, hpText, hpBg, hpFill, counterText]);
+        .setOrigin(0, 0.5);
+      row.add([rowBg, marker, name, hpText, hpBg, hpFill, counterText]);
       panel.add(row);
-      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, abilityText, w: panelW - u(14), h: u(42) };
+      this.enemyPartRows[part.id] = { container: row, bg: rowBg, hpFill, hpText, counterText, w: panelW - u(12), h: u(40) };
     });
 
     this.enemyPartPanel = panel;
@@ -2388,13 +2401,77 @@ export class CardBattleSystem {
       if (!row) continue;
       row.hpText.setText(`${part.hp}/${part.maxHp}`);
       const hpRatio = Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1);
-      row.hpFill.width = u(88) * hpRatio;
+      row.hpFill.width = u(72) * hpRatio;
       row.counterText.setText(this.getPartCounterText(part));
-      row.abilityText.setText(part.destroyed ? "파괴됨" : this.getPartAbilityText(part));
       row.bg.setFillStyle(part.destroyed ? 0x2a2222 : 0x1b1420, part.destroyed ? 0.36 : 0.62);
       const hpColor = hpRatio > 0.62 ? 0x58d68d : hpRatio > 0.32 ? 0xffd572 : 0xff5e7a;
       row.hpFill.setFillStyle(part.destroyed ? 0x777777 : hpColor, part.destroyed ? 0.5 : 0.95);
     }
+  }
+
+  private showEnemyPartTooltip(partId: PartId) {
+    if (!this.enemyPartPanel) return;
+    const part = this.getEnemyPart(partId);
+    const row = this.enemyPartRows[partId];
+    if (!part || !row) return;
+    this.enemyPartTooltip?.destroy();
+    this.activeTooltipPartId = partId;
+
+    const panelW = u(176);
+    const tooltipW = u(156);
+    const tooltipH = u(48);
+    const x = this.enemyPartPanel.x + panelW / 2 + tooltipW / 2 + u(10);
+    const y = this.enemyPartPanel.y + row.container.y;
+    const tip = this.scene.add.container(x, y).setDepth(835);
+    const bg = this.scene.add
+      .rectangle(0, 0, tooltipW, tooltipH, 0x120b17, 0.88)
+      .setStrokeStyle(u(1), this.getPartAccentColor(part), 0.86);
+    const title = this.scene.add
+      .text(-tooltipW / 2 + u(10), -u(12), part.displayName, {
+        fontFamily: "serif",
+        fontSize: px(8.5),
+        color: "#f3e6c9",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0.5);
+    const body = this.scene.add
+      .text(-tooltipW / 2 + u(10), u(9), part.destroyed ? "파괴됨" : this.getPartAbilityText(part), {
+        fontFamily: "serif",
+        fontSize: px(7.8),
+        color: part.destroyed ? "#999999" : "#ffd572",
+        fontStyle: "bold",
+        wordWrap: { width: tooltipW - u(20) },
+      })
+      .setOrigin(0, 0.5);
+    tip.add([bg, title, body]);
+    tip.setAlpha(0).setScale(0.96);
+    this.overlay?.add(tip);
+    this.enemyPartTooltip = tip;
+    this.scene.tweens.add({
+      targets: tip,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 130,
+      ease: "Quad.easeOut",
+    });
+  }
+
+  private hideEnemyPartTooltip() {
+    const tip = this.enemyPartTooltip;
+    this.enemyPartTooltip = null;
+    this.activeTooltipPartId = null;
+    if (!tip) return;
+    this.scene.tweens.killTweensOf(tip);
+    this.scene.tweens.add({
+      targets: tip,
+      alpha: 0,
+      duration: 110,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        if (tip.scene) tip.destroy();
+      },
+    });
   }
 
   private getPartCounterText(part: EnemyRuntimePart) {
