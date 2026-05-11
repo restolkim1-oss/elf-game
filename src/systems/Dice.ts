@@ -19,10 +19,11 @@ export class DiceRoller {
   ) {
     const value = Phaser.Math.Between(1, 6);
     const critical = value >= 4;
+    const diceScale = 0.8;
     const startY = y + u(44);
     const apexY = y - u(70);
 
-    const group = scene.add.container(x, startY).setDepth(760);
+    const group = scene.add.container(x, startY).setDepth(760).setScale(diceScale);
     const shadow = scene.add
       .ellipse(0, u(92), u(112), u(22), 0x000000, 0.28)
       .setScale(0.65, 0.65);
@@ -86,8 +87,8 @@ export class DiceRoller {
     scene.tweens.add({
       targets: group,
       y: apexY,
-      scaleX: 1.16,
-      scaleY: 1.16,
+      scaleX: diceScale * 1.16,
+      scaleY: diceScale * 1.16,
       duration: 360,
       ease: "Cubic.easeOut",
       onUpdate: () => shadow.setScale(0.42, 0.42),
@@ -100,8 +101,8 @@ export class DiceRoller {
         scene.tweens.add({
           targets: group,
           y,
-          scaleX: 1,
-          scaleY: 1,
+          scaleX: diceScale,
+          scaleY: diceScale,
           duration: 440,
           ease: "Bounce.easeOut",
           onUpdate: () => shadow.setScale(0.9, 0.9),

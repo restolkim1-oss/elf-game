@@ -194,15 +194,10 @@ export class UIScene extends Phaser.Scene {
       .rectangle(width / 2, barH / 2, width, barH, 0x24172d, 0.92)
       .setDepth(1500)
       .setStrokeStyle(u(1.2), COLORS.gild, 0.86);
-    this.add
-      .rectangle(width / 2, barH + titleH / 2, width, titleH, 0x000000, 0.58)
-      .setDepth(1500);
 
     const resources = [
-      { key: "menu_icon_main", text: "21/21" },
       { key: "menu_icon_coin", text: "0", dynamic: "coins" },
       { key: "menu_icon_gem", text: "4,300" },
-      { key: "menu_icon_settings", text: "100" },
     ];
     const cellW = width / resources.length;
     resources.forEach((item, idx) => {
