@@ -40,9 +40,10 @@ type CardEffect =
   | { kind: "drain"; amount: number }
   | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
   | { kind: "partDamage"; partId: PartId; amount: number }
-  | { kind: "reflectNextAttack"; ratio: number }
+  | { kind: "reflectNextAttack"; ratio: number; poisonOnTrigger?: number; requireBlockHit?: boolean }
   | { kind: "weakenNextAttack"; ratio: number; maxTurns: number }
   | { kind: "autoParryNextAttack"; counterDamage: number; maxTurns: number }
+  | { kind: "poisonAutoParryNextAttack"; counterDamage: number; poisonOnTrigger: number; maxTurns: number }
   | { kind: "dodgeFirstAttackOfNextEnemyTurn"; maxTurns: number }
   | { kind: "dodgeNextAttack"; maxTurns: number }
   | { kind: "parry"; amount: number };
@@ -284,9 +285,15 @@ interface SideState {
   chargeStacks: number;
   burn: { dmg: number; turns: number } | null;
   weaken: { amount: number; turns: number } | null;
-  reflectNextAttack: { ratio: number } | null;
+  reflectNextAttack: { ratio: number; poisonOnTrigger?: number; requireBlockHit?: boolean } | null;
   weakenNextAttack: { ratio: number; turnsLeft: number } | null;
-  autoParryNextAttack: { counterDamage: number; turnsLeft: number } | null;
+  autoParryNextAttack: { counterDamage: number; turnsLeft: number; triggerOrder: number } | null;
+  poisonAutoParryNextAttack: {
+    counterDamage: number;
+    poisonOnTrigger: number;
+    turnsLeft: number;
+    triggerOrder: number;
+  } | null;
   dodgeFirstAttackOfNextEnemyTurn: { turnsLeft: number } | null;
   dodgeNextAttack: { turnsLeft: number } | null;
   parts: EnemyRuntimePart[];
@@ -382,6 +389,7 @@ export class CardBattleSystem {
   private lastSpeechAt = 0;
   private flowWatchdog: Phaser.Time.TimerEvent | null = null;
   private battleRunId = 0;
+  private nextReactionOrder = 1;
   private effectObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(scene: Phaser.Scene) {
@@ -494,6 +502,7 @@ export class CardBattleSystem {
       reflectNextAttack: null,
       weakenNextAttack: null,
       autoParryNextAttack: null,
+      poisonAutoParryNextAttack: null,
       dodgeFirstAttackOfNextEnemyTurn: null,
       dodgeNextAttack: null,
       parts: [],
@@ -510,6 +519,7 @@ export class CardBattleSystem {
       reflectNextAttack: null,
       weakenNextAttack: null,
       autoParryNextAttack: null,
+      poisonAutoParryNextAttack: null,
       dodgeFirstAttackOfNextEnemyTurn: null,
       dodgeNextAttack: null,
       parts: this.createEnemyParts("default"),
@@ -517,6 +527,7 @@ export class CardBattleSystem {
     };
     this.energy = ENERGY_MAX;
     this.turn = 1;
+    this.nextReactionOrder = 1;
     this.activePartId = part.id;
     this.deck = shuffle(STARTER_DECK.map((cardId) => this.createTarotCard(cardId)));
     this.hand = [];
@@ -930,19 +941,30 @@ export class CardBattleSystem {
       this.playWeakenBreakEffect();
     }
 
+    const playerBlockBeforeHit = this.player.block;
     this.applyAttack(this.player, incoming);
     this.playAttackEffect("player", incoming);
 
     let reflected = 0;
     if (this.player.reflectNextAttack) {
-      const ratio = this.player.reflectNextAttack.ratio;
-      this.player.reflectNextAttack = null;
-      reflected = Math.max(0, Math.round(incoming * ratio));
-      if (reflected > 0) {
-        this.applyAttack(this.enemy, reflected);
-        this.playReflectEffect(reflected);
+      const reaction = this.player.reflectNextAttack;
+      const shieldWasHit = playerBlockBeforeHit > 0 && incoming > 0;
+      const shouldTrigger = !reaction.requireBlockHit || shieldWasHit;
+      if (shouldTrigger) {
+        this.player.reflectNextAttack = null;
+        reflected = Math.max(0, Math.round(incoming * reaction.ratio));
+        if (reflected > 0) {
+          this.applyAttack(this.enemy, reflected);
+          this.playReflectEffect(reflected);
+        }
+        if (reaction.poisonOnTrigger) {
+          const poison = this.applyPoisonToEnemy(reaction.poisonOnTrigger);
+          if (poison > 0) parts.push(`독 +${poison}`);
+        }
+        parts.push(`반격 ${reflected}`);
+      } else {
+        parts.push("독방벽 미발동");
       }
-      parts.push(`반격 ${reflected}`);
     }
 
     const suffix = parts.length > 0 ? ` (${parts.join(" · ")})` : "";
@@ -954,16 +976,35 @@ export class CardBattleSystem {
   }
 
   private resolveEnemyAttackPrevention(rawAmount: number) {
-    if (this.player.autoParryNextAttack) {
-      const { counterDamage } = this.player.autoParryNextAttack;
-      this.player.autoParryNextAttack = null;
-      const dealt = this.applyAttack(this.enemy, counterDamage);
-      this.playAutoParryEffect(dealt);
-      return {
-        prevented: true,
-        counterDamage: dealt,
-        log: `자동 패링! 적 공격 ${rawAmount} 무효 · 반격 ${dealt}`,
-      };
+    const normalParry = this.player.autoParryNextAttack;
+    const poisonParry = this.player.poisonAutoParryNextAttack;
+    if (normalParry || poisonParry) {
+      const usePoisonParry =
+        !!poisonParry &&
+        (!normalParry || poisonParry.triggerOrder < normalParry.triggerOrder);
+
+      if (usePoisonParry && poisonParry) {
+        this.player.poisonAutoParryNextAttack = null;
+        const dealt = this.applyAttack(this.enemy, poisonParry.counterDamage);
+        const poison = this.applyPoisonToEnemy(poisonParry.poisonOnTrigger);
+        this.playAutoParryEffect(dealt);
+        return {
+          prevented: true,
+          counterDamage: dealt,
+          log: `독칼날! 적 공격 ${rawAmount} 무효 · 반격 ${dealt} · 독 +${poison}`,
+        };
+      }
+
+      if (normalParry) {
+        this.player.autoParryNextAttack = null;
+        const dealt = this.applyAttack(this.enemy, normalParry.counterDamage);
+        this.playAutoParryEffect(dealt);
+        return {
+          prevented: true,
+          counterDamage: dealt,
+          log: `자동 패링! 적 공격 ${rawAmount} 무효 · 반격 ${dealt}`,
+        };
+      }
     }
 
     if (this.player.dodgeNextAttack) {
@@ -1203,7 +1244,12 @@ export class CardBattleSystem {
     const id = cards[0]?.cardId ?? "attack";
     if (id === "temp_smash") return "smash";
     if (id === "temp_lifesteal" || id === "temp_drain_poison") return "drain";
-    if (id === "temp_poison_arrow" || id === "temp_strong_poison") return "poison";
+    if (
+      id === "temp_poison_arrow" ||
+      id === "temp_strong_poison" ||
+      id === "temp_poison_barrier" ||
+      id === "temp_poison_blade"
+    ) return "poison";
     if (id === "temp_counter" || id === "temp_disarm") return "counter";
     return "normal";
   }
@@ -1279,9 +1325,17 @@ export class CardBattleSystem {
           logParts.push(`독 +${effect.amount}`);
           break;
         case "reflectNextAttack":
-          this.player.reflectNextAttack = { ratio: effect.ratio };
+          this.player.reflectNextAttack = {
+            ratio: effect.ratio,
+            poisonOnTrigger: effect.poisonOnTrigger,
+            requireBlockHit: effect.requireBlockHit,
+          };
           this.playCounterReadyEffect();
-          logParts.push(`반격 대기 ${Math.round(effect.ratio * 100)}%`);
+          logParts.push(
+            effect.poisonOnTrigger
+              ? `독방벽 대기 ${Math.round(effect.ratio * 100)}%`
+              : `반격 대기 ${Math.round(effect.ratio * 100)}%`
+          );
           break;
         case "weakenNextAttack":
           this.enemy.weakenNextAttack = {
@@ -1295,9 +1349,20 @@ export class CardBattleSystem {
           this.player.autoParryNextAttack = {
             counterDamage: effect.counterDamage,
             turnsLeft: effect.maxTurns,
+            triggerOrder: this.nextReactionOrder++,
           };
           this.playCounterStanceReadyEffect();
           logParts.push(`자동 패링 대기`);
+          break;
+        case "poisonAutoParryNextAttack":
+          this.player.poisonAutoParryNextAttack = {
+            counterDamage: effect.counterDamage,
+            poisonOnTrigger: effect.poisonOnTrigger,
+            turnsLeft: effect.maxTurns,
+            triggerOrder: this.nextReactionOrder++,
+          };
+          this.playCounterStanceReadyEffect();
+          logParts.push(`독칼날 대기`);
           break;
         case "dodgeFirstAttackOfNextEnemyTurn":
           this.player.dodgeFirstAttackOfNextEnemyTurn = {
@@ -1970,6 +2035,13 @@ export class CardBattleSystem {
         expired.push("카운터스탠스");
       }
     }
+    if (this.player.poisonAutoParryNextAttack) {
+      this.player.poisonAutoParryNextAttack.turnsLeft -= 1;
+      if (this.player.poisonAutoParryNextAttack.turnsLeft <= 0) {
+        this.player.poisonAutoParryNextAttack = null;
+        expired.push("독칼날");
+      }
+    }
     if (this.player.dodgeFirstAttackOfNextEnemyTurn) {
       this.player.dodgeFirstAttackOfNextEnemyTurn.turnsLeft -= 1;
       if (this.player.dodgeFirstAttackOfNextEnemyTurn.turnsLeft <= 0) {
@@ -2243,7 +2315,9 @@ export class CardBattleSystem {
   private getEnemyAttackPreventionLabel() {
     const labels: string[] = [];
     if (this.enemy.partRuntime.strongAttackNext) labels.push("강공");
-    if (this.player.autoParryNextAttack) labels.push("자동 패링");
+    if (this.player.autoParryNextAttack || this.player.poisonAutoParryNextAttack) {
+      labels.push(this.player.poisonAutoParryNextAttack && !this.player.autoParryNextAttack ? "독칼날" : "자동 패링");
+    }
     else if (this.player.dodgeNextAttack || this.player.dodgeFirstAttackOfNextEnemyTurn) labels.push("회피");
     return labels.length > 0 ? ` (${labels.join(" · ")})` : "";
   }
@@ -2251,6 +2325,7 @@ export class CardBattleSystem {
   private hasEnemyAttackPrevention() {
     return (
       this.player.autoParryNextAttack !== null ||
+      this.player.poisonAutoParryNextAttack !== null ||
       this.player.dodgeNextAttack !== null ||
       this.player.dodgeFirstAttackOfNextEnemyTurn !== null
     );
@@ -2300,6 +2375,7 @@ export class CardBattleSystem {
       playerParts.push(`반격 ${Math.round(this.player.reflectNextAttack.ratio * 100)}%`);
     }
     if (this.player.autoParryNextAttack) playerParts.push("자동 패링");
+    if (this.player.poisonAutoParryNextAttack) playerParts.push("독칼날");
     if (this.player.dodgeNextAttack) playerParts.push("완전회피");
     if (this.player.dodgeFirstAttackOfNextEnemyTurn) playerParts.push("신속회피");
     this.playerStatusText.setText(playerParts.join("  ·  "));
@@ -3014,11 +3090,15 @@ export class CardBattleSystem {
         case "partDamage":
           return `${this.getPartDisplayName(effect.partId)} 피해 ${effect.amount}`;
         case "reflectNextAttack":
-          return `다음 공격 반사 ${Math.round(effect.ratio * 100)}%`;
+          return effect.poisonOnTrigger
+            ? `보호막 피격 시 반사 ${Math.round(effect.ratio * 100)}% + 독 ${effect.poisonOnTrigger}`
+            : `다음 공격 반사 ${Math.round(effect.ratio * 100)}%`;
         case "weakenNextAttack":
           return `적 다음 공격 약화 ${Math.round(effect.ratio * 100)}%`;
         case "autoParryNextAttack":
           return `자동 패링 + 반격 ${effect.counterDamage}`;
+        case "poisonAutoParryNextAttack":
+          return `독칼날 반격 ${effect.counterDamage} + 독 ${effect.poisonOnTrigger}`;
         case "dodgeFirstAttackOfNextEnemyTurn":
           return "다음 적 턴 첫 공격 회피";
         case "dodgeNextAttack":

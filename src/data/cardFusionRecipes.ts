@@ -11,9 +11,10 @@ export type FusionEffect =
   | { kind: "heal"; amount: number }
   | { kind: "energy"; amount: number }
   | { kind: "applyPoison"; amount: number }
-  | { kind: "reflectNextAttack"; ratio: number }
+  | { kind: "reflectNextAttack"; ratio: number; poisonOnTrigger?: number; requireBlockHit?: boolean }
   | { kind: "weakenNextAttack"; ratio: number; maxTurns: number }
   | { kind: "autoParryNextAttack"; counterDamage: number; maxTurns: number }
+  | { kind: "poisonAutoParryNextAttack"; counterDamage: number; poisonOnTrigger: number; maxTurns: number }
   | { kind: "dodgeFirstAttackOfNextEnemyTurn"; maxTurns: number }
   | { kind: "dodgeNextAttack"; maxTurns: number };
 
@@ -142,6 +143,35 @@ export const CARD_FUSION_RECIPES: CardFusionRecipe[] = [
         { kind: "applyPoison", amount: 4 },
         { kind: "heal", amount: 5 },
       ],
+    },
+  },
+  {
+    id: "defense_poison_poison_barrier",
+    roles: ["defense", "poison"],
+    result: {
+      id: "temp_poison_barrier",
+      name: "독방벽",
+      role: "defense",
+      cost: 2,
+      color: 0x4fb36a,
+      description: "큰 보호막 + 보호막 피격 시\n50% 반사 + 독 2스택",
+      effects: [
+        { kind: "block", amount: 11 },
+        { kind: "reflectNextAttack", ratio: 0.5, poisonOnTrigger: 2, requireBlockHit: true },
+      ],
+    },
+  },
+  {
+    id: "parry_poison_poison_blade",
+    roles: ["parry", "poison"],
+    result: {
+      id: "temp_poison_blade",
+      name: "독칼날",
+      role: "parry",
+      cost: 2,
+      color: 0x6c5bd6,
+      description: "다음 공격 자동 패링\n작은 반격 + 독 3스택",
+      effects: [{ kind: "poisonAutoParryNextAttack", counterDamage: 4, poisonOnTrigger: 3, maxTurns: 2 }],
     },
   },
   {
