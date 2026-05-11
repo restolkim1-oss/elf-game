@@ -19,10 +19,12 @@ import {
   getShopGalleryItem,
   type ShopArtId,
 } from "../data/shop";
+import type { PartId } from "../data/enemyParts";
 
 const AFFINITY_MAX = 100;
 const STAGE2_UNLOCK_AFFINITY = 40;
 const STAGE3_UNLOCK_AFFINITY = 100;
+const BATTLE_WIN_COIN_REWARD = 100;
 
 export class GameScene extends Phaser.Scene {
   private partSystem!: PartSystem;
@@ -43,7 +45,7 @@ export class GameScene extends Phaser.Scene {
   private stageSet: StageSet = 1;
   private stage2StoryUnlocked = false;
   private stage3StoryUnlocked = false;
-  private currency = 0;
+  private coins = 0;
   private affinity = 0;
   private inventory: Record<ShopArtId, number> = createEmptyGalleryInventory();
 
@@ -329,17 +331,16 @@ export class GameScene extends Phaser.Scene {
 
     this.stageManager.hidePartLayer(part.id);
     this.partSystem.removePart(part.id);
-    if (alreadyCleared) return;
+    if (alreadyCleared) {
+      return { rewardPart: null as PartDef | null, finished: this.progressSystem.isFinished() };
+    }
 
-    this.grantCoins(35 + part.difficulty * 15, `${part.label} 클리어 보상`);
     this.removed.add(part.id);
     this.progressSystem.advance();
     this.events.emit("progress", this.progressSystem.getProgress());
 
     if (this.progressSystem.isFinished()) {
-      this.grantCoins(120, "스테이지 클리어 보너스");
-      this.triggerFinale();
-      return;
+      return { rewardPart: part, finished: true };
     }
 
     const targetKey = stageForRemoved(this.removed, this.stageSet);
@@ -350,9 +351,11 @@ export class GameScene extends Phaser.Scene {
       this.stageManager.transitionTo(targetKey);
     }
     this.partSystem.setActivePart(this.getNextPart()?.id ?? null);
+    return { rewardPart: part, finished: false };
   }
 
   private handlePartsDestroyedInBattle(partIds: string[], activePartId: string) {
+    const destroyedParts: PartDef[] = [];
     for (const partId of partIds) {
       const mappedId = this.mapBattlePartIdToStagePartId(partId);
       if (!mappedId || this.removed.has(mappedId)) continue;
@@ -364,19 +367,49 @@ export class GameScene extends Phaser.Scene {
       this.removed.add(mappedId);
       this.progressSystem.advance();
       this.events.emit("progress", this.progressSystem.getProgress());
+      destroyedParts.push(part);
       if (mappedId !== activePartId) {
         this.feedback(`${part.label} 파츠가 전투 중 파괴되었습니다.`);
       }
     }
-    if (this.progressSystem.isFinished() && !this.finaleTriggered) {
-      this.grantCoins(120, "스테이지 클리어 보너스");
-      this.triggerFinale();
-    }
+    return destroyedParts;
   }
 
   private mapBattlePartIdToStagePartId(partId: string) {
     if (partId === "shoes") return "boots";
     return partId;
+  }
+
+  private mapStagePartIdToBattlePartId(partId: string): PartId | null {
+    switch (partId) {
+      case "boots":
+        return "shoes";
+      case "circlet":
+      case "cape":
+      case "sweater":
+      case "skirt":
+      case "underwear":
+        return partId;
+      default:
+        return null;
+    }
+  }
+
+  private getBattlePartLabel(partId: PartId) {
+    switch (partId) {
+      case "circlet":
+        return "서클릿";
+      case "cape":
+        return "케이프";
+      case "sweater":
+        return "스웨터";
+      case "skirt":
+        return "스커트";
+      case "shoes":
+        return "신발";
+      case "underwear":
+        return "언더웨어";
+    }
   }
 
   private getNextPart(): PartDef | null {
@@ -410,26 +443,48 @@ export class GameScene extends Phaser.Scene {
 
     this.cardBattle.start(part, (success, battleResult) => {
       if (flowId !== this.battleFlowId) return;
-      let nextPart: PartDef | null = null;
-      try {
-        if (success) {
-          this.handlePartsDestroyedInBattle(battleResult?.destroyedPartIds ?? [], part.id);
-          this.handlePartCleared(part);
-          nextPart = this.getNextPart();
-        } else if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
-          this.abortingPuzzle = false;
-          this.feedback("미니게임을 포기했습니다.");
-        } else {
-          this.events.emit("failure", part.id);
-        }
-      } finally {
-        if (success && nextPart && !this.finaleTriggered) {
-          const queuedPart = nextPart;
-          this.queueNextPartBattle(queuedPart, flowId);
-        } else {
+      if (success) {
+        const destroyedInBattle = this.handlePartsDestroyedInBattle(battleResult?.destroyedPartIds ?? [], part.id);
+        const clearResult = this.handlePartCleared(part);
+        const nextPart = this.getNextPart();
+        this.grantCoins(BATTLE_WIN_COIN_REWARD);
+        this.showBattleReward(clearResult.rewardPart, destroyedInBattle, () => {
+          if (flowId !== this.battleFlowId) return;
+          if (clearResult.finished && !this.finaleTriggered) {
+            this.releaseBattleLock();
+            this.triggerFinale();
+            return;
+          }
+          if (nextPart && !this.finaleTriggered) {
+            this.queueNextPartBattle(nextPart, flowId);
+            return;
+          }
           this.releaseBattleLock();
-        }
+        });
+        return;
       }
+      if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
+        this.abortingPuzzle = false;
+        this.feedback("미니게임을 포기했습니다.");
+      } else {
+        this.events.emit("failure", part.id);
+      }
+      this.releaseBattleLock();
+    });
+  }
+
+  private showBattleReward(rewardPart: PartDef | null, destroyedInBattle: PartDef[], onContinue: () => void) {
+    const rewardPartId = rewardPart ? this.mapStagePartIdToBattlePartId(rewardPart.id) : null;
+    const destroyedPartIds = destroyedInBattle
+      .map((part) => this.mapStagePartIdToBattlePartId(part.id))
+      .filter((partId): partId is PartId => partId !== null);
+    this.events.emit("battle-reward-show", {
+      coins: BATTLE_WIN_COIN_REWARD,
+      rewardPartId,
+      rewardPartLabel: rewardPartId ? this.getBattlePartLabel(rewardPartId) : null,
+      battleDestroyedPartIds: destroyedPartIds,
+      battleDestroyedLabels: destroyedPartIds.map((partId) => this.getBattlePartLabel(partId)),
+      onContinue,
     });
   }
 
@@ -476,7 +531,6 @@ export class GameScene extends Phaser.Scene {
       this.stageManager.hidePartLayer(part.id, 240);
       this.removed.add(part.id);
       this.progressSystem.advance();
-      this.grantCoins(25 + part.difficulty * 8);
     }
 
     this.events.emit("progress", this.progressSystem.getProgress());
@@ -579,11 +633,11 @@ export class GameScene extends Phaser.Scene {
       this.events.emit("view-shop-art", entry);
       return;
     }
-    if (this.currency < entry.cost) {
+    if (this.coins < entry.cost) {
       this.feedback(`${entry.label} 구입에 금화 ${entry.cost}개가 필요합니다.`);
       return;
     }
-    this.currency -= entry.cost;
+    this.coins -= entry.cost;
     this.inventory[id] = 1;
     this.persistMetaState();
     this.emitEconomyState();
@@ -591,12 +645,11 @@ export class GameScene extends Phaser.Scene {
     this.events.emit("view-shop-art", entry);
   }
 
-  private grantCoins(amount: number, reason?: string) {
+  private grantCoins(amount: number) {
     if (amount <= 0) return;
-    this.currency += amount;
+    this.coins += amount;
     this.persistMetaState();
     this.emitEconomyState();
-    if (reason) this.feedback(`${reason} · 금화 +${amount}`);
   }
 
   private canUseStage2() {
@@ -615,7 +668,7 @@ export class GameScene extends Phaser.Scene {
 
   private emitEconomyState() {
     this.events.emit("economy-update", {
-      currency: this.currency,
+      currency: this.coins,
       affinity: this.affinity,
       affinityMax: AFFINITY_MAX,
       inventory: { ...this.inventory },
@@ -642,7 +695,7 @@ export class GameScene extends Phaser.Scene {
     const inv = this.registry.get("meta-inventory");
     const stage2Unlocked = this.registry.get("meta-stage2-unlocked");
     const stage3Unlocked = this.registry.get("meta-stage3-unlocked");
-    this.currency = Number.isFinite(c) ? Number(c) : 0;
+    this.coins = Number.isFinite(c) ? Number(c) : 0;
     this.affinity = Phaser.Math.Clamp(
       Number.isFinite(a) ? Number(a) : 0,
       0,
@@ -660,7 +713,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private persistMetaState() {
-    this.registry.set("meta-currency", this.currency);
+    this.registry.set("meta-currency", this.coins);
     this.registry.set("meta-affinity", this.affinity);
     this.registry.set("meta-inventory", { ...this.inventory });
     this.registry.set("meta-stage2-unlocked", this.stage2StoryUnlocked);

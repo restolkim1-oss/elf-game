@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { MENU_ICONS, type PartDef, getPartsForStage } from "../data/parts";
 import { SHOP_GALLERY, type ShopArtId } from "../data/shop";
+import { PART_STORIES } from "../data/partStories";
+import type { PartId } from "../data/enemyParts";
 import { UI_SCALE } from "../main";
 
 const COLORS = {
@@ -46,6 +48,15 @@ interface ShopArtViewPayload {
   cost: number;
 }
 
+interface BattleRewardPayload {
+  coins: number;
+  rewardPartId: PartId | null;
+  rewardPartLabel: string | null;
+  battleDestroyedPartIds: PartId[];
+  battleDestroyedLabels: string[];
+  onContinue: () => void;
+}
+
 export class UIScene extends Phaser.Scene {
   private parts: PartDef[] = [];
   private pills: Pill[] = [];
@@ -63,6 +74,9 @@ export class UIScene extends Phaser.Scene {
   private bottomPanelGroup: Phaser.GameObjects.Container | null = null;
   private clearCelebration: Phaser.GameObjects.Container | null = null;
   private galleryView: Phaser.GameObjects.Container | null = null;
+  private rewardModal: Phaser.GameObjects.Container | null = null;
+  private topCoinText: Phaser.GameObjects.Text | null = null;
+  private displayedCoins = 0;
   private topEnemyGroup: Phaser.GameObjects.Container | null = null;
   private topEnemyName: Phaser.GameObjects.Text | null = null;
   private topEnemyIntent: Phaser.GameObjects.Text | null = null;
@@ -93,6 +107,9 @@ export class UIScene extends Phaser.Scene {
     this.bottomPanelGroup = null;
     this.clearCelebration = null;
     this.galleryView = null;
+    this.rewardModal = null;
+    this.topCoinText = null;
+    this.displayedCoins = 0;
     this.topEnemyGroup = null;
     this.topEnemyName = null;
     this.topEnemyIntent = null;
@@ -141,6 +158,9 @@ export class UIScene extends Phaser.Scene {
     game.events.on("view-shop-art", (payload: ShopArtViewPayload) => {
       this.showGalleryView(payload);
     });
+    game.events.on("battle-reward-show", (payload: BattleRewardPayload) => {
+      this.showBattleRewardModal(payload);
+    });
     game.events.on("viewing-mode", () => this.drawZoomControls(width, height));
     game.events.on("finale", () => this.onFinale());
     game.events.on("enemy-energy-show", (payload: { label: string; hp: number; hpMax: number; intent?: string }) => {
@@ -180,7 +200,7 @@ export class UIScene extends Phaser.Scene {
 
     const resources = [
       { key: "menu_icon_main", text: "21/21" },
-      { key: "menu_icon_coin", text: "199,240" },
+      { key: "menu_icon_coin", text: "0", dynamic: "coins" },
       { key: "menu_icon_gem", text: "4,300" },
       { key: "menu_icon_settings", text: "100" },
     ];
@@ -193,7 +213,7 @@ export class UIScene extends Phaser.Scene {
         const scale = Math.min(u(38) / icon.width, u(38) / icon.height);
         icon.setScale(scale);
       }
-      this.add
+      const valueText = this.add
         .text(x + cellW * 0.05, barH / 2, item.text, {
           fontFamily: "serif",
           fontSize: px(15),
@@ -204,6 +224,9 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setDepth(1502);
+      if (item.dynamic === "coins") {
+        this.topCoinText = valueText;
+      }
       this.add
         .text(x + cellW * 0.34, barH / 2, "+", {
           fontFamily: "serif",
@@ -868,6 +891,159 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  private showBattleRewardModal(payload: BattleRewardPayload) {
+    this.rewardModal?.destroy();
+    const { width, height } = this.scale;
+    const c = this.add.container(0, 0).setDepth(2300);
+    this.rewardModal = c;
+    let continued = false;
+
+    c.add(
+      this.add
+        .rectangle(width / 2, height / 2, width, height, 0x050208, 0.72)
+        .setInteractive()
+    );
+
+    const panelW = Math.min(width * 0.9, u(360));
+    const panelH = Math.min(height * 0.7, u(430));
+    const panelX = width / 2;
+    const panelY = height / 2;
+    const story = payload.rewardPartId ? PART_STORIES[payload.rewardPartId] : null;
+    const destroyedText =
+      payload.battleDestroyedLabels.length > 0
+        ? `전투 중 파괴: ${payload.battleDestroyedLabels.join(", ")}`
+        : "전투 중 파괴: 없음";
+
+    c.add(
+      this.add
+        .rectangle(panelX, panelY, panelW, panelH, COLORS.panelMid, 0.98)
+        .setStrokeStyle(u(2), COLORS.gild, 0.96)
+    );
+    c.add(
+      this.add
+        .rectangle(panelX, panelY - panelH / 2 + u(44), panelW - u(18), u(58), 0x2d1f1a, 0.9)
+        .setStrokeStyle(u(1), COLORS.gildHot, 0.65)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - panelH / 2 + u(28), "전투 승리!", {
+          fontFamily: "serif",
+          fontSize: px(23),
+          color: COLORS.textHighlight,
+          fontStyle: "bold",
+          stroke: "#130814",
+          strokeThickness: u(1.2),
+        })
+        .setOrigin(0.5, 0)
+    );
+
+    c.add(
+      this.add
+        .text(
+          panelX,
+          panelY - panelH / 2 + u(104),
+          payload.rewardPartLabel ? `보상 파츠: ${payload.rewardPartLabel}` : "보상 파츠: 이미 모두 파괴됨",
+          {
+            fontFamily: "serif",
+            fontSize: px(14),
+            color: COLORS.text,
+            fontStyle: "bold",
+          }
+        )
+        .setOrigin(0.5)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - panelH / 2 + u(139), story?.title ?? "이미 모두 파괴됨", {
+          fontFamily: "serif",
+          fontSize: px(15),
+          color: COLORS.textHighlight,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - panelH / 2 + u(188), story?.text ?? "이번 전투에서 추가로 해제할 파츠가 없습니다.", {
+          fontFamily: "serif",
+          fontSize: px(11),
+          color: COLORS.text,
+          fontStyle: "bold",
+          align: "center",
+          wordWrap: { width: panelW - u(54) },
+        })
+        .setOrigin(0.5)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY + u(38), destroyedText, {
+          fontFamily: "serif",
+          fontSize: px(10.5),
+          color: COLORS.textDim,
+          fontStyle: "bold",
+          align: "center",
+          wordWrap: { width: panelW - u(54) },
+        })
+        .setOrigin(0.5)
+    );
+
+    const coinText = this.add
+      .text(panelX, panelY + u(88), "획득 코인: +0", {
+        fontFamily: "serif",
+        fontSize: px(17),
+        color: COLORS.success,
+        fontStyle: "bold",
+        stroke: "#102012",
+        strokeThickness: u(1),
+      })
+      .setOrigin(0.5);
+    c.add(coinText);
+    this.tweens.addCounter({
+      from: 0,
+      to: payload.coins,
+      duration: 720,
+      ease: "Cubic.easeOut",
+      onUpdate: (tween) => {
+        coinText.setText(`획득 코인: +${Math.round(tween.getValue() ?? 0)}`);
+      },
+    });
+
+    this.makeButton(
+      c,
+      panelX,
+      panelY + panelH / 2 - u(48),
+      panelW * 0.62,
+      u(42),
+      "계속",
+      () => {
+        if (continued) return;
+        continued = true;
+        const old = this.rewardModal;
+        this.rewardModal = null;
+        this.tweens.add({
+          targets: old,
+          alpha: 0,
+          duration: 150,
+          onComplete: () => {
+            old?.destroy();
+            payload.onContinue();
+          },
+        });
+      },
+      px(12)
+    );
+
+    c.setAlpha(0).setScale(0.96);
+    this.tweens.add({
+      targets: c,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 220,
+      ease: "Back.easeOut",
+    });
+  }
+
   private makeButton(
     container: Phaser.GameObjects.Container,
     x: number,
@@ -908,6 +1084,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateEconomy(state: EconomyState) {
+    this.updateTopCoinText(state.currency);
     this.statText.setText(
       `금화 ${state.currency}  |  감상 ${this.getOwnedGalleryCount()} / ${SHOP_GALLERY.length}  |  스테이지 ${state.stageSet}`
     );
@@ -917,6 +1094,42 @@ export class UIScene extends Phaser.Scene {
       this.shopMenu = null;
       this.drawShopMenu();
     }
+  }
+
+  private updateTopCoinText(targetCoins: number) {
+    if (!this.topCoinText) return;
+    const from = this.displayedCoins;
+    const to = Math.max(0, Math.floor(targetCoins));
+    if (from === to) {
+      this.topCoinText.setText(this.formatCoins(to));
+      return;
+    }
+    this.tweens.killTweensOf(this.topCoinText);
+    this.tweens.addCounter({
+      from,
+      to,
+      duration: 680,
+      ease: "Cubic.easeOut",
+      onUpdate: (tween) => {
+        const value = Math.round(tween.getValue() ?? 0);
+        this.topCoinText?.setText(this.formatCoins(value));
+      },
+      onComplete: () => {
+        this.displayedCoins = to;
+        this.topCoinText?.setText(this.formatCoins(to));
+      },
+    });
+    this.tweens.add({
+      targets: this.topCoinText,
+      scaleX: { from: 1.12, to: 1 },
+      scaleY: { from: 1.12, to: 1 },
+      duration: 260,
+      ease: "Back.easeOut",
+    });
+  }
+
+  private formatCoins(value: number) {
+    return Math.max(0, Math.floor(value)).toLocaleString("ko-KR");
   }
 
   private markCleared(partId: string) {
