@@ -572,7 +572,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveClearTextureKey(): string {
-    return "E1_clear";
+    return "E1_base";
   }
 
   private switchStageSet(next: StageSet) {
