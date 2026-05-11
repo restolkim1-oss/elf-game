@@ -9,7 +9,7 @@ export interface PartStory {
 export const PART_STORIES: Record<PartId, PartStory> = {
   circlet: {
     partId: "circlet",
-    title: "제목 미정",
+    title: "부서진 서클릿",
     text: `인간들이 숲에 쳐들어왔다. 그들은 다짜고짜 우리를 공격했고, 격렬한 전투가 시작되었다.
 칼날이 스치는 소리, 마법이 터지는 굉음 속에서 나는 활을 당겼다.
 그때, 차가운 금속이 머리를 스쳤다. 내 서클릿이 상대의 검에 부서져 떨어졌다.
@@ -17,7 +17,7 @@ export const PART_STORIES: Record<PartId, PartStory> = {
   },
   shoes: {
     partId: "shoes",
-    title: "제목 미정",
+    title: "맨발의 흙",
     text: `전투는 멈추지 않았다. 화살을 쏘고, 마법을 외치고, 그저 본능적으로 움직였다.
 시간이 얼마나 흘렀는지 모른다. 한 순간 발이 미끄러졌고, 나는 그제야 내려다봤다.
 흙 위에 디딘 맨발. 신발은 어느 결에 사라져 있었다.
@@ -25,7 +25,7 @@ export const PART_STORIES: Record<PartId, PartStory> = {
   },
   cape: {
     partId: "cape",
-    title: "제목 미정",
+    title: "찢어진 가문의 문장",
     text: `다시 일어났다. 가문의 케이프를 끌어당겨 어깨를 감쌌다. 이건 내 자존심이었다.
 그러나 그 자존심은 너무도 쉽게 찢겨나갔다. 검 한 번에, 거짓말처럼.
 가문의 문장이 바람에 흩어졌다.
@@ -33,7 +33,7 @@ export const PART_STORIES: Record<PartId, PartStory> = {
   },
   sweater: {
     partId: "sweater",
-    title: "제목 미정",
+    title: "무너지는 가면",
     text: `몸이 한계에 다다랐다. 마나는 바닥났고, 호흡은 가빠졌다.
 그들의 검이 다시 닿았고, 천이 갈라졌다.
 그제야 알았다. 그들은 단순히 나를 죽이려는 게 아니라, 무너뜨리려는 거였다.
@@ -41,7 +41,7 @@ export const PART_STORIES: Record<PartId, PartStory> = {
   },
   skirt: {
     partId: "skirt",
-    title: "제목 미정",
+    title: "멈춰 선 질문",
     text: `다리에 힘이 풀렸다. 나무에 등을 기대고 겨우 버텼다.
 누더기가 된 스커트를 내려다보며, 나는 처음으로 멈춰 섰다.
 왜 이런 짓을 하는 걸까. 우리 숲은 너희에게 아무 짓도 안 했는데.
@@ -49,7 +49,7 @@ export const PART_STORIES: Record<PartId, PartStory> = {
   },
   underwear: {
     partId: "underwear",
-    title: "제목 미정",
+    title: "침묵한 숲",
     text: `모든 게 끝나 있었다. 마지막 천 조각마저, 흙 위에 떨어져 있었다.
 나는 마침내 고개를 들어 그를 바라봤다. 눈빛은 무엇 하나 남지 않은 자의 그것이었다.
 더 이상 가진 게 없어. 내 자존심도, 내 숲도, 내 이름도. 다 가져갔어.

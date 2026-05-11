@@ -13,7 +13,6 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image("E1", "/assets/E1_base.png");
     STAGE_LAYERS.forEach((layer) => {
       this.load.image(layer.textureKey, layer.path);
     });

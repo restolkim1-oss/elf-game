@@ -67,7 +67,7 @@ export const STAGE_LAYERS: StageLayerDef[] = [
   {
     id: "base",
     textureKey: "E1_base",
-    path: "/assets/E1_base.png",
+    path: "/assets/E1_base.png?v=base-20260511",
     depth: 10,
   },
   {

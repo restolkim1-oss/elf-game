@@ -46,7 +46,7 @@ export class StageManager {
 
     if (!this.baseLayer) {
       this.baseLayer = scene.add
-        .image(centerX, centerY, "E1")
+        .image(centerX, centerY, "E1_base")
         .setOrigin(0.5, 0.5)
         .setScale(scale)
         .setDepth(10);

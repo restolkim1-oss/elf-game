@@ -1079,7 +1079,167 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: c, alpha: 1, duration: 130 });
   }
 
+  private showReadableBattleRewardModal(payload: BattleRewardPayload) {
+    this.rewardModal?.destroy();
+    const { width, height } = this.scale;
+    const c = this.add.container(0, 0).setDepth(2300);
+    this.rewardModal = c;
+    let continued = false;
+
+    c.add(
+      this.add
+        .rectangle(width / 2, height / 2, width, height, 0x050208, 0.72)
+        .setInteractive()
+    );
+
+    const panelW = Math.min(width * 0.92, u(390));
+    const panelH = Math.min(height * 0.82, u(520));
+    const panelX = width / 2;
+    const panelY = height / 2;
+    const rewardPartId = payload.rewardPartId;
+    const story = rewardPartId === null ? null : PART_STORIES[rewardPartId as PartId];
+    const destroyedText =
+      payload.battleDestroyedLabels.length > 0
+        ? `전투 중 파괴: ${payload.battleDestroyedLabels.join(", ")}`
+        : "";
+
+    c.add(
+      this.add
+        .rectangle(panelX, panelY, panelW, panelH, COLORS.panelMid, 0.98)
+        .setStrokeStyle(u(2), COLORS.gild, 0.96)
+    );
+    c.add(
+      this.add
+        .rectangle(panelX, panelY - panelH / 2 + u(44), panelW - u(18), u(58), 0x2d1f1a, 0.9)
+        .setStrokeStyle(u(1), COLORS.gildHot, 0.65)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - panelH / 2 + u(25), "전투 승리!", {
+          fontFamily: "serif",
+          fontSize: px(24),
+          color: COLORS.textHighlight,
+          fontStyle: "bold",
+          stroke: "#130814",
+          strokeThickness: u(1.2),
+        })
+        .setOrigin(0.5, 0)
+    );
+    c.add(
+      this.add
+        .text(
+          panelX,
+          panelY - panelH / 2 + u(92),
+          payload.rewardPartLabel
+            ? `보상 파츠: ${payload.rewardPartLabel}`
+            : "이미 모든 파츠가 파괴되었습니다.",
+          {
+            fontFamily: "serif",
+            fontSize: px(15),
+            color: COLORS.text,
+            fontStyle: "bold",
+            align: "center",
+          }
+        )
+        .setOrigin(0.5)
+    );
+
+    const storyBoxH = panelH - u(destroyedText ? 230 : 205);
+    c.add(
+      this.add
+        .rectangle(panelX, panelY - u(20), panelW - u(34), storyBoxH, 0x130f18, 0.56)
+        .setStrokeStyle(u(1), COLORS.gild, 0.35)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - u(20), story?.text ?? "이번 전투에서 추가로 해제할 파츠가 없습니다.", {
+          fontFamily: "serif",
+          fontSize: px(17),
+          color: COLORS.text,
+          fontStyle: "bold",
+          align: "center",
+          lineSpacing: u(4),
+          wordWrap: { width: panelW - u(54) },
+        })
+        .setOrigin(0.5)
+    );
+
+    if (destroyedText) {
+      c.add(
+        this.add
+          .text(panelX, panelY + panelH / 2 - u(135), destroyedText, {
+            fontFamily: "serif",
+            fontSize: px(11),
+            color: COLORS.textDim,
+            fontStyle: "bold",
+            align: "center",
+            wordWrap: { width: panelW - u(54) },
+          })
+          .setOrigin(0.5)
+      );
+    }
+
+    const coinText = this.add
+      .text(panelX, panelY + panelH / 2 - u(96), "획득 코인: +0", {
+        fontFamily: "serif",
+        fontSize: px(17),
+        color: COLORS.success,
+        fontStyle: "bold",
+        stroke: "#102012",
+        strokeThickness: u(1),
+      })
+      .setOrigin(0.5);
+    c.add(coinText);
+    this.tweens.addCounter({
+      from: 0,
+      to: payload.coins,
+      duration: 720,
+      ease: "Cubic.easeOut",
+      onUpdate: (tween) => {
+        coinText.setText(`획득 코인: +${Math.round(tween.getValue() ?? 0)}`);
+      },
+    });
+
+    this.makeButton(
+      c,
+      panelX,
+      panelY + panelH / 2 - u(42),
+      panelW * 0.62,
+      u(42),
+      "계속",
+      () => {
+        if (continued) return;
+        continued = true;
+        const old = this.rewardModal;
+        this.rewardModal = null;
+        this.tweens.add({
+          targets: old,
+          alpha: 0,
+          duration: 150,
+          onComplete: () => {
+            old?.destroy();
+            payload.onContinue();
+          },
+        });
+      },
+      px(12)
+    );
+
+    c.setAlpha(0).setScale(0.96);
+    this.tweens.add({
+      targets: c,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 220,
+      ease: "Back.easeOut",
+    });
+  }
+
   private showBattleRewardModal(payload: BattleRewardPayload) {
+    this.showReadableBattleRewardModal(payload);
+    return;
+
     this.rewardModal?.destroy();
     const { width, height } = this.scale;
     const c = this.add.container(0, 0).setDepth(2300);
@@ -1096,7 +1256,8 @@ export class UIScene extends Phaser.Scene {
     const panelH = Math.min(height * 0.7, u(430));
     const panelX = width / 2;
     const panelY = height / 2;
-    const story = payload.rewardPartId ? PART_STORIES[payload.rewardPartId] : null;
+    const rewardPartId = payload.rewardPartId;
+    const story = rewardPartId === null ? null : PART_STORIES[rewardPartId as PartId];
     const destroyedText =
       payload.battleDestroyedLabels.length > 0
         ? `전투 중 파괴: ${payload.battleDestroyedLabels.join(", ")}`

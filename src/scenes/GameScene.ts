@@ -562,6 +562,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveTextureKey(stageKey: StageKey): string {
+    if (stageKey === "E1") return "E1_base";
     return stageKey;
   }
 
