@@ -15,6 +15,7 @@ const TARGET_HAND = 5;
 const HAND_LIMIT = 7;
 const MAX_TURNS = 12;
 const POISON_STACK_CAP = 99;
+const CHARGE_STACK_CAP = 99;
 const ENEMY_REACTION_LINES = [
   "제법인데?",
   "이럴수가! 잘하네?",
@@ -23,7 +24,7 @@ const ENEMY_REACTION_LINES = [
   "생각보다 강하네?",
 ];
 
-type BaseCardId = "attack" | "powerAttack" | "defense" | "heal" | "parry" | "poison";
+type BaseCardId = "attack" | "powerAttack" | "defense" | "heal" | "parry" | "poison" | "charge";
 type TempCardId = `temp_${string}`;
 type CardId = BaseCardId | TempCardId;
 type CardRole = FusionRole;
@@ -34,6 +35,7 @@ type CardEffect =
   | { kind: "block"; amount: number }
   | { kind: "heal"; amount: number }
   | { kind: "energy"; amount: number }
+  | { kind: "applyCharge"; amount: number }
   | { kind: "applyPoison"; amount: number }
   | { kind: "drain"; amount: number }
   | { kind: "partBonusAttack"; amount: number; partIds: string[]; label: string }
@@ -199,6 +201,24 @@ const CARDS: Record<string, CardDef> = {
     damage: 1,
     risk: 3,
   },
+  charge: {
+    id: "charge",
+    characterName: "세리아",
+    role: "charge",
+    roleLabel: "충전",
+    name: "충전",
+    cost: 1,
+    description: "자신에게 충전 스택 +3",
+    effects: [{ kind: "applyCharge", amount: 3 }],
+    color: 0xffc857,
+    isReversed: false,
+    level: 1,
+    attack: 3,
+    defense: 4,
+    psyche: 10,
+    damage: 1,
+    risk: 2,
+  },
   parry: {
     id: "parry",
     characterName: "미르",
@@ -226,6 +246,7 @@ const STARTER_DECK: BaseCardId[] = [
   "heal", "heal",
   "parry", "parry", "parry",
   "poison", "poison",
+  "charge", "charge",
 ];
 
 type IntentKind = "attack" | "block";
@@ -260,6 +281,7 @@ interface SideState {
   hpMax: number;
   block: number;
   poisonStacks: number;
+  chargeStacks: number;
   burn: { dmg: number; turns: number } | null;
   weaken: { amount: number; turns: number } | null;
   reflectNextAttack: { ratio: number } | null;
@@ -313,6 +335,7 @@ export class CardBattleSystem {
   private playerEnergyOrbStates: boolean[] = [];
   private playerBlockText!: Phaser.GameObjects.Text;
   private playerStatusText!: Phaser.GameObjects.Text;
+  private playerChargeText: Phaser.GameObjects.Text | null = null;
   private enemyHpFill!: Phaser.GameObjects.Rectangle;
   private enemyHpText!: Phaser.GameObjects.Text;
   private enemyBlockText!: Phaser.GameObjects.Text;
@@ -429,6 +452,7 @@ export class CardBattleSystem {
     this.enemyPoisonText = null;
     this.playerEnergyOrbs = [];
     this.playerEnergyOrbStates = [];
+    this.playerChargeText = null;
     this.lastSpeechAt = 0;
     this.overlay?.destroy();
     this.overlay = null;
@@ -454,6 +478,7 @@ export class CardBattleSystem {
       hpMax: PLAYER_HP_MAX,
       block: 0,
       poisonStacks: 0,
+      chargeStacks: 0,
       burn: null,
       weaken: null,
       reflectNextAttack: null,
@@ -469,6 +494,7 @@ export class CardBattleSystem {
       hpMax: enemyHpMax,
       block: 0,
       poisonStacks: 0,
+      chargeStacks: 0,
       burn: null,
       weaken: null,
       reflectNextAttack: null,
@@ -648,6 +674,16 @@ export class CardBattleSystem {
       this.playerEnergyOrbs.push(orb);
       this.playerEnergyOrbStates.push(true);
     }
+    this.playerChargeText = this.scene.add
+      .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(16), orbY, "", {
+        fontFamily: "serif",
+        fontSize: px(11),
+        color: "#ffd572",
+        fontStyle: "bold",
+        stroke: "#2a1605",
+        strokeThickness: u(1.2),
+      })
+      .setOrigin(0, 0.5);
     this.playerBlockText = this.scene.add
       .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(12), playerHpY, "", {
         fontFamily: "serif",
@@ -683,6 +719,7 @@ export class CardBattleSystem {
       this.playerHpFill,
       this.playerHpText,
       ...this.playerEnergyOrbs,
+      this.playerChargeText,
       this.playerBlockText,
       this.playerStatusText,
       this.deckCountText,
@@ -1109,7 +1146,8 @@ export class CardBattleSystem {
       case "attack":
         attemptedAttack = true;
         if (duel.didWin) {
-          const result = this.applyPlayerDamageToEnemy(duel.damage, damageContext);
+          const attackAmount = this.applyChargeBoostToAttackAmount(duel.damage);
+          const result = this.applyPlayerDamageToEnemy(attackAmount, damageContext);
           didAttack = !result.prevented;
           resolvedAttackDamage = result.appliedAmount;
         } else {
@@ -1127,6 +1165,9 @@ export class CardBattleSystem {
         break;
       case "poison":
         this.applyPoisonToEnemy(totalEffect);
+        break;
+      case "charge":
+        this.applyChargeToPlayer(totalEffect);
         break;
       case "parry": {
         const guard = Math.max(1, Math.round(totalEffect * comboMultiplier));
@@ -1165,7 +1206,8 @@ export class CardBattleSystem {
     for (const effect of def.effects) {
       switch (effect.kind) {
         case "attack": {
-          const result = this.applyPlayerDamageToEnemy(effect.amount, damageContext);
+          const amount = this.applyChargeBoostToAttackAmount(effect.amount);
+          const result = this.applyPlayerDamageToEnemy(amount, damageContext);
           const dealt = result.dealt;
           didAttack = didAttack || !result.prevented;
           totalDamage += result.appliedAmount;
@@ -1190,7 +1232,8 @@ export class CardBattleSystem {
           break;
         }
         case "drain": {
-          const result = this.applyPlayerDamageToEnemy(effect.amount, damageContext);
+          const amount = this.applyChargeBoostToAttackAmount(effect.amount);
+          const result = this.applyPlayerDamageToEnemy(amount, damageContext);
           const dealt = result.dealt;
           const before = this.player.hp;
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + dealt);
@@ -1214,6 +1257,10 @@ export class CardBattleSystem {
         case "energy":
           this.energy = Math.min(ENERGY_MAX, this.energy + effect.amount);
           logParts.push(`기력 +${effect.amount}`);
+          break;
+        case "applyCharge":
+          this.applyChargeToPlayer(effect.amount);
+          logParts.push(`충전 +${effect.amount}`);
           break;
         case "applyPoison":
           this.applyPoisonToEnemy(effect.amount);
@@ -1587,6 +1634,23 @@ export class CardBattleSystem {
     if (applied <= 0) return 0;
     this.enemy.poisonStacks = Math.min(POISON_STACK_CAP, this.enemy.poisonStacks + applied);
     return applied;
+  }
+
+  private applyChargeToPlayer(amount: number) {
+    const applied = Math.max(0, Math.round(amount));
+    if (applied <= 0) return 0;
+    this.player.chargeStacks = Math.min(CHARGE_STACK_CAP, this.player.chargeStacks + applied);
+    this.playChargeTextPulse();
+    return applied;
+  }
+
+  private applyChargeBoostToAttackAmount(baseAmount: number) {
+    const charge = this.player.chargeStacks;
+    if (charge <= 0) return baseAmount;
+    const boosted = baseAmount + charge * 3;
+    this.player.chargeStacks = 0;
+    this.playChargeConsumeEffect(charge);
+    return boosted;
   }
 
   private processPoisonTick() {
@@ -2105,6 +2169,7 @@ export class CardBattleSystem {
   private refreshEnergyOrbs() {
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
     this.energyText.setText(selectedCost > 0 ? `선택 ${selectedCost}` : "");
+    this.playerChargeText?.setText(this.player.chargeStacks > 0 ? `충전: ${this.player.chargeStacks}` : "");
     this.playerEnergyOrbs.forEach((orb, idx) => {
       const active = idx < this.energy;
       if (this.playerEnergyOrbStates[idx] === active) {
@@ -2227,7 +2292,7 @@ export class CardBattleSystem {
     this.playerStatusText.setText(playerParts.join("  ·  "));
 
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
-    this.energyText.setText(`기력 ${this.energy} / ${ENERGY_MAX}${selectedCost > 0 ? ` · 선택 ${selectedCost}` : ""}`);
+    this.energyText.setText(selectedCost > 0 ? `선택 ${selectedCost}` : "");
     this.turnText.setText(`턴 ${this.turn} / ${MAX_TURNS}`);
     this.deckCountText.setText(`덱 ${this.deck.length} · 버림 ${this.discard.length}`);
   }
@@ -2881,6 +2946,60 @@ export class CardBattleSystem {
       ease: "Cubic.easeOut",
       onComplete: () => {
         if (text.scene) text.destroy();
+      },
+    });
+  }
+
+  private playChargeTextPulse() {
+    if (!this.playerChargeText) return;
+    this.scene.tweens.killTweensOf(this.playerChargeText);
+    this.playerChargeText.setAlpha(1).setScale(1);
+    this.scene.tweens.add({
+      targets: this.playerChargeText,
+      scaleX: { from: 1.28, to: 1 },
+      scaleY: { from: 1.28, to: 1 },
+      duration: 220,
+      ease: "Back.Out",
+    });
+  }
+
+  private playChargeConsumeEffect(charge: number) {
+    if (!this.playerChargeText) return;
+    const { x, y } = this.playerChargeText;
+    const flash = this.trackEffect(
+      this.scene.add
+        .text(x, y - u(18), `충전 +${charge * 3}`, {
+          fontFamily: "serif",
+          fontSize: px(13),
+          color: "#ffd572",
+          fontStyle: "bold",
+          stroke: "#2a1605",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0, 0.5)
+        .setDepth(724)
+    );
+    this.overlay?.add(flash);
+    this.scene.tweens.add({
+      targets: flash,
+      y: flash.y - u(20),
+      alpha: 0,
+      duration: 560,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (flash.scene) flash.destroy();
+      },
+    });
+    this.scene.tweens.killTweensOf(this.playerChargeText);
+    this.scene.tweens.add({
+      targets: this.playerChargeText,
+      alpha: { from: 1, to: 0.25 },
+      scaleX: { from: 1.18, to: 0.85 },
+      scaleY: { from: 1.18, to: 0.85 },
+      duration: 220,
+      yoyo: true,
+      onComplete: () => {
+        this.playerChargeText?.setAlpha(1).setScale(1);
       },
     });
   }

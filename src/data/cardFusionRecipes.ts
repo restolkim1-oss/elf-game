@@ -1,6 +1,6 @@
 import type { PartId } from "./enemyParts";
 
-export type FusionRole = "attack" | "defense" | "heal" | "parry" | "poison";
+export type FusionRole = "attack" | "defense" | "heal" | "parry" | "poison" | "charge";
 
 export type FusionEffect =
   | { kind: "attack"; amount: number }
