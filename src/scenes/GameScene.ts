@@ -102,7 +102,7 @@ export class GameScene extends Phaser.Scene {
     const scale = Math.min(availableH / origH, (width * 0.78) / origW);
 
     const characterX = width / 2;
-    const characterY = topUi + availableH / 2;
+    const characterY = topUi + availableH / 2 - height * 0.09;
 
     this.stageManager = new StageManager(
       this,

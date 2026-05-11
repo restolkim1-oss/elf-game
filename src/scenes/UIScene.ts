@@ -66,6 +66,7 @@ export class UIScene extends Phaser.Scene {
   private topEnemyGroup: Phaser.GameObjects.Container | null = null;
   private topEnemyName: Phaser.GameObjects.Text | null = null;
   private topEnemyIntent: Phaser.GameObjects.Text | null = null;
+  private topEnemyIntentBg: Phaser.GameObjects.Rectangle | null = null;
   private topEnemyHpFill: Phaser.GameObjects.Rectangle | null = null;
   private topEnemyHpText: Phaser.GameObjects.Text | null = null;
   private topEnemyHpMaxWidth = 0;
@@ -95,6 +96,7 @@ export class UIScene extends Phaser.Scene {
     this.topEnemyGroup = null;
     this.topEnemyName = null;
     this.topEnemyIntent = null;
+    this.topEnemyIntentBg = null;
     this.topEnemyHpFill = null;
     this.topEnemyHpText = null;
     this.topEnemyHpMaxWidth = 0;
@@ -229,26 +231,26 @@ export class UIScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
+    const intentBg = this.add
+      .rectangle(width * 0.81, centerY - u(26), u(190), u(34), 0x170b12, 0.58)
+      .setOrigin(1, 0.5)
+      .setStrokeStyle(u(1), COLORS.gild, 0.45);
     const intent = this.add
       .text(width * 0.81, centerY - u(26), "", {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(18),
         color: COLORS.textHighlight,
         fontStyle: "bold",
+        stroke: "#1b1020",
+        strokeThickness: u(1.4),
       })
       .setOrigin(1, 0.5);
-    const crest = this.add
-      .circle(width / 2, centerY + u(8), u(37), 0x2d2018, 0.86)
-      .setStrokeStyle(u(1.4), 0xd4a656, 0.8);
-    const crestInner = this.add
-      .circle(width / 2, centerY + u(8), u(29), 0xead7a5, 0.22)
-      .setStrokeStyle(u(1), 0xf3d48a, 0.55);
     const hpBg = this.add
-      .rectangle(width / 2, centerY + u(11), hpW, u(25), 0x201016, 0.94)
+      .rectangle(width / 2, centerY + u(11), hpW, u(25), 0x000000, 0)
       .setStrokeStyle(u(1.6), 0xd4a656, 0.92);
     const hpInner = this.add
-      .rectangle(width / 2, centerY + u(11), hpW - u(10), u(16), 0x4a111b, 0.82)
-      .setStrokeStyle(u(0.8), 0x8c5b32, 0.65);
+      .rectangle(width / 2, centerY + u(11), hpW - u(10), u(16), 0x000000, 0)
+      .setStrokeStyle(u(0.8), 0x8c5b32, 0.3);
     const hpFill = this.add
       .rectangle(width / 2 - hpW / 2 + u(5), centerY + u(11), hpW - u(10), u(15), 0xa7192e, 0.96)
       .setOrigin(0, 0.5);
@@ -276,10 +278,11 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.topEnemyName = name;
+    this.topEnemyIntentBg = intentBg;
     this.topEnemyIntent = intent;
     this.topEnemyHpFill = hpFill;
     this.topEnemyHpText = hpText;
-    group.add([crest, crestInner, name, intent, hpBg, hpInner, hpFill, leftCap, rightCap, leftGem, rightGem, hpText]);
+    group.add([name, intentBg, intent, hpBg, hpInner, hpFill, leftCap, rightCap, leftGem, rightGem, hpText]);
   }
 
   private showTopEnemyEnergy(payload: { label: string; hp: number; hpMax: number; intent?: string }) {
@@ -292,7 +295,48 @@ export class UIScene extends Phaser.Scene {
     const ratio = Phaser.Math.Clamp(payload.hp / Math.max(1, payload.hpMax), 0, 1);
     if (this.topEnemyHpFill) this.topEnemyHpFill.width = Math.max(0, this.topEnemyHpMaxWidth - u(10)) * ratio;
     this.topEnemyHpText?.setText(`${payload.hp} / ${payload.hpMax}`);
-    if (payload.intent !== undefined) this.topEnemyIntent?.setText(payload.intent);
+    if (payload.intent !== undefined) {
+      const intent = this.formatEnemyIntent(payload.intent);
+      this.topEnemyIntent?.setText(intent.text);
+      this.topEnemyIntent?.setColor(intent.color);
+      this.topEnemyIntentBg?.setFillStyle(intent.bg, 0.62);
+      this.topEnemyIntentBg?.setStrokeStyle(u(1), intent.stroke, 0.65);
+    }
+  }
+
+  private formatEnemyIntent(raw: string) {
+    const number = raw.match(/-?\d+/)?.[0] ?? "";
+    if (raw.includes("공격") || raw.includes("怨듦꺽")) {
+      const suffix = raw.includes("(") ? ` ${raw.slice(raw.indexOf("("))}` : "";
+      return {
+        text: `공격: ${number}${suffix}`,
+        color: "#ff9a70",
+        bg: 0x2c1110,
+        stroke: 0xff7f50,
+      };
+    }
+    if (raw.includes("보호막") || raw.includes("蹂댄샇")) {
+      return {
+        text: `보호막: +${number}`,
+        color: "#9ad0ff",
+        bg: 0x0f1a2c,
+        stroke: 0x6bb6ff,
+      };
+    }
+    if (raw.includes("회복") || raw.includes("뚮났")) {
+      return {
+        text: `회복: +${number}`,
+        color: "#86e08d",
+        bg: 0x102816,
+        stroke: 0x58d68d,
+      };
+    }
+    return {
+      text: raw.replace("다음:", "다음: "),
+      color: COLORS.textHighlight,
+      bg: 0x170b12,
+      stroke: COLORS.gild,
+    };
   }
 
   private drawBottomPanel(width: number, height: number) {

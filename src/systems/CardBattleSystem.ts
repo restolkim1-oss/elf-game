@@ -309,8 +309,8 @@ export class CardBattleSystem {
 
   private playerHpFill!: Phaser.GameObjects.Rectangle;
   private playerHpText!: Phaser.GameObjects.Text;
-  private playerEnergyFill!: Phaser.GameObjects.Rectangle;
-  private playerEnergyText!: Phaser.GameObjects.Text;
+  private playerEnergyOrbs: Phaser.GameObjects.Arc[] = [];
+  private playerEnergyOrbStates: boolean[] = [];
   private playerBlockText!: Phaser.GameObjects.Text;
   private playerStatusText!: Phaser.GameObjects.Text;
   private enemyHpFill!: Phaser.GameObjects.Rectangle;
@@ -346,10 +346,8 @@ export class CardBattleSystem {
   private handAreaY = 0;
   private handAreaWidth = 0;
   private playerHpBarMaxWidth = 0;
-  private playerEnergyBarMaxWidth = 0;
   private enemyHpBarMaxWidth = 0;
   private playerHpBarLeft = 0;
-  private playerEnergyBarLeft = 0;
   private enemyHpBarLeft = 0;
   private dragStart: { x: number; y: number; card: TarotCardState } | null = null;
   private speechBubble: Phaser.GameObjects.Container | null = null;
@@ -429,6 +427,8 @@ export class CardBattleSystem {
     this.enemyPartPanel = null;
     this.enemyPartRows = {};
     this.enemyPoisonText = null;
+    this.playerEnergyOrbs = [];
+    this.playerEnergyOrbStates = [];
     this.lastSpeechAt = 0;
     this.overlay?.destroy();
     this.overlay = null;
@@ -608,10 +608,8 @@ export class CardBattleSystem {
       .setOrigin(1, 0.5);
 
     const playerHpY = playerStripY + u(2);
-    this.playerHpBarMaxWidth = playerPanelW * 0.55;
-    this.playerEnergyBarMaxWidth = playerPanelW * 0.18;
-    this.playerHpBarLeft = width / 2 - playerPanelW / 2 + u(22);
-    this.playerEnergyBarLeft = this.playerHpBarLeft + this.playerHpBarMaxWidth + u(8);
+    this.playerHpBarMaxWidth = playerPanelW * 0.62;
+    this.playerHpBarLeft = width / 2 - this.playerHpBarMaxWidth / 2;
     const playerHpBg = this.scene.add
       .rectangle(
         this.playerHpBarLeft + this.playerHpBarMaxWidth / 2,
@@ -638,34 +636,20 @@ export class CardBattleSystem {
         }
       )
       .setOrigin(0.5);
-    const playerEnergyBg = this.scene.add
-      .rectangle(
-        this.playerEnergyBarLeft + this.playerEnergyBarMaxWidth / 2,
-        playerHpY,
-        this.playerEnergyBarMaxWidth,
-        u(20),
-        0x171529,
-        0.92
-      )
-      .setStrokeStyle(u(1), 0x9ad0ff, 0.75);
-    this.playerEnergyFill = this.scene.add
-      .rectangle(this.playerEnergyBarLeft, playerHpY, this.playerEnergyBarMaxWidth, u(14), 0x58a8ff, 0.96)
-      .setOrigin(0, 0.5);
-    this.playerEnergyText = this.scene.add
-      .text(
-        this.playerEnergyBarLeft + this.playerEnergyBarMaxWidth / 2,
-        playerHpY,
-        `${this.energy} / ${ENERGY_MAX}`,
-        {
-          fontFamily: "serif",
-          fontSize: px(10),
-          color: "#ffffff",
-          fontStyle: "bold",
-        }
-      )
-      .setOrigin(0.5);
+    this.playerEnergyOrbs = [];
+    this.playerEnergyOrbStates = [];
+    const orbY = playerHpY + u(26);
+    const orbGap = u(22);
+    const orbStartX = width / 2 - orbGap * (ENERGY_MAX - 1) * 0.5;
+    for (let i = 0; i < ENERGY_MAX; i++) {
+      const orb = this.scene.add
+        .circle(orbStartX + i * orbGap, orbY, u(8), 0x43e5c8, 0.96)
+        .setStrokeStyle(u(1.2), 0xf3d48a, 0.8);
+      this.playerEnergyOrbs.push(orb);
+      this.playerEnergyOrbStates.push(true);
+    }
     this.playerBlockText = this.scene.add
-      .text(this.playerEnergyBarLeft + this.playerEnergyBarMaxWidth + u(8), playerHpY, "", {
+      .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(12), playerHpY, "", {
         fontFamily: "serif",
         fontSize: px(10),
         color: "#9ad0ff",
@@ -698,9 +682,7 @@ export class CardBattleSystem {
       playerHpBg,
       this.playerHpFill,
       this.playerHpText,
-      playerEnergyBg,
-      this.playerEnergyFill,
-      this.playerEnergyText,
+      ...this.playerEnergyOrbs,
       this.playerBlockText,
       this.playerStatusText,
       this.deckCountText,
@@ -2098,8 +2080,10 @@ export class CardBattleSystem {
 
   private refreshAll() {
     this.refreshHpBars();
+    this.refreshEnergyOrbs();
     this.refreshIntent();
     this.refreshStatus();
+    this.refreshEnergyOrbs();
     this.refreshEnemyPartPanel();
     this.refreshHandRender();
     this.refreshButtons();
@@ -2116,6 +2100,30 @@ export class CardBattleSystem {
     this.enemyHpFill.width = this.enemyHpBarMaxWidth * eRatio;
     this.enemyHpText.setText(`${this.enemy.hp} / ${this.enemy.hpMax}`);
     this.enemyBlockText.setText(this.enemy.block > 0 ? `🛡 ${this.enemy.block}` : "");
+  }
+
+  private refreshEnergyOrbs() {
+    const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
+    this.energyText.setText(selectedCost > 0 ? `선택 ${selectedCost}` : "");
+    this.playerEnergyOrbs.forEach((orb, idx) => {
+      const active = idx < this.energy;
+      if (this.playerEnergyOrbStates[idx] === active) {
+        orb.setFillStyle(active ? 0x43e5c8 : 0x5a5a64, active ? 0.96 : 0.48);
+        orb.setAlpha(active ? 1 : 0.55);
+        return;
+      }
+      this.playerEnergyOrbStates[idx] = active;
+      orb.setFillStyle(active ? 0x43e5c8 : 0x5a5a64, active ? 0.96 : 0.48);
+      this.scene.tweens.killTweensOf(orb);
+      this.scene.tweens.add({
+        targets: orb,
+        scaleX: active ? { from: 0.55, to: 1 } : { from: 1, to: 0.62 },
+        scaleY: active ? { from: 0.55, to: 1 } : { from: 1, to: 0.62 },
+        alpha: active ? { from: 0.55, to: 1 } : { from: 1, to: 0.55 },
+        duration: 160,
+        ease: active ? "Back.Out" : "Quad.easeOut",
+      });
+    });
   }
 
   private refreshIntent() {
@@ -2219,9 +2227,6 @@ export class CardBattleSystem {
     this.playerStatusText.setText(playerParts.join("  ·  "));
 
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
-    const energyRatio = Phaser.Math.Clamp(this.energy / ENERGY_MAX, 0, 1);
-    this.playerEnergyFill.width = this.playerEnergyBarMaxWidth * energyRatio;
-    this.playerEnergyText.setText(`${this.energy} / ${ENERGY_MAX}`);
     this.energyText.setText(`기력 ${this.energy} / ${ENERGY_MAX}${selectedCost > 0 ? ` · 선택 ${selectedCost}` : ""}`);
     this.turnText.setText(`턴 ${this.turn} / ${MAX_TURNS}`);
     this.deckCountText.setText(`덱 ${this.deck.length} · 버림 ${this.discard.length}`);
