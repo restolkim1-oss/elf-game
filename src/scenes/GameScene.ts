@@ -352,29 +352,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handlePartsDestroyedInBattle(partIds: string[], activePartId: string) {
-    const destroyedParts: PartDef[] = [];
-    for (const partId of partIds) {
-      const mappedId = this.mapBattlePartIdToStagePartId(partId);
-      if (!mappedId || this.removed.has(mappedId)) continue;
-      const part = this.parts.find((candidate) => candidate.id === mappedId);
-      if (!part) continue;
-
-      this.stageManager.hidePartLayer(mappedId);
-      this.partSystem.removePart(mappedId);
-      this.removed.add(mappedId);
-      this.progressSystem.advance();
-      this.events.emit("progress", this.progressSystem.getProgress());
-      destroyedParts.push(part);
-      if (mappedId !== activePartId) {
-        this.feedback(`${part.label} 파츠가 전투 중 파괴되었습니다.`);
-      }
-    }
-    return destroyedParts;
-  }
-
-  private mapBattlePartIdToStagePartId(partId: string) {
-    if (partId === "shoes") return "boots";
-    return partId;
+    void partIds;
+    void activePartId;
+    // Combat part HP is a battle mechanic only. The visual strip sequence must
+    // stay ordered, so stage layers are removed only by handlePartCleared().
+    return [];
   }
 
   private mapStagePartIdToBattlePartId(partId: string): PartId | null {
