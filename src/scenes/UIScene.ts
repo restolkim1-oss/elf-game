@@ -652,12 +652,7 @@ export class UIScene extends Phaser.Scene {
     const old = this.shopMenu;
     this.shopMenu = null;
     this.bottomMenu?.setVisible(!this.puzzleBusy);
-    this.tweens.add({
-      targets: old,
-      alpha: 0,
-      duration: 160,
-      onComplete: () => old.destroy(),
-    });
+    this.closeModalWithTransition(old, { onComplete: () => old.destroy() });
   }
 
   private drawShopMenu() {
@@ -814,8 +809,7 @@ export class UIScene extends Phaser.Scene {
       );
     });
 
-    c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+    this.openModalWithTransition(c);
   }
 
   private getOwnedGalleryCount() {
@@ -875,20 +869,14 @@ export class UIScene extends Phaser.Scene {
       () => this.hideGalleryView(),
       px(11)
     );
-    c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+    this.openModalWithTransition(c);
   }
 
   private hideGalleryView() {
     if (!this.galleryView) return;
     const old = this.galleryView;
     this.galleryView = null;
-    this.tweens.add({
-      targets: old,
-      alpha: 0,
-      duration: 140,
-      onComplete: () => old.destroy(),
-    });
+    this.closeModalWithTransition(old, { onComplete: () => old.destroy() });
   }
 
   private drawPoseShopMenu() {
@@ -964,8 +952,7 @@ export class UIScene extends Phaser.Scene {
       this.drawPoseCell(c, pose, x, y, cardW, cardH, unlocked.has(pose.id));
     });
 
-    c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+    this.openModalWithTransition(c);
   }
 
   private redrawPoseShopMenu() {
@@ -1035,15 +1022,14 @@ export class UIScene extends Phaser.Scene {
       this.makeButton(c, width / 2, height - u(106), u(196), u(42), `${pose.price} 코인에 구매`, () => this.confirmPosePurchase(pose), px(11));
     }
     this.makeButton(c, width / 2, height - u(54), u(176), u(42), "닫기", () => this.hidePosePreview(), px(11));
-    c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 180 });
+    this.openModalWithTransition(c);
   }
 
   private hidePosePreview() {
     if (!this.posePreview) return;
     const old = this.posePreview;
     this.posePreview = null;
-    this.tweens.add({ targets: old, alpha: 0, duration: 140, onComplete: () => old.destroy() });
+    this.closeModalWithTransition(old, { onComplete: () => old.destroy() });
   }
 
   private confirmPosePurchase(pose: PoseData) {
@@ -1064,18 +1050,28 @@ export class UIScene extends Phaser.Scene {
   private showConfirmDialog(message: string, onYes: () => void) {
     const { width, height } = this.scale;
     const c = this.add.container(0, 0).setDepth(2500);
+    let closing = false;
     c.add(this.add.rectangle(width / 2, height / 2, width, height, 0x050208, 0.48).setInteractive());
     const panelW = width * 0.78;
     const panelY = height / 2;
     c.add(this.add.rectangle(width / 2, panelY, panelW, u(170), COLORS.panelMid, 0.98).setStrokeStyle(u(2), COLORS.gild, 0.92));
     c.add(this.add.text(width / 2, panelY - u(42), message, { fontFamily: "serif", fontSize: px(13), color: COLORS.text, fontStyle: "bold", align: "center", wordWrap: { width: panelW - u(42) } }).setOrigin(0.5));
     this.makeButton(c, width / 2 - u(64), panelY + u(46), u(104), u(38), "예", () => {
-      c.destroy();
-      onYes();
+      if (closing) return;
+      closing = true;
+      this.closeModalWithTransition(c, {
+        onComplete: () => {
+          c.destroy();
+          onYes();
+        },
+      });
     }, px(11));
-    this.makeButton(c, width / 2 + u(64), panelY + u(46), u(104), u(38), "아니오", () => c.destroy(), px(11));
-    c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 130 });
+    this.makeButton(c, width / 2 + u(64), panelY + u(46), u(104), u(38), "아니오", () => {
+      if (closing) return;
+      closing = true;
+      this.closeModalWithTransition(c, { onComplete: () => c.destroy() });
+    }, px(11));
+    this.openModalWithTransition(c, { duration: 180, scaleFrom: 0.88 });
   }
 
   private showBattleRewardModal(payload: BattleRewardPayload) {
@@ -1179,15 +1175,17 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     c.add(coinText);
-    this.tweens.addCounter({
-      from: 0,
-      to: payload.coins,
-      duration: 720,
-      ease: "Cubic.easeOut",
-      onUpdate: (tween) => {
-        coinText.setText(`\uD68D\uB4DD \uCF54\uC778: +${Math.round(tween.getValue() ?? 0)}`);
-      },
-    });
+    const startCoinCountUp = () => {
+      this.tweens.addCounter({
+        from: 0,
+        to: payload.coins,
+        duration: 640,
+        ease: "Cubic.easeOut",
+        onUpdate: (tween) => {
+          coinText.setText(`\uD68D\uB4DD \uCF54\uC778: +${Math.round(tween.getValue() ?? 0)}`);
+        },
+      });
+    };
 
     this.makeButton(
       c,
@@ -1201,10 +1199,7 @@ export class UIScene extends Phaser.Scene {
         continued = true;
         const old = this.rewardModal;
         this.rewardModal = null;
-        this.tweens.add({
-          targets: old,
-          alpha: 0,
-          duration: 150,
+        this.closeModalWithTransition(old, {
           onComplete: () => {
             old?.destroy();
             payload.onContinue();
@@ -1214,14 +1209,63 @@ export class UIScene extends Phaser.Scene {
       px(12)
     );
 
-    c.setAlpha(0).setScale(0.96);
+    this.openModalWithTransition(c, {
+      duration: 300,
+      scaleFrom: 0.86,
+      onComplete: startCoinCountUp,
+    });
+  }
+
+  private openModalWithTransition(
+    container: Phaser.GameObjects.Container,
+    options: {
+      duration?: number;
+      scaleFrom?: number;
+      ease?: string;
+      onComplete?: () => void;
+    } = {}
+  ) {
+    const duration = options.duration ?? 200;
+    const scaleFrom = options.scaleFrom ?? 0.01;
+    const ease = options.ease ?? "Back.easeOut";
+    this.tweens.killTweensOf(container);
+    container.setAlpha(0).setScale(scaleFrom);
     this.tweens.add({
-      targets: c,
+      targets: container,
       alpha: 1,
       scaleX: 1,
       scaleY: 1,
-      duration: 220,
-      ease: "Back.easeOut",
+      duration,
+      ease,
+      onComplete: options.onComplete,
+    });
+  }
+
+  private closeModalWithTransition(
+    container: Phaser.GameObjects.Container | null,
+    options: {
+      duration?: number;
+      scaleTo?: number;
+      ease?: string;
+      onComplete?: () => void;
+    } = {}
+  ) {
+    if (!container) {
+      options.onComplete?.();
+      return;
+    }
+    const duration = options.duration ?? 150;
+    const scaleTo = options.scaleTo ?? 0.01;
+    const ease = options.ease ?? "Cubic.easeIn";
+    this.tweens.killTweensOf(container);
+    this.tweens.add({
+      targets: container,
+      alpha: 0,
+      scaleX: scaleTo,
+      scaleY: scaleTo,
+      duration,
+      ease,
+      onComplete: options.onComplete,
     });
   }
 
