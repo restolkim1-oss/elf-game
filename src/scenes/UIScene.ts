@@ -2,7 +2,6 @@ import Phaser from "phaser";
 import { MENU_ICONS, type PartDef, getPartsForStage } from "../data/parts";
 import { SHOP_GALLERY, type ShopArtId } from "../data/shop";
 import { POSES, type PoseData } from "../data/posesData";
-import { PART_STORIES } from "../data/partStories";
 import type { PartId } from "../data/enemyParts";
 import { UI_SCALE } from "../main";
 
@@ -1079,7 +1078,7 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: c, alpha: 1, duration: 130 });
   }
 
-  private showReadableBattleRewardModal(payload: BattleRewardPayload) {
+  private showBattleRewardModal(payload: BattleRewardPayload) {
     this.rewardModal?.destroy();
     const { width, height } = this.scale;
     const c = this.add.container(0, 0).setDepth(2300);
@@ -1092,16 +1091,16 @@ export class UIScene extends Phaser.Scene {
         .setInteractive()
     );
 
-    const panelW = Math.min(width * 0.92, u(390));
-    const panelH = Math.min(height * 0.82, u(520));
+    const panelW = Math.min(width * 0.86, u(360));
+    const panelH = Math.min(height * 0.48, u(300));
     const panelX = width / 2;
     const panelY = height / 2;
-    const rewardPartId = payload.rewardPartId;
-    const story = rewardPartId === null ? null : PART_STORIES[rewardPartId as PartId];
-    const destroyedText =
-      payload.battleDestroyedLabels.length > 0
-        ? `전투 중 파괴: ${payload.battleDestroyedLabels.join(", ")}`
-        : "";
+    const rewardTitle = payload.rewardPartLabel
+      ? `${payload.rewardPartLabel} \uD30C\uAD34!`
+      : "\uBAA8\uB4E0 \uD30C\uCE20 \uD30C\uAD34 \uC644\uB8CC!";
+    const destroyedText = payload.battleDestroyedLabels.length > 0
+      ? `\uC804\uD22C \uC911 \uD30C\uAD34: ${payload.battleDestroyedLabels.join(", ")}`
+      : "";
 
     c.add(
       this.add
@@ -1115,7 +1114,7 @@ export class UIScene extends Phaser.Scene {
     );
     c.add(
       this.add
-        .text(panelX, panelY - panelH / 2 + u(25), "전투 승리!", {
+        .text(panelX, panelY - panelH / 2 + u(25), "\uC804\uD22C \uC2B9\uB9AC!", {
           fontFamily: "serif",
           fontSize: px(24),
           color: COLORS.textHighlight,
@@ -1125,49 +1124,39 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 0)
     );
-    c.add(
-      this.add
-        .text(
-          panelX,
-          panelY - panelH / 2 + u(92),
-          payload.rewardPartLabel
-            ? `보상 파츠: ${payload.rewardPartLabel}`
-            : "이미 모든 파츠가 파괴되었습니다.",
-          {
-            fontFamily: "serif",
-            fontSize: px(15),
-            color: COLORS.text,
-            fontStyle: "bold",
-            align: "center",
-          }
-        )
-        .setOrigin(0.5)
-    );
 
-    const storyBoxH = panelH - u(destroyedText ? 230 : 205);
     c.add(
       this.add
-        .rectangle(panelX, panelY - u(20), panelW - u(34), storyBoxH, 0x130f18, 0.56)
-        .setStrokeStyle(u(1), COLORS.gild, 0.35)
-    );
-    c.add(
-      this.add
-        .text(panelX, panelY - u(20), story?.text ?? "이번 전투에서 추가로 해제할 파츠가 없습니다.", {
+        .text(panelX, panelY - u(35), rewardTitle, {
           fontFamily: "serif",
-          fontSize: px(17),
-          color: COLORS.text,
+          fontSize: px(23),
+          color: COLORS.textHighlight,
           fontStyle: "bold",
           align: "center",
-          lineSpacing: u(4),
-          wordWrap: { width: panelW - u(54) },
+          stroke: "#130814",
+          strokeThickness: u(1),
         })
         .setOrigin(0.5)
     );
 
+    const rewardGlow = this.add
+      .ellipse(panelX, panelY + u(8), panelW * 0.5, u(58), COLORS.gild, 0.16)
+      .setStrokeStyle(u(1.5), COLORS.gildHot, 0.72);
+    c.add(rewardGlow);
+    this.tweens.add({
+      targets: rewardGlow,
+      scaleX: { from: 0.92, to: 1.08 },
+      alpha: { from: 0.55, to: 0.18 },
+      duration: 760,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
     if (destroyedText) {
       c.add(
         this.add
-          .text(panelX, panelY + panelH / 2 - u(135), destroyedText, {
+          .text(panelX, panelY + panelH / 2 - u(112), destroyedText, {
             fontFamily: "serif",
             fontSize: px(11),
             color: COLORS.textDim,
@@ -1180,7 +1169,7 @@ export class UIScene extends Phaser.Scene {
     }
 
     const coinText = this.add
-      .text(panelX, panelY + panelH / 2 - u(96), "획득 코인: +0", {
+      .text(panelX, panelY + panelH / 2 - u(82), "\uD68D\uB4DD \uCF54\uC778: +0", {
         fontFamily: "serif",
         fontSize: px(17),
         color: COLORS.success,
@@ -1196,174 +1185,17 @@ export class UIScene extends Phaser.Scene {
       duration: 720,
       ease: "Cubic.easeOut",
       onUpdate: (tween) => {
-        coinText.setText(`획득 코인: +${Math.round(tween.getValue() ?? 0)}`);
+        coinText.setText(`\uD68D\uB4DD \uCF54\uC778: +${Math.round(tween.getValue() ?? 0)}`);
       },
     });
 
     this.makeButton(
       c,
       panelX,
-      panelY + panelH / 2 - u(42),
+      panelY + panelH / 2 - u(36),
       panelW * 0.62,
       u(42),
-      "계속",
-      () => {
-        if (continued) return;
-        continued = true;
-        const old = this.rewardModal;
-        this.rewardModal = null;
-        this.tweens.add({
-          targets: old,
-          alpha: 0,
-          duration: 150,
-          onComplete: () => {
-            old?.destroy();
-            payload.onContinue();
-          },
-        });
-      },
-      px(12)
-    );
-
-    c.setAlpha(0).setScale(0.96);
-    this.tweens.add({
-      targets: c,
-      alpha: 1,
-      scaleX: 1,
-      scaleY: 1,
-      duration: 220,
-      ease: "Back.easeOut",
-    });
-  }
-
-  private showBattleRewardModal(payload: BattleRewardPayload) {
-    this.showReadableBattleRewardModal(payload);
-    return;
-
-    this.rewardModal?.destroy();
-    const { width, height } = this.scale;
-    const c = this.add.container(0, 0).setDepth(2300);
-    this.rewardModal = c;
-    let continued = false;
-
-    c.add(
-      this.add
-        .rectangle(width / 2, height / 2, width, height, 0x050208, 0.72)
-        .setInteractive()
-    );
-
-    const panelW = Math.min(width * 0.9, u(360));
-    const panelH = Math.min(height * 0.7, u(430));
-    const panelX = width / 2;
-    const panelY = height / 2;
-    const rewardPartId = payload.rewardPartId;
-    const story = rewardPartId === null ? null : PART_STORIES[rewardPartId as PartId];
-    const destroyedText =
-      payload.battleDestroyedLabels.length > 0
-        ? `전투 중 파괴: ${payload.battleDestroyedLabels.join(", ")}`
-        : "전투 중 파괴: 없음";
-
-    c.add(
-      this.add
-        .rectangle(panelX, panelY, panelW, panelH, COLORS.panelMid, 0.98)
-        .setStrokeStyle(u(2), COLORS.gild, 0.96)
-    );
-    c.add(
-      this.add
-        .rectangle(panelX, panelY - panelH / 2 + u(44), panelW - u(18), u(58), 0x2d1f1a, 0.9)
-        .setStrokeStyle(u(1), COLORS.gildHot, 0.65)
-    );
-    c.add(
-      this.add
-        .text(panelX, panelY - panelH / 2 + u(28), "전투 승리!", {
-          fontFamily: "serif",
-          fontSize: px(23),
-          color: COLORS.textHighlight,
-          fontStyle: "bold",
-          stroke: "#130814",
-          strokeThickness: u(1.2),
-        })
-        .setOrigin(0.5, 0)
-    );
-
-    c.add(
-      this.add
-        .text(
-          panelX,
-          panelY - panelH / 2 + u(104),
-          payload.rewardPartLabel ? `보상 파츠: ${payload.rewardPartLabel}` : "보상 파츠: 이미 모두 파괴됨",
-          {
-            fontFamily: "serif",
-            fontSize: px(14),
-            color: COLORS.text,
-            fontStyle: "bold",
-          }
-        )
-        .setOrigin(0.5)
-    );
-    c.add(
-      this.add
-        .text(panelX, panelY - panelH / 2 + u(139), story?.title ?? "이미 모두 파괴됨", {
-          fontFamily: "serif",
-          fontSize: px(15),
-          color: COLORS.textHighlight,
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5)
-    );
-    c.add(
-      this.add
-        .text(panelX, panelY - panelH / 2 + u(188), story?.text ?? "이번 전투에서 추가로 해제할 파츠가 없습니다.", {
-          fontFamily: "serif",
-          fontSize: px(11),
-          color: COLORS.text,
-          fontStyle: "bold",
-          align: "center",
-          wordWrap: { width: panelW - u(54) },
-        })
-        .setOrigin(0.5)
-    );
-    c.add(
-      this.add
-        .text(panelX, panelY + u(38), destroyedText, {
-          fontFamily: "serif",
-          fontSize: px(10.5),
-          color: COLORS.textDim,
-          fontStyle: "bold",
-          align: "center",
-          wordWrap: { width: panelW - u(54) },
-        })
-        .setOrigin(0.5)
-    );
-
-    const coinText = this.add
-      .text(panelX, panelY + u(88), "획득 코인: +0", {
-        fontFamily: "serif",
-        fontSize: px(17),
-        color: COLORS.success,
-        fontStyle: "bold",
-        stroke: "#102012",
-        strokeThickness: u(1),
-      })
-      .setOrigin(0.5);
-    c.add(coinText);
-    this.tweens.addCounter({
-      from: 0,
-      to: payload.coins,
-      duration: 720,
-      ease: "Cubic.easeOut",
-      onUpdate: (tween) => {
-        coinText.setText(`획득 코인: +${Math.round(tween.getValue() ?? 0)}`);
-      },
-    });
-
-    this.makeButton(
-      c,
-      panelX,
-      panelY + panelH / 2 - u(48),
-      panelW * 0.62,
-      u(42),
-      "계속",
+      "\uACC4\uC18D",
       () => {
         if (continued) return;
         continued = true;
