@@ -1133,6 +1133,7 @@ export class CardBattleSystem {
       this.flashLog(`기력 부족 (${actualCost} / ${this.energy})`);
       return false;
     }
+    this.playCardUseTrail(comboCards, routedAttackPartId);
     this.energy -= actualCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
     this.selectedCards = this.selectedCards.filter((c) => !comboCards.includes(c));
@@ -1648,13 +1649,42 @@ export class CardBattleSystem {
   }
 
   private playMergeEffect(slot: HandCard) {
+    const color = this.getCardEffectColor(CARDS[slot.card.cardId]);
     const ring = this.trackEffect(
       this.scene.add
         .rectangle(slot.container.x, slot.container.y, slot.cardW + u(22), slot.cardH + u(22), 0xffffff, 0)
-        .setStrokeStyle(u(5), 0x82ffe6, 0.95)
+        .setStrokeStyle(u(5), color, 0.95)
         .setDepth(820)
     );
+    const bloom = this.trackEffect(
+      this.scene.add
+        .circle(slot.container.x, slot.container.y, u(34), color, 0.3)
+        .setDepth(819)
+    );
     this.overlay?.add(ring);
+    this.overlay?.add(bloom);
+    for (let i = 0; i < 16; i++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const dist = Phaser.Math.Between(u(34), u(96));
+      const spark = this.trackEffect(
+        this.scene.add
+          .circle(slot.container.x, slot.container.y, Phaser.Math.Between(u(2), u(5)), i % 3 === 0 ? 0xffffff : color, 0.9)
+          .setDepth(821)
+      );
+      this.overlay?.add(spark);
+      this.scene.tweens.add({
+        targets: spark,
+        x: slot.container.x + Math.cos(angle) * dist,
+        y: slot.container.y + Math.sin(angle) * dist,
+        scale: 0.2,
+        alpha: 0,
+        duration: Phaser.Math.Between(260, 460),
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          if (spark.scene) spark.destroy();
+        },
+      });
+    }
     this.scene.tweens.add({
       targets: ring,
       scaleX: 1.25,
@@ -1664,6 +1694,17 @@ export class CardBattleSystem {
       ease: "Quad.easeOut",
       onComplete: () => {
         if (ring.scene) ring.destroy();
+      },
+    });
+    this.scene.tweens.add({
+      targets: bloom,
+      scaleX: 2.2,
+      scaleY: 2.2,
+      alpha: 0,
+      duration: 360,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (bloom.scene) bloom.destroy();
       },
     });
   }
@@ -1677,6 +1718,17 @@ export class CardBattleSystem {
     );
     this.overlay?.add(ring);
     this.scene.tweens.add({
+      targets: slot.container,
+      x: { from: slot.container.x - u(5), to: slot.container.x + u(5) },
+      yoyo: true,
+      repeat: 2,
+      duration: 45,
+      ease: "Sine.easeInOut",
+      onComplete: () => {
+        if (slot.container.scene) slot.container.x = slot.baseX;
+      },
+    });
+    this.scene.tweens.add({
       targets: ring,
       scaleX: 1.08,
       scaleY: 1.08,
@@ -1687,6 +1739,138 @@ export class CardBattleSystem {
         if (ring.scene) ring.destroy();
       },
     });
+  }
+
+  private playInvalidDropReturn(slot: HandCard) {
+    const flash = this.trackEffect(
+      this.scene.add
+        .rectangle(slot.container.x, slot.container.y, slot.cardW + u(14), slot.cardH + u(14), 0xffffff, 0)
+        .setStrokeStyle(u(3), 0xff4d5f, 0.9)
+        .setDepth(822)
+    );
+    this.overlay?.add(flash);
+    this.scene.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleX: 1.12,
+      scaleY: 1.12,
+      duration: 220,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        if (flash.scene) flash.destroy();
+      },
+    });
+  }
+
+  private playCardUseTrail(cards: TarotCardState[], routedAttackPartId?: PartId) {
+    const first = cards[0];
+    if (!first || !this.overlay) return;
+    const slot = this.handObjs.find((handSlot) => handSlot.card === first);
+    if (!slot) return;
+    const def = CARDS[first.cardId];
+    const color = this.getCardEffectColor(def);
+    const target = this.getCardUseTrailTarget(def, routedAttackPartId);
+    const ghost = this.trackEffect(
+      this.scene.add
+        .container(slot.container.x, slot.container.y)
+        .setDepth(835)
+        .setScale(cards.length > 1 || first.isTemporary ? 1.05 : 0.96)
+    );
+    const body = this.scene.add
+      .rectangle(0, 0, slot.cardW * 0.72, slot.cardH * 0.72, def.color, first.isTemporary ? 0.72 : 0.52)
+      .setStrokeStyle(u(first.isTemporary ? 3 : 2), color, first.isTemporary ? 1 : 0.76);
+    const label = this.scene.add
+      .text(0, 0, def.roleLabel, {
+        fontFamily: "serif",
+        fontSize: px(first.isTemporary ? 11 : 9),
+        color: "#fff7df",
+        fontStyle: "bold",
+        stroke: "#120912",
+        strokeThickness: u(1),
+      })
+      .setOrigin(0.5);
+    ghost.add([body, label]);
+    this.overlay.add(ghost);
+
+    const trail = this.trackEffect(this.scene.add.graphics().setDepth(834));
+    trail.lineStyle(u(first.isTemporary ? 4 : 2), color, first.isTemporary ? 0.76 : 0.42);
+    trail.beginPath();
+    trail.moveTo(slot.container.x, slot.container.y);
+    trail.lineTo((slot.container.x + target.x) / 2, Math.min(slot.container.y, target.y) - u(54));
+    trail.lineTo(target.x, target.y);
+    trail.strokePath();
+    this.overlay.add(trail);
+
+    this.scene.tweens.add({
+      targets: ghost,
+      x: target.x,
+      y: target.y,
+      scaleX: 0.34,
+      scaleY: 0.34,
+      alpha: 0,
+      duration: 200,
+      ease: "Cubic.easeIn",
+      onComplete: () => {
+        if (ghost.scene) ghost.destroy();
+        this.playCardUseImpact(target.x, target.y, color, first.isTemporary || cards.length > 1);
+      },
+    });
+    this.scene.tweens.add({
+      targets: trail,
+      alpha: 0,
+      duration: 240,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        if (trail.scene) trail.destroy();
+      },
+    });
+  }
+
+  private getCardUseTrailTarget(def: CardDef, routedAttackPartId?: PartId) {
+    if (routedAttackPartId && this.enemyPartRows[routedAttackPartId] && this.enemyPartPanel) {
+      const row = this.enemyPartRows[routedAttackPartId]!;
+      return { x: this.enemyPartPanel.x + row.container.x, y: this.enemyPartPanel.y + row.container.y };
+    }
+    const { width, height } = this.scene.scale;
+    const attacks = def.effects.some((effect) => effect.kind === "attack" || effect.kind === "drain" || effect.kind === "partDamage");
+    const supports = def.effects.some((effect) => effect.kind === "block" || effect.kind === "heal" || effect.kind === "energy" || effect.kind === "applyCharge");
+    if (attacks || def.role === "poison" || def.role === "attack" || def.role === "parry") {
+      return { x: width / 2, y: Math.max(u(190), height * 0.38) };
+    }
+    if (supports || def.role === "defense" || def.role === "heal" || def.role === "charge") {
+      return { x: width * 0.38, y: height - u(280) };
+    }
+    return { x: width / 2, y: height * 0.5 };
+  }
+
+  private playCardUseImpact(x: number, y: number, color: number, strong: boolean) {
+    const impact = this.trackEffect(
+      this.scene.add
+        .circle(x, y, u(strong ? 28 : 18), color, strong ? 0.34 : 0.22)
+        .setStrokeStyle(u(strong ? 4 : 2), 0xffffff, strong ? 0.72 : 0.42)
+        .setDepth(836)
+    );
+    this.overlay?.add(impact);
+    this.scene.tweens.add({
+      targets: impact,
+      alpha: 0,
+      scaleX: strong ? 2.1 : 1.55,
+      scaleY: strong ? 2.1 : 1.55,
+      duration: strong ? 360 : 260,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (impact.scene) impact.destroy();
+      },
+    });
+  }
+
+  private getCardEffectColor(def: CardDef) {
+    if (def.id.includes("poison") || def.role === "poison") return 0x8cff66;
+    if (def.id.includes("drain") || def.id.includes("lifesteal") || def.role === "heal") return 0xff5e7a;
+    if (def.id.includes("counter") || def.id.includes("parry") || def.role === "parry") return 0x82ffe6;
+    if (def.role === "defense") return 0x7bd8ff;
+    if (def.id.includes("smash") || def.role === "attack") return 0xffd572;
+    return def.color;
   }
 
   private applyAttack(target: SideState, raw: number) {
@@ -2804,36 +2988,72 @@ export class CardBattleSystem {
         ease: "Sine.easeInOut",
       });
     }
+    if (temporary) {
+      container.setAlpha(0).setScale(0.9);
+      this.scene.tweens.add({
+        targets: container,
+        alpha: 1,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 220,
+        ease: "Back.easeOut",
+      });
+      this.scene.tweens.add({
+        targets: tempGlow,
+        alpha: { from: 1, to: 0.55 },
+        yoyo: true,
+        repeat: -1,
+        duration: 760,
+        ease: "Sine.easeInOut",
+      });
+    }
     this.overlay?.add(container);
 
     bg.on("pointerover", () => {
       if (this.busy || this.finished) return;
       this.startCardPreviewTimer(card, x, y);
       this.highlightMergeTarget(card);
+      this.scene.tweens.killTweensOf(container);
       this.scene.tweens.add({
         targets: container,
-        y: y - u(14),
+        y: selected ? y - u(24) : y - u(10),
         scaleX: 1.05,
         scaleY: 1.05,
-        duration: 140,
+        duration: 100,
+        ease: "Quad.easeOut",
       });
+      tempGlow.setAlpha(temporary ? 0.95 : 0.38);
     });
     bg.on("pointerout", () => {
       this.clearCardPreview();
       dropGlow.setAlpha(0);
+      this.scene.tweens.killTweensOf(container);
       this.scene.tweens.add({
         targets: container,
         y: selected ? y - u(18) : y,
         scaleX: 1,
         scaleY: 1,
-        duration: 140,
+        alpha: 1,
+        duration: 120,
+        ease: "Quad.easeOut",
       });
+      tempGlow.setAlpha(temporary ? 0.8 : 0);
     });
     bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this.clearCardPreview();
       this.dragStart = { x: pointer.x, y: pointer.y, card };
       this.startCardPreviewTimer(card, pointer.x, pointer.y);
       container.setDepth(800);
+      this.scene.tweens.killTweensOf(container);
+      this.scene.tweens.add({
+        targets: container,
+        scaleX: 1.1,
+        scaleY: 1.1,
+        alpha: 0.9,
+        duration: 90,
+        ease: "Quad.easeOut",
+      });
+      tempGlow.setAlpha(temporary ? 1 : 0.55);
     });
     bg.on("pointermove", (pointer: Phaser.Input.Pointer) => {
       if (!this.dragStart || this.dragStart.card !== card) return;
@@ -2856,9 +3076,11 @@ export class CardBattleSystem {
           y: selected ? y - u(18) : y,
           scaleX: 1,
           scaleY: 1,
+          alpha: 1,
           duration: 140,
           ease: "Quad.easeOut",
         });
+        tempGlow.setAlpha(temporary ? 0.8 : 0);
         return;
       }
       this.cancelCardPreviewTimer();
@@ -2869,13 +3091,18 @@ export class CardBattleSystem {
       if (moved > u(24)) {
         const handled = this.handleDraggedCardDrop(card, pointer.x, pointer.y);
         if (!handled) {
+          this.playInvalidDropReturn(slot);
           this.scene.tweens.add({
             targets: container,
             x,
             y: selected ? y - u(18) : y,
-            duration: 160,
+            scaleX: 1,
+            scaleY: 1,
+            alpha: 1,
+            duration: 250,
             ease: "Quad.easeOut",
           });
+          tempGlow.setAlpha(temporary ? 0.8 : 0);
         }
         this.clearMergeHighlights();
         this.clearPartDropHighlights();
@@ -2905,15 +3132,18 @@ export class CardBattleSystem {
       }
       this.clearMergeHighlights();
       this.clearPartDropHighlights();
+      this.playInvalidDropReturn(slot);
       this.scene.tweens.add({
         targets: container,
         x,
         y: selected ? y - u(18) : y,
         scaleX: 1,
         scaleY: 1,
-        duration: 160,
+        alpha: 1,
+        duration: 250,
         ease: "Quad.easeOut",
       });
+      tempGlow.setAlpha(temporary ? 0.8 : 0);
     });
 
     const slot: HandCard = {
@@ -3275,21 +3505,9 @@ export class CardBattleSystem {
     const { width } = this.scene.scale;
     const x = width / 2 + u(52);
     const y = u(190);
-    const cloud = this.trackEffect(this.scene.add.circle(x, y, u(30), 0x5abf4a, 0.28).setDepth(721));
-    const text = this.trackEffect(
-      this.scene.add
-        .text(x, y - u(36), `독 -${amount}`, {
-          fontFamily: "serif",
-          fontSize: px(18),
-          color: "#b8ff8a",
-          fontStyle: "bold",
-          stroke: "#123814",
-          strokeThickness: u(2),
-        })
-        .setOrigin(0.5)
-        .setDepth(722)
-    );
-    this.overlay?.add([cloud, text]);
+    const cloud = this.trackEffect(this.scene.add.circle(x, y, u(30), 0x8a4cff, 0.26).setDepth(721));
+    this.overlay?.add(cloud);
+    this.playFloatingNumber(x, y + u(18), `독 -${amount}`, amount, "poison");
     this.scene.tweens.add({
       targets: cloud,
       alpha: 0,
@@ -3299,16 +3517,6 @@ export class CardBattleSystem {
       ease: "Cubic.easeOut",
       onComplete: () => {
         if (cloud.scene) cloud.destroy();
-      },
-    });
-    this.scene.tweens.add({
-      targets: text,
-      y: text.y - u(30),
-      alpha: 0,
-      duration: 620,
-      ease: "Cubic.easeOut",
-      onComplete: () => {
-        if (text.scene) text.destroy();
       },
     });
   }
@@ -3576,16 +3784,86 @@ export class CardBattleSystem {
     });
   }
 
+  private playImpactShake(amount: number, target: "enemy" | "player") {
+    if (amount <= 0) return;
+    let duration = 80;
+    let intensity = 0.0018;
+    if (amount >= 16) {
+      duration = target === "player" ? 280 : 240;
+      intensity = target === "player" ? 0.007 : 0.006;
+    } else if (amount >= 6) {
+      duration = target === "player" ? 190 : 170;
+      intensity = target === "player" ? 0.0042 : 0.0038;
+    }
+    this.scene.cameras.main.shake(duration, intensity);
+  }
+
+  private playFloatingNumber(
+    x: number,
+    y: number,
+    textValue: string,
+    amount: number,
+    kind: "damage" | "poison" | "heal" = "damage"
+  ) {
+    const bigHit = amount >= 16;
+    const color = kind === "heal" ? "#7dff9a" : kind === "poison" ? "#b86cff" : bigHit ? "#ff5e5e" : "#ffffff";
+    const stroke = kind === "heal" ? "#0b3d1c" : kind === "poison" ? "#2d0f42" : bigHit ? "#6d0c0c" : "#5a1018";
+    const damage = this.trackEffect(
+      this.scene.add
+        .text(x + Phaser.Math.Between(-u(18), u(18)), y - u(54), textValue, {
+          fontFamily: "serif",
+          fontSize: px(bigHit ? 30 : 21),
+          color,
+          fontStyle: "bold",
+          stroke,
+          strokeThickness: u(bigHit ? 3 : 2),
+          shadow: {
+            offsetX: 0,
+            offsetY: u(3),
+            color: "#000000",
+            blur: u(5),
+            fill: true,
+          },
+        })
+        .setOrigin(0.5)
+        .setAngle(Phaser.Math.Between(-7, 7))
+        .setScale(0.55)
+        .setDepth(722)
+    );
+    this.overlay?.add(damage);
+    this.scene.tweens.add({
+      targets: damage,
+      scaleX: bigHit ? 1.24 : 1.08,
+      scaleY: bigHit ? 1.24 : 1.08,
+      duration: 200,
+      ease: "Back.easeOut",
+      onComplete: () => {
+        if (!damage.scene) return;
+        this.scene.tweens.add({
+          targets: damage,
+          y: damage.y - u(44),
+          scaleX: bigHit ? 1.05 : 0.92,
+          scaleY: bigHit ? 1.05 : 0.92,
+          alpha: 0,
+          duration: 400,
+          delay: 300,
+          ease: "Cubic.easeOut",
+          onComplete: () => {
+            if (damage.scene) damage.destroy();
+          },
+        });
+      },
+    });
+  }
+
   private playAttackEffect(target: "enemy" | "player", amount = 0, style: AttackVisualStyle = "normal") {
     const { width, height } = this.scene.scale;
     const y = target === "enemy" ? Math.max(u(190), height * 0.38) : height - u(280);
     const x = width / 2;
     const color = target === "enemy" ? this.getAttackEffectColor(style) : 0xffd572;
-    const strong = amount >= 20 || style !== "normal";
+    const strong = amount >= 16 || style !== "normal";
     const lineWidth = style === "normal" ? u(8) : u(14);
-    if (target === "player" || amount >= 25) {
-      this.scene.cameras.main.shake(target === "enemy" ? 170 : 220, target === "enemy" ? 0.005 : 0.009);
-    }
+    this.playImpactShake(amount, target);
 
     const slash = this.trackEffect(this.scene.add.graphics().setDepth(720));
     slash.lineStyle(lineWidth, color, 0.95);
@@ -3611,33 +3889,7 @@ export class CardBattleSystem {
     this.overlay?.add([flash, shock]);
     this.overlay?.add(burst);
     if (amount > 0) {
-      const bigHit = amount >= 20;
-      const damage = this.trackEffect(
-        this.scene.add
-          .text(x + Phaser.Math.Between(-u(18), u(18)), y - u(54), `-${amount}`, {
-            fontFamily: "serif",
-            fontSize: px(bigHit ? 28 : 20),
-            color: bigHit ? "#ffd572" : "#ffffff",
-            fontStyle: "bold",
-            stroke: bigHit ? "#7a1212" : "#5a1018",
-            strokeThickness: u(bigHit ? 3 : 2),
-          })
-          .setOrigin(0.5)
-          .setAngle(Phaser.Math.Between(-7, 7))
-          .setDepth(722)
-      );
-      this.overlay?.add(damage);
-      this.scene.tweens.add({
-        targets: damage,
-        y: damage.y - u(36),
-        scale: { from: bigHit ? 1.22 : 1.05, to: 0.92 },
-        alpha: 0,
-        duration: bigHit ? 680 : 520,
-        ease: "Cubic.easeOut",
-        onComplete: () => {
-          if (damage.scene) damage.destroy();
-        },
-      });
+      this.playFloatingNumber(x, y, `-${amount}`, amount, style === "poison" ? "poison" : "damage");
     }
 
     if (style === "drain") this.playReturnLightEffect(0xff5e7a);
