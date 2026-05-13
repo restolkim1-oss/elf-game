@@ -1984,7 +1984,6 @@ export class CardBattleSystem {
 
     const before = target.hp;
     const partDamage = Math.min(before, modifier.amount);
-    if (partDamage > 0) this.scene.events.emit("battle-part-zoom-impact", target.id);
     target.hp = Math.max(0, target.hp - modifier.amount);
     const overflow = Math.max(0, modifier.amount - before);
     let destroyed = false;
@@ -2120,7 +2119,6 @@ export class CardBattleSystem {
     if (!this.lastDestroyedPartIds.includes(part.id)) this.lastDestroyedPartIds.push(part.id);
     if (part.id === "shoes") this.enemy.partRuntime.shoesNegateFirstHit = false;
     if (part.id === "skirt") this.enemy.partRuntime.strongAttackNext = false;
-    this.scene.events.emit("battle-part-zoom-clear", part.id);
     this.playPartDestroyEffect(part.id);
     this.refreshEnemyPartPanel();
     this.refreshIntent();

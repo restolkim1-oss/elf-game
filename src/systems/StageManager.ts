@@ -107,6 +107,30 @@ export class StageManager {
     if (holdMs > 0) this.scheduleZoomReset(holdMs);
   }
 
+  playPartRemovalCloseup(stagePartId: string, zoomPartId: PartId | null, onComplete: () => void) {
+    const finish = () => {
+      this.resetCharacterZoom(300);
+      this.scene.time.delayedCall(320, onComplete);
+    };
+    const removeLayer = () => {
+      this.hidePartLayer(stagePartId, 700);
+      this.scene.time.delayedCall(740, finish);
+    };
+    if (!zoomPartId) {
+      removeLayer();
+      return;
+    }
+    const frame = PART_ZOOM_FRAMES[zoomPartId];
+    if (!frame) {
+      removeLayer();
+      return;
+    }
+    this.activeZoomKey = `remove:${zoomPartId}`;
+    this.focusedPartId = zoomPartId;
+    this.clearZoomResetTimer();
+    this.tweenCharacterFocus(frame.focusY, frame.zoom, 300, "Cubic.easeOut", removeLayer);
+  }
+
   focusBattlePart(partId: PartId, duration = 300) {
     const frame = PART_ZOOM_FRAMES[partId];
     if (!frame) return;
@@ -264,7 +288,7 @@ export class StageManager {
     const tween = this.scene.tweens.add({
       targets: proxy,
       t: 1,
-      duration: 1500,
+      duration: 5000,
       ease: "Sine.easeInOut",
       onUpdate: () => {
         if (this.battleIntroActive) this.applyIntroFocus(proxy.t);
@@ -281,18 +305,17 @@ export class StageManager {
     const clamped = Phaser.Math.Clamp(t, 0, 1);
     let focusY: number;
     let zoom: number;
-    if (clamped < 1 / 3) {
-      const local = clamped * 3;
-      focusY = Phaser.Math.Linear(0.92, 0.65, this.smoothIntroStep(local));
+    if (clamped < 0.4) {
+      const local = clamped / 0.4;
+      focusY = Phaser.Math.Linear(0.92, 0.18, this.smoothIntroStep(local));
       zoom = 2;
-    } else if (clamped < 2 / 3) {
-      const local = (clamped - 1 / 3) * 3;
-      focusY = Phaser.Math.Linear(0.65, 0.3, this.smoothIntroStep(local));
+    } else if (clamped < 0.7) {
+      focusY = 0.18;
       zoom = 2;
     } else {
-      const local = (clamped - 2 / 3) * 3;
+      const local = (clamped - 0.7) / 0.3;
       const eased = this.smoothIntroStep(local);
-      focusY = Phaser.Math.Linear(0.3, 0.5, eased);
+      focusY = Phaser.Math.Linear(0.18, 0.5, eased);
       zoom = Phaser.Math.Linear(2, 1, eased);
     }
     this.applyCharacterFocus(focusY, zoom);

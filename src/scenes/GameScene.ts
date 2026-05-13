@@ -155,12 +155,6 @@ export class GameScene extends Phaser.Scene {
     this.events.on("buy-pose", (id: string) => this.buyPose(id));
     this.events.on("request-economy-sync", () => this.emitEconomyState());
     this.events.on("abort-current-puzzle", () => this.abortCurrentPuzzle());
-    this.events.on("battle-part-zoom-impact", (partId: PartId) =>
-      this.stageManager.focusBattlePart(partId, 300)
-    );
-    this.events.on("battle-part-zoom-clear", (partId: PartId) =>
-      this.stageManager.clearBattlePartFocus(partId, 400)
-    );
     this.events.emit("puzzle-busy", false);
     this.time.delayedCall(650, () => this.startOrderedBattle());
   }
@@ -334,7 +328,6 @@ export class GameScene extends Phaser.Scene {
   private handlePartCleared(part: PartDef) {
     const alreadyCleared = this.removed.has(part.id);
 
-    this.stageManager.hidePartLayer(part.id);
     this.partSystem.removePart(part.id);
     if (alreadyCleared) {
       return { rewardPart: null as PartDef | null, finished: this.progressSystem.isFinished() };
@@ -363,7 +356,7 @@ export class GameScene extends Phaser.Scene {
     void partIds;
     void activePartId;
     // Combat part HP is a battle mechanic only. The visual strip sequence must
-    // stay ordered, so stage layers are removed only by handlePartCleared().
+    // stay ordered, so stage layers are removed only by the stage-clear flow.
     return [];
   }
 
@@ -440,24 +433,35 @@ export class GameScene extends Phaser.Scene {
       this.cardBattle.start(part, (success, battleResult) => {
       if (flowId !== this.battleFlowId) return;
       if (success) {
-        this.stageManager.resetCharacterZoom(300);
         const destroyedInBattle = this.handlePartsDestroyedInBattle(battleResult?.destroyedPartIds ?? [], part.id);
         const clearResult = this.handlePartCleared(part);
         const nextPart = this.getNextPart();
         this.grantCoins(BATTLE_WIN_COIN_REWARD);
-        this.showBattleReward(clearResult.rewardPart, destroyedInBattle, () => {
+        const showReward = () => {
           if (flowId !== this.battleFlowId) return;
-          if (clearResult.finished && !this.finaleTriggered) {
+          this.showBattleReward(clearResult.rewardPart, destroyedInBattle, () => {
+            if (flowId !== this.battleFlowId) return;
+            if (clearResult.finished && !this.finaleTriggered) {
+              this.releaseBattleLock();
+              this.triggerFinale();
+              return;
+            }
+            if (nextPart && !this.finaleTriggered) {
+              this.queueNextPartBattle(nextPart, flowId);
+              return;
+            }
             this.releaseBattleLock();
-            this.triggerFinale();
-            return;
-          }
-          if (nextPart && !this.finaleTriggered) {
-            this.queueNextPartBattle(nextPart, flowId);
-            return;
-          }
-          this.releaseBattleLock();
-        });
+          });
+        };
+        if (clearResult.rewardPart) {
+          this.stageManager.playPartRemovalCloseup(
+            clearResult.rewardPart.id,
+            this.mapStagePartIdToBattlePartId(clearResult.rewardPart.id),
+            showReward
+          );
+        } else {
+          showReward();
+        }
         return;
       }
       if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
