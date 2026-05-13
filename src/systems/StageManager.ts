@@ -1,5 +1,15 @@
 import Phaser from "phaser";
 import { STAGE_LAYERS, type StageKey, type StageLayerDef } from "../data/parts";
+import type { PartId } from "../data/enemyParts";
+
+const PART_ZOOM_FRAMES: Record<PartId, { focusY: number; zoom: number }> = {
+  circlet: { focusY: 0.13, zoom: 1.6 },
+  cape: { focusY: 0.27, zoom: 1.4 },
+  sweater: { focusY: 0.34, zoom: 1.42 },
+  skirt: { focusY: 0.55, zoom: 1.4 },
+  shoes: { focusY: 0.79, zoom: 1.5 },
+  underwear: { focusY: 0.47, zoom: 1.42 },
+};
 
 export class StageManager {
   private scene: Phaser.Scene;
@@ -12,6 +22,11 @@ export class StageManager {
   private centerX: number;
   private centerY: number;
   private scale: number;
+  private zoomTweens: Phaser.Tweens.Tween[] = [];
+  private zoomResetTimer: Phaser.Time.TimerEvent | null = null;
+  private activeZoomKey: string | null = null;
+  private battleIntroActive = false;
+  private battleIntroComplete: (() => void) | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -61,6 +76,53 @@ export class StageManager {
     this.currentKey = "E1";
   }
 
+  playBattleIntro(onComplete: () => void) {
+    this.battleIntroActive = true;
+    this.battleIntroComplete = onComplete;
+    this.activeZoomKey = "intro";
+    this.clearZoomResetTimer();
+    this.stopZoomTweens();
+    this.applyCharacterFocus(0.92, 2);
+    this.tweenCharacterFocus(0.65, 2, 500, "Cubic.easeInOut", () => {
+      if (!this.battleIntroActive) return;
+      this.tweenCharacterFocus(0.3, 2, 500, "Cubic.easeInOut", () => {
+        if (!this.battleIntroActive) return;
+        this.tweenCharacterFocus(0.5, 1, 500, "Cubic.easeInOut", () => this.completeBattleIntro(false));
+      });
+    });
+  }
+
+  skipBattleIntro() {
+    if (!this.battleIntroActive) return false;
+    this.completeBattleIntro(true);
+    return true;
+  }
+
+  zoomToPart(partId: PartId, duration = 300, holdMs = 0) {
+    const frame = PART_ZOOM_FRAMES[partId];
+    if (!frame) return;
+    const key = `part:${partId}`;
+    if (this.activeZoomKey === key && holdMs <= 0) return;
+    this.activeZoomKey = key;
+    this.clearZoomResetTimer();
+    this.tweenCharacterFocus(frame.focusY, frame.zoom, duration, "Cubic.easeOut");
+    if (holdMs > 0) this.scheduleZoomReset(holdMs);
+  }
+
+  zoomToMainAttack(duration = 300, holdMs = 1500) {
+    const key = "main-attack";
+    this.activeZoomKey = key;
+    this.clearZoomResetTimer();
+    this.tweenCharacterFocus(0.3, 1.2, duration, "Cubic.easeOut");
+    if (holdMs > 0) this.scheduleZoomReset(holdMs);
+  }
+
+  resetCharacterZoom(duration = 400) {
+    this.activeZoomKey = null;
+    this.clearZoomResetTimer();
+    this.tweenCharacterFocus(0.5, 1, duration, "Cubic.easeOut");
+  }
+
   hidePartLayer(partId: string, duration = 420) {
     this.hiddenPartIds.add(partId);
     const directLayerIds = this.partLayerIds.get(partId) ?? [];
@@ -75,7 +137,6 @@ export class StageManager {
         console.warn("[STAGE] layer image missing", layerId);
         return;
       }
-      this.scene.tweens.killTweensOf(img);
       this.playLayerRemovalEffect(img);
       this.scene.tweens.add({
         targets: img,
@@ -104,7 +165,6 @@ export class StageManager {
     }
 
     this.layers.forEach((img) => {
-      this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({
         targets: img,
         alpha: 0,
@@ -132,7 +192,6 @@ export class StageManager {
 
   fadeOutAll(duration = 400) {
     this.layers.forEach((img) => {
-      this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({ targets: img, alpha: 0, duration });
     });
     this.fadeOutExtraLayers(duration);
@@ -144,7 +203,6 @@ export class StageManager {
     this.layers.forEach((img, layerId) => {
       const partId = this.getPartIdForLayer(layerId);
       const shouldShow = !partId || !this.hiddenPartIds.has(partId);
-      this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({
         targets: img,
         alpha: shouldShow ? 1 : 0,
@@ -169,7 +227,6 @@ export class StageManager {
 
   private fadeOutExtraLayers(duration: number) {
     this.extraLayers.forEach((img) => {
-      this.scene.tweens.killTweensOf(img);
       this.scene.tweens.add({
         targets: img,
         alpha: 0,
@@ -177,6 +234,92 @@ export class StageManager {
         ease: "Quad.easeInOut",
       });
     });
+  }
+
+  private completeBattleIntro(skip: boolean) {
+    if (!this.battleIntroActive) return;
+    const done = this.battleIntroComplete;
+    this.battleIntroActive = false;
+    this.battleIntroComplete = null;
+    this.activeZoomKey = null;
+    this.clearZoomResetTimer();
+    this.stopZoomTweens();
+    if (skip) {
+      this.applyCharacterFocus(0.5, 1);
+    } else {
+      this.applyCharacterFocus(0.5, 1);
+    }
+    done?.();
+  }
+
+  private scheduleZoomReset(delay: number) {
+    this.clearZoomResetTimer();
+    this.zoomResetTimer = this.scene.time.delayedCall(delay, () => {
+      this.zoomResetTimer = null;
+      if (!this.battleIntroActive) this.resetCharacterZoom(400);
+    });
+  }
+
+  private clearZoomResetTimer() {
+    this.zoomResetTimer?.remove(false);
+    this.zoomResetTimer = null;
+  }
+
+  private tweenCharacterFocus(
+    focusY: number,
+    zoom: number,
+    duration: number,
+    ease: string,
+    onComplete?: () => void
+  ) {
+    this.stopZoomTweens();
+    const transform = this.getFocusTransform(focusY, zoom);
+    const targets = this.getCharacterImages().filter((img) => !!img.scene);
+    if (targets.length === 0) {
+      onComplete?.();
+      return;
+    }
+    const tween = this.scene.tweens.add({
+      targets,
+      x: transform.x,
+      y: transform.y,
+      scaleX: transform.scale,
+      scaleY: transform.scale,
+      duration,
+      ease,
+      onComplete: () => {
+        this.zoomTweens = this.zoomTweens.filter((t) => t !== tween);
+        onComplete?.();
+      },
+    });
+    this.zoomTweens.push(tween);
+  }
+
+  private applyCharacterFocus(focusY: number, zoom: number) {
+    const transform = this.getFocusTransform(focusY, zoom);
+    this.getCharacterImages().forEach((img) => {
+      img.setPosition(transform.x, transform.y);
+      img.setScale(transform.scale);
+    });
+  }
+
+  private getFocusTransform(focusY: number, zoom: number) {
+    const sourceHeight = this.baseLayer.height * this.scale;
+    const scale = this.scale * zoom;
+    const y = this.centerY - (focusY - 0.5) * sourceHeight * zoom;
+    return { x: this.centerX, y, scale };
+  }
+
+  private getCharacterImages() {
+    return [...this.layers.values(), ...this.extraLayers.values()];
+  }
+
+  private stopZoomTweens() {
+    this.zoomTweens.forEach((tween) => {
+      if (tween.isPlaying()) tween.stop();
+      tween.remove();
+    });
+    this.zoomTweens = [];
   }
 
   private playLayerRemovalEffect(img: Phaser.GameObjects.Image) {

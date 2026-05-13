@@ -38,6 +38,7 @@ export class GameScene extends Phaser.Scene {
   private puzzleBusy = false;
   private abortingPuzzle = false;
   private battleFlowId = 0;
+  private battleIntroSkipHandler: (() => void) | null = null;
 
   private stageSet: StageSet = 1;
   private stage2StoryUnlocked = false;
@@ -153,6 +154,18 @@ export class GameScene extends Phaser.Scene {
     this.events.on("buy-pose", (id: string) => this.buyPose(id));
     this.events.on("request-economy-sync", () => this.emitEconomyState());
     this.events.on("abort-current-puzzle", () => this.abortCurrentPuzzle());
+    this.events.on("battle-part-zoom-preview", (partId: PartId, duration = 300) =>
+      this.stageManager.zoomToPart(partId, duration)
+    );
+    this.events.on("battle-part-zoom-impact", (partId: PartId) =>
+      this.stageManager.zoomToPart(partId, 300, 1500)
+    );
+    this.events.on("battle-main-zoom-impact", () =>
+      this.stageManager.zoomToMainAttack(300, 1500)
+    );
+    this.events.on("battle-character-zoom-reset", () =>
+      this.stageManager.resetCharacterZoom(400)
+    );
     this.events.emit("puzzle-busy", false);
     this.time.delayedCall(650, () => this.startOrderedBattle());
   }
@@ -420,9 +433,19 @@ export class GameScene extends Phaser.Scene {
     this.partSystem.setPuzzleActive(true);
     this.partSystem.setInputEnabled(false);
 
-    this.cardBattle.start(part, (success, battleResult) => {
+    let battleStarted = false;
+    const beginBattle = () => {
+      if (battleStarted) return;
+      battleStarted = true;
+      this.clearBattleIntroSkip();
+      if (flowId !== this.battleFlowId || this.finaleTriggered || this.interactionActive) {
+        this.releaseBattleLock();
+        return;
+      }
+      this.cardBattle.start(part, (success, battleResult) => {
       if (flowId !== this.battleFlowId) return;
       if (success) {
+        this.stageManager.resetCharacterZoom(300);
         const destroyedInBattle = this.handlePartsDestroyedInBattle(battleResult?.destroyedPartIds ?? [], part.id);
         const clearResult = this.handlePartCleared(part);
         const nextPart = this.getNextPart();
@@ -449,7 +472,25 @@ export class GameScene extends Phaser.Scene {
         this.events.emit("failure", part.id);
       }
       this.releaseBattleLock();
-    });
+      });
+    };
+
+    this.armBattleIntroSkip();
+    this.stageManager.playBattleIntro(beginBattle);
+  }
+
+  private armBattleIntroSkip() {
+    this.clearBattleIntroSkip();
+    this.battleIntroSkipHandler = () => {
+      this.stageManager.skipBattleIntro();
+    };
+    this.input.once("pointerdown", this.battleIntroSkipHandler);
+  }
+
+  private clearBattleIntroSkip() {
+    if (!this.battleIntroSkipHandler) return;
+    this.input.off("pointerdown", this.battleIntroSkipHandler);
+    this.battleIntroSkipHandler = null;
   }
 
   private showBattleReward(rewardPart: PartDef | null, destroyedInBattle: PartDef[], onContinue: () => void) {
@@ -494,6 +535,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private releaseBattleLock() {
+    this.clearBattleIntroSkip();
+    this.stageManager.resetCharacterZoom(300);
     this.puzzleBusy = false;
     this.events.emit("puzzle-busy", false);
     this.partSystem.setPuzzleActive(false);

@@ -391,6 +391,8 @@ export class CardBattleSystem {
   private battleRunId = 0;
   private nextReactionOrder = 1;
   private effectObjects: Phaser.GameObjects.GameObject[] = [];
+  private lastPreviewZoomPartId: PartId | null = null;
+  private impactZoomHoldUntil = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -480,6 +482,7 @@ export class CardBattleSystem {
     this.discard = [];
     this.selectedCards = [];
     this.dragStart = null;
+    this.clearPartZoomPreview();
   }
 
   private startBattle(part: PartDef) {
@@ -487,7 +490,7 @@ export class CardBattleSystem {
 
     // Battle UI floats over the existing scene — no opaque backdrop so the
     // character image and stage stay visible behind the strips and cards.
-    this.overlay = this.scene.add.container(0, 0).setDepth(500);
+    this.overlay = this.scene.add.container(0, 0).setDepth(500).setAlpha(0);
 
     // Initialize state
     const enemyHpMax = 22 + part.difficulty * 9;
@@ -791,6 +794,12 @@ export class CardBattleSystem {
     // Start of battle
     this.drawToFull(START_HAND);
     this.refreshAll();
+    this.scene.tweens.add({
+      targets: this.overlay,
+      alpha: 1,
+      duration: 240,
+      ease: "Quad.easeOut",
+    });
     this.playTurnAnnouncement();
   }
 
@@ -1510,6 +1519,7 @@ export class CardBattleSystem {
     if (this.busy || this.finished) return;
     const overCard = pointerX !== undefined && pointerY !== undefined && this.getHandSlotAt(pointerX, pointerY, source) !== null;
     const canRoute = this.cardHasRoutableAttack(source);
+    let hoveredPartId: PartId | null = null;
     for (const part of this.enemy.parts) {
       const row = this.enemyPartRows[part.id];
       if (!row) continue;
@@ -1522,12 +1532,32 @@ export class CardBattleSystem {
         continue;
       }
       row.bg.setStrokeStyle(u(hovered ? 1.7 : 1), hovered ? 0x82ffe6 : 0xffd572, hovered ? 1 : 0.72);
-      if (hovered) row.dropText.setText(this.getRoutedDamagePreview(source));
+      if (hovered) {
+        hoveredPartId = part.id;
+        row.dropText.setText(this.getRoutedDamagePreview(source));
+      }
     }
+    this.updatePartZoomPreview(hoveredPartId);
   }
 
   private clearPartDropHighlights() {
     this.refreshEnemyPartPanel();
+    this.clearPartZoomPreview();
+  }
+
+  private updatePartZoomPreview(partId: PartId | null) {
+    if (this.lastPreviewZoomPartId === partId) return;
+    const duration = this.lastPreviewZoomPartId === null ? 300 : 200;
+    this.lastPreviewZoomPartId = partId;
+    if (partId) this.scene.events.emit("battle-part-zoom-preview", partId, duration);
+    else this.scene.events.emit("battle-character-zoom-reset");
+  }
+
+  private clearPartZoomPreview() {
+    if (this.lastPreviewZoomPartId === null) return;
+    this.lastPreviewZoomPartId = null;
+    if (this.scene.time.now < this.impactZoomHoldUntil) return;
+    this.scene.events.emit("battle-character-zoom-reset");
   }
 
   private getHandSlotAt(x: number, y: number, source?: TarotCardState) {
@@ -1936,6 +1966,10 @@ export class CardBattleSystem {
     const modifier = this.applyActivePlayerDamageModifiers(raw, context);
     if (modifier.prevented) return { dealt: 0, appliedAmount: 0, prevented: true };
     const dealt = this.applyAttack(this.enemy, modifier.amount);
+    if (dealt > 0) {
+      this.impactZoomHoldUntil = this.scene.time.now + 1500;
+      this.scene.events.emit("battle-main-zoom-impact");
+    }
     return { dealt, appliedAmount: modifier.amount, prevented: false };
   }
 
@@ -1970,6 +2004,10 @@ export class CardBattleSystem {
 
     const before = target.hp;
     const partDamage = Math.min(before, modifier.amount);
+    if (partDamage > 0) {
+      this.impactZoomHoldUntil = this.scene.time.now + 1500;
+      this.scene.events.emit("battle-part-zoom-impact", target.id);
+    }
     target.hp = Math.max(0, target.hp - modifier.amount);
     const overflow = Math.max(0, modifier.amount - before);
     let destroyed = false;
