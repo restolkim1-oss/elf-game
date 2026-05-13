@@ -15,6 +15,7 @@ const START_HAND = 5;
 const TARGET_HAND = 5;
 const HAND_LIMIT = 7;
 const MAX_TURNS = 12;
+const EXCHANGE_MAX = 2;
 const POISON_STACK_CAP = 99;
 const CHARGE_STACK_CAP = 99;
 const ENEMY_REACTION_LINES = [
@@ -357,6 +358,8 @@ export class CardBattleSystem {
   private handObjs: HandCard[] = [];
   private endTurnBg!: Phaser.GameObjects.Rectangle;
   private useCardsBg!: Phaser.GameObjects.Rectangle;
+  private exchangeBg!: Phaser.GameObjects.Rectangle;
+  private exchangeButtonText: Phaser.GameObjects.Text | null = null;
   private enemyPartPanel: Phaser.GameObjects.Container | null = null;
   private enemyPartTooltip: Phaser.GameObjects.Container | null = null;
   private activeTooltipPartId: PartId | null = null;
@@ -396,6 +399,8 @@ export class CardBattleSystem {
   private visualComboCount = 0;
   private visualComboTimer: Phaser.Time.TimerEvent | null = null;
   private visualComboText: Phaser.GameObjects.Text | null = null;
+  private exchangeRemaining = EXCHANGE_MAX;
+  private exchangeMode = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -489,6 +494,8 @@ export class CardBattleSystem {
     this.hand = [];
     this.discard = [];
     this.selectedCards = [];
+    this.exchangeRemaining = EXCHANGE_MAX;
+    this.exchangeMode = false;
     this.dragStart = null;
     this.blockedDragCardUid = null;
   }
@@ -640,16 +647,20 @@ export class CardBattleSystem {
     const playerStripInner = this.scene.add
       .rectangle(width / 2, playerStripY, playerPanelW - u(10), u(74), 0x11131a, 0.32)
       .setStrokeStyle(u(0.8), 0xf3d48a, 0.28);
+    const playerHpY = playerStripY + u(2);
+    this.playerHpBarMaxWidth = playerPanelW * 0.58;
+    this.playerHpBarLeft = width / 2 - this.playerHpBarMaxWidth / 2;
+
     const playerName = this.scene.add
-      .text(width / 2 - playerPanelW / 2 + u(18), playerStripY - u(31), "플레이어", {
+      .text(this.playerHpBarLeft - u(16), playerHpY, "플레이어", {
         fontFamily: "serif",
-        fontSize: px(18),
+        fontSize: px(15),
         color: "#f3e6c9",
         fontStyle: "bold",
         stroke: "#090610",
-        strokeThickness: u(1.4),
+        strokeThickness: u(1.2),
       })
-      .setOrigin(0, 0.5);
+      .setOrigin(1, 0.5);
     this.energyText = this.scene.add
       .text(width / 2, playerStripY - u(31), "", {
         fontFamily: "serif",
@@ -659,19 +670,15 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     this.turnText = this.scene.add
-      .text(width / 2 + playerPanelW / 2 - u(18), playerStripY - u(31), "", {
+      .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(16), playerHpY, "", {
         fontFamily: "serif",
-        fontSize: px(18),
+        fontSize: px(15),
         color: "#f3d48a",
         fontStyle: "bold",
         stroke: "#090610",
-        strokeThickness: u(1.4),
+        strokeThickness: u(1.2),
       })
-      .setOrigin(1, 0.5);
-
-    const playerHpY = playerStripY + u(2);
-    this.playerHpBarMaxWidth = playerPanelW * 0.62;
-    this.playerHpBarLeft = width / 2 - this.playerHpBarMaxWidth / 2;
+      .setOrigin(0, 0.5);
     const playerHpBg = this.scene.add
       .rectangle(
         this.playerHpBarLeft + this.playerHpBarMaxWidth / 2,
@@ -781,27 +788,45 @@ export class CardBattleSystem {
     this.handAreaWidth = stripW * 0.96;
 
     // Action buttons at the very bottom corners
-    const btnY = height - u(31);
-    this.endTurnBg = this.makeButton(
-      width - u(106),
-      btnY,
-      u(170),
-      u(42),
-      "턴 종료",
-      () => this.endPlayerTurn()
-    );
-    this.useCardsBg = this.makeButton(
-      width / 2,
-      btnY,
-      u(205),
-      u(42),
-      "카드 사용",
-      () => this.playSelectedCards()
-    );
-    this.makeButton(u(106), btnY, u(170), u(42), "포기", () => {
+    const btnY = height - u(38);
+    const btnGap = u(8);
+    const btnW = (width - btnGap * 5) / 4;
+    const btnH = u(56);
+    const btnX = (idx: number) => btnGap + btnW / 2 + idx * (btnW + btnGap);
+    this.makeButton(btnX(0), btnY, btnW, btnH, "포기", () => {
       this.cancelled = true;
       this.finish(false);
-    });
+    }, 15);
+    this.exchangeBg = this.makeButton(
+      btnX(1),
+      btnY,
+      btnW,
+      btnH,
+      `교환 ${this.exchangeRemaining}/${EXCHANGE_MAX}`,
+      () => this.toggleExchangeMode(),
+      15,
+      (text) => {
+        this.exchangeButtonText = text;
+      }
+    );
+    this.useCardsBg = this.makeButton(
+      btnX(2),
+      btnY,
+      btnW,
+      btnH,
+      "카드 사용",
+      () => this.playSelectedCards(),
+      15
+    );
+    this.endTurnBg = this.makeButton(
+      btnX(3),
+      btnY,
+      btnW,
+      btnH,
+      "턴 종료",
+      () => this.endPlayerTurn(),
+      15
+    );
 
     // Start of battle
     this.drawToFull(START_HAND);
@@ -836,6 +861,7 @@ export class CardBattleSystem {
 
   private endPlayerTurn() {
     if (this.busy || this.finished) return;
+    this.exchangeMode = false;
     this.removeTemporaryCardsFromHand(true);
     this.busy = true;
     this.refreshButtons();
@@ -1097,6 +1123,10 @@ export class CardBattleSystem {
     if (this.busy || this.finished) return;
     const card = this.hand[handIdx];
     if (!card) return;
+    if (this.exchangeMode) {
+      this.exchangeCard(card);
+      return;
+    }
     const def = CARDS[card.cardId];
     const selected = this.selectedCards.includes(card);
     if (selected) {
@@ -1137,6 +1167,12 @@ export class CardBattleSystem {
 
   private playSelectedCards() {
     if (this.busy || this.finished) return;
+    if (this.exchangeMode) {
+      this.exchangeMode = false;
+      this.flashLog("교환 모드를 취소했습니다");
+      this.refreshAll();
+      return;
+    }
     if (this.selectedCards.length === 0) {
       this.flashLog("사용할 카드를 선택하세요");
       return;
@@ -1553,6 +1589,39 @@ export class CardBattleSystem {
         row.dropText.setText(this.getRoutedDamagePreview(source));
       }
     }
+  }
+
+  private toggleExchangeMode() {
+    if (this.busy || this.finished) return;
+    if (this.exchangeRemaining <= 0) {
+      this.flashLog("이번 전투의 교환 횟수를 모두 사용했습니다");
+      return;
+    }
+    this.exchangeMode = !this.exchangeMode;
+    if (this.exchangeMode) {
+      this.selectedCards = [];
+      this.flashLog(`교환할 카드 1장을 선택하세요 (${this.exchangeRemaining}/${EXCHANGE_MAX})`);
+    } else {
+      this.flashLog("교환 모드를 취소했습니다");
+    }
+    this.refreshAll();
+  }
+
+  private exchangeCard(card: TarotCardState) {
+    if (this.busy || this.finished || this.exchangeRemaining <= 0) return;
+    const idx = this.hand.indexOf(card);
+    if (idx < 0) return;
+    const def = CARDS[card.cardId];
+    this.hand.splice(idx, 1);
+    const shouldDiscard = !card.isTemporary;
+    this.selectedCards = this.selectedCards.filter((selected) => selected !== card);
+    this.exchangeRemaining = Math.max(0, this.exchangeRemaining - 1);
+    this.exchangeMode = false;
+    this.drawToFull(TARGET_HAND);
+    if (shouldDiscard) this.discard.push(card);
+    SoundManager.play(this.scene, "cardDraw");
+    this.flashLog(`${def.roleLabel} 카드 교환 완료 (${this.exchangeRemaining}/${EXCHANGE_MAX})`);
+    this.refreshAll();
   }
 
   private clearPartDropHighlights() {
@@ -3101,6 +3170,10 @@ export class CardBattleSystem {
 
     bg.on("pointerover", () => {
       if (this.busy || this.finished) return;
+      if (this.exchangeMode) {
+        tempGlow.setAlpha(0.75);
+        return;
+      }
       this.startCardPreviewTimer(card, x, y);
       this.highlightMergeTarget(card);
       this.scene.tweens.killTweensOf(container);
@@ -3131,6 +3204,20 @@ export class CardBattleSystem {
     });
     bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this.clearCardPreview();
+      if (this.exchangeMode) {
+        this.dragStart = null;
+        this.blockedDragCardUid = null;
+        this.scene.tweens.killTweensOf(container);
+        this.scene.tweens.add({
+          targets: container,
+          scaleX: 1.06,
+          scaleY: 1.06,
+          y: y - u(10),
+          duration: 90,
+          ease: "Quad.easeOut",
+        });
+        return;
+      }
       this.blockedDragCardUid = null;
       this.dragStart = { x: pointer.x, y: pointer.y, card };
       this.startCardPreviewTimer(card, pointer.x, pointer.y);
@@ -3465,7 +3552,12 @@ export class CardBattleSystem {
   private refreshButtons() {
     const canEnd = !this.busy && !this.finished;
     this.endTurnBg.setFillStyle(0x12101e, canEnd ? 0.96 : 0.45);
-    this.useCardsBg.setFillStyle(0x12101e, canEnd && this.selectedCards.length > 0 ? 0.96 : 0.45);
+    this.useCardsBg.setFillStyle(0x12101e, canEnd && !this.exchangeMode && this.selectedCards.length > 0 ? 0.96 : 0.45);
+    const canExchange = canEnd && this.exchangeRemaining > 0;
+    this.exchangeBg?.setFillStyle(this.exchangeMode ? 0x26321e : 0x12101e, canExchange ? 0.96 : 0.45);
+    this.exchangeBg?.setStrokeStyle(u(this.exchangeMode ? 2 : 1), this.exchangeMode ? 0x82ffe6 : 0xf3e6c9, canExchange ? 0.9 : 0.42);
+    this.exchangeButtonText?.setText(`교환 ${this.exchangeRemaining}/${EXCHANGE_MAX}`);
+    this.exchangeButtonText?.setColor(this.exchangeMode ? "#82ffe6" : canExchange ? "#f3e6c9" : "#8a7b68");
   }
 
   private flashLog(text: string) {
@@ -4287,7 +4379,9 @@ export class CardBattleSystem {
     w: number,
     h: number,
     label: string,
-    onClick: () => void
+    onClick: () => void,
+    fontSize = 14,
+    onTextCreated?: (text: Phaser.GameObjects.Text) => void
   ): Phaser.GameObjects.Rectangle {
     const outer = this.scene.add
       .rectangle(x, y, w, h, 0x07070d, 0.98)
@@ -4308,13 +4402,14 @@ export class CardBattleSystem {
     const text = this.scene.add
       .text(x, y, label, {
         fontFamily: "serif",
-        fontSize: px(14),
+        fontSize: px(fontSize),
         color: "#f3e6c9",
         fontStyle: "bold",
         stroke: "#050409",
         strokeThickness: u(1),
       })
       .setOrigin(0.5);
+    onTextCreated?.(text);
     bg.on("pointerover", () => {
       bg.setFillStyle(0x211836, 0.98);
       outer.setStrokeStyle(u(1.8), 0xffd572, 1);
