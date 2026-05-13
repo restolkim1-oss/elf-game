@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { UI_SCALE } from "../main";
+import { SoundManager } from "./SoundManager";
 
 const u = (n: number) => n * UI_SCALE;
 const px = (n: number) => `${Math.round(n * UI_SCALE * 1.55)}px`;
@@ -24,6 +25,7 @@ export class DiceRoller {
     const apexY = y - u(70);
 
     const group = scene.add.container(x, startY).setDepth(760).setScale(diceScale);
+    SoundManager.play(scene, "diceShake");
     const shadow = scene.add
       .ellipse(0, u(92), u(112), u(22), 0x000000, 0.28)
       .setScale(0.65, 0.65);
@@ -105,6 +107,7 @@ export class DiceRoller {
           scaleY: diceScale,
           duration: 440,
           ease: "Bounce.easeOut",
+          onStart: () => SoundManager.play(scene, "diceThrow"),
           onUpdate: () => shadow.setScale(0.9, 0.9),
           onComplete: () => {
             if (!isAlive()) {

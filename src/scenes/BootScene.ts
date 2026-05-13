@@ -6,6 +6,7 @@ import {
   STAGE_LAYERS,
 } from "../data/parts";
 import { POSES } from "../data/posesData";
+import { SOUND_ASSETS } from "../systems/SoundManager";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -27,6 +28,9 @@ export class BootScene extends Phaser.Scene {
     });
     INTERACTION_ORDER.forEach((key) => {
       this.load.image(key, INTERACTION_ASSET_PATHS[key]);
+    });
+    SOUND_ASSETS.forEach((sound) => {
+      this.load.audio(sound.key, sound.path);
     });
   }
 

@@ -15,6 +15,7 @@ import {
 } from "../data/parts";
 import { POSES, getPose } from "../data/posesData";
 import type { PartId } from "../data/enemyParts";
+import { SoundManager } from "../systems/SoundManager";
 
 const AFFINITY_MAX = 100;
 const STAGE2_UNLOCK_AFFINITY = 40;
@@ -75,6 +76,7 @@ export class GameScene extends Phaser.Scene {
     this.parts = getPartsForStage(this.stageSet);
     this.registry.set("stage-set", this.stageSet);
     this.registry.set("current-parts", this.parts);
+    SoundManager.init(this);
     this.cameras.main.setZoom(1);
     this.cameras.main.setScroll(0, 0);
 
@@ -667,6 +669,7 @@ export class GameScene extends Phaser.Scene {
     this.unlockedPoses.add(pose.id);
     this.persistMetaState();
     this.emitEconomyState();
+    SoundManager.play(this, "coinSpend");
     this.feedback(`${pose.displayName} 구매 완료`, "#86e08d");
   }
 
@@ -675,6 +678,7 @@ export class GameScene extends Phaser.Scene {
     this.coins += amount;
     this.persistMetaState();
     this.emitEconomyState();
+    SoundManager.play(this, "coinGain");
   }
 
   private canUseStage2() {

@@ -4,6 +4,7 @@ import { SHOP_GALLERY, type ShopArtId } from "../data/shop";
 import { POSES, type PoseData } from "../data/posesData";
 import type { PartId } from "../data/enemyParts";
 import { UI_SCALE } from "../main";
+import { SoundManager } from "../systems/SoundManager";
 
 const COLORS = {
   panelDeep: 0x07030b,
@@ -99,6 +100,7 @@ export class UIScene extends Phaser.Scene {
 
   create() {
     const game = this.scene.get("GameScene");
+    SoundManager.init(this);
     this.parts =
       (game.registry.get("current-parts") as PartDef[] | undefined) ??
       getPartsForStage(1);
@@ -481,6 +483,7 @@ export class UIScene extends Phaser.Scene {
     };
 
     makeIconButton(MENU_ICONS[0], topY, topSize, () => {
+      SoundManager.play(this, "uiToggle");
       this.sideIconExpanded = !this.sideIconExpanded;
       setChildVisible(this.sideIconExpanded);
     });
@@ -489,7 +492,11 @@ export class UIScene extends Phaser.Scene {
       const y = topY + topSize * 0.62 + gap + size / 2 + idx * (size + gap);
       const entries = makeIconButton(icon, y, size, () => {
         if (icon.key === "menu_icon_shop") {
+          SoundManager.play(this, "shopOpen");
           this.toggleShopMenu();
+        } else if (icon.key === "menu_icon_settings") {
+          const muted = SoundManager.toggleMute(this);
+          this.flashHint(muted ? "사운드 OFF" : "사운드 ON", COLORS.textHighlight);
         } else {
           this.flashHint(`${icon.label} 메뉴는 준비 중입니다.`, COLORS.textHighlight);
         }
@@ -1079,6 +1086,7 @@ export class UIScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const c = this.add.container(0, 0).setDepth(2300);
     this.rewardModal = c;
+    SoundManager.play(this, "reward");
     let continued = false;
 
     c.add(
@@ -1225,6 +1233,7 @@ export class UIScene extends Phaser.Scene {
       onComplete?: () => void;
     } = {}
   ) {
+    SoundManager.play(this, "modalOpen", (options.duration ?? 200) >= 300 ? 0.9 : 0.72);
     const duration = options.duration ?? 200;
     const scaleFrom = options.scaleFrom ?? 0.01;
     const ease = options.ease ?? "Back.easeOut";
@@ -1254,6 +1263,7 @@ export class UIScene extends Phaser.Scene {
       options.onComplete?.();
       return;
     }
+    SoundManager.play(this, "modalClose", 0.72);
     const duration = options.duration ?? 150;
     const scaleTo = options.scaleTo ?? 0.01;
     const ease = options.ease ?? "Cubic.easeIn";
@@ -1295,6 +1305,7 @@ export class UIScene extends Phaser.Scene {
     bg.on("pointerover", () => bg.setFillStyle(0x2a1a34, 0.98));
     bg.on("pointerout", () => bg.setFillStyle(COLORS.panelSoft, 0.96));
     bg.on("pointerdown", () => {
+      SoundManager.play(this, "uiClick");
       this.tweens.add({
         targets: [bg, txt],
         scaleX: 0.94,

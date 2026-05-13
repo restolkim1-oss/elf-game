@@ -4,6 +4,7 @@ import { findFusionRecipe, type CardFusionRecipe, type FusionEffect, type Fusion
 import { ENEMY_PART_CONFIG, type EnemyPart, type PartAbility, type PartId } from "../data/enemyParts";
 import { DiceRoller } from "./Dice";
 import { UI_SCALE } from "../main";
+import { SoundManager } from "./SoundManager";
 
 const u = (n: number) => n * UI_SCALE;
 const px = (n: number) => `${Math.round(n * UI_SCALE * 1.55)}px`;
@@ -1142,6 +1143,7 @@ export class CardBattleSystem {
       return false;
     }
     this.playCardUseTrail(comboCards, routedAttackPartId);
+    SoundManager.play(this.scene, "cardUse");
     this.energy -= actualCost;
     this.hand = this.hand.filter((c) => !comboCards.includes(c));
     this.selectedCards = this.selectedCards.filter((c) => !comboCards.includes(c));
@@ -1648,6 +1650,7 @@ export class CardBattleSystem {
     this.hand.splice(Math.max(0, targetIndex), 0, fusedCard);
     this.selectedCards = this.selectedCards.filter((card) => card !== source && card !== target);
     this.playMergeEffect(targetSlot);
+    SoundManager.play(this.scene, "cardMerge");
     this.flashLog(`${recipe.result.name} 임시 카드 생성!`);
     this.refreshAll();
     return true;
@@ -1756,6 +1759,7 @@ export class CardBattleSystem {
   }
 
   private playInvalidDropReturn(slot: HandCard) {
+    SoundManager.play(this.scene, "invalidDrop");
     const flash = this.trackEffect(
       this.scene.add
         .rectangle(slot.container.x, slot.container.y, slot.cardW + u(14), slot.cardH + u(14), 0xffffff, 0)
@@ -2269,12 +2273,9 @@ export class CardBattleSystem {
 
   private maybeShowEnemySpeech(force = false) {
     if (this.finished || !this.enemy || !this.player) return;
-    const enemyRatio = this.enemy.hp / Math.max(1, this.enemy.hpMax);
-    const playerIsAhead = this.enemy.hp < this.player.hp || enemyRatio <= 0.68;
-    if (!force && !playerIsAhead) return;
     const now = this.scene.time.now;
-    if (now - this.lastSpeechAt < 1800) return;
-    if (!force && Phaser.Math.Between(1, 100) > 52) return;
+    if (now - this.lastSpeechAt < 1400) return;
+    if (!force && Phaser.Math.Between(1, 100) > 62) return;
 
     this.lastSpeechAt = now;
     const line =
@@ -2290,7 +2291,7 @@ export class CardBattleSystem {
     const y = height * 0.13;
     const bubbleW = u(200);
     const bubbleH = u(68);
-    const c = this.trackEffect(this.scene.add.container(x, y).setDepth(790));
+    const c = this.trackEffect(this.scene.add.container(x, y).setDepth(980));
     this.speechBubble = c;
 
     const bg = this.scene.add.graphics();
@@ -2322,7 +2323,6 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     c.add([bg, text]);
-    this.overlay?.add(c);
 
     c.setAlpha(0).setScale(0.84);
     this.scene.tweens.add({
@@ -2411,6 +2411,7 @@ export class CardBattleSystem {
   }
 
   private draw(n: number) {
+    let drawn = 0;
     for (let i = 0; i < n; i++) {
       if (this.hand.length >= HAND_LIMIT) break;
       if (this.deck.length === 0) {
@@ -2419,8 +2420,12 @@ export class CardBattleSystem {
         this.discard = [];
       }
       const card = this.deck.pop();
-      if (card) this.hand.push(card);
+      if (card) {
+        this.hand.push(card);
+        drawn++;
+      }
     }
+    if (drawn > 0) SoundManager.play(this.scene, "cardDraw", Math.min(1, 0.55 + drawn * 0.12));
   }
 
   // -- Rendering --
@@ -4102,6 +4107,7 @@ export class CardBattleSystem {
       outer.setStrokeStyle(u(1.6), 0xd4a656, 0.9);
     });
     bg.on("pointerdown", () => {
+      SoundManager.play(this.scene, "uiClick");
       this.scene.tweens.add({
         targets: [outer, bg, inner, leftGem, rightGem, text],
         scaleX: 0.95,
