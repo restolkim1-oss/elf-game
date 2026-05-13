@@ -943,9 +943,9 @@ export class UIScene extends Phaser.Scene {
     const cols = 3;
     const gap = u(10);
     const cardW = (panelW - u(40) - gap * (cols - 1)) / cols;
-    const cardH = u(156);
+    const cardH = u(150);
     const startX = panelX - (cardW + gap);
-    const startY = panelY - panelH / 2 + u(174);
+    const startY = panelY - panelH / 2 + u(216);
     visiblePoses.forEach((pose, idx) => {
       const x = startX + (idx % cols) * (cardW + gap);
       const y = startY + Math.floor(idx / cols) * (cardH + u(12));

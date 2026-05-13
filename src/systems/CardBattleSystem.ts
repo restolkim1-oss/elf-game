@@ -391,7 +391,6 @@ export class CardBattleSystem {
   private battleRunId = 0;
   private nextReactionOrder = 1;
   private effectObjects: Phaser.GameObjects.GameObject[] = [];
-  private lastPreviewZoomPartId: PartId | null = null;
   private blockedDragCardUid: number | null = null;
 
   constructor(scene: Phaser.Scene) {
@@ -483,7 +482,6 @@ export class CardBattleSystem {
     this.selectedCards = [];
     this.dragStart = null;
     this.blockedDragCardUid = null;
-    this.clearPartZoomPreview();
   }
 
   private startBattle(part: PartDef) {
@@ -1520,7 +1518,6 @@ export class CardBattleSystem {
     if (this.busy || this.finished) return;
     const overCard = pointerX !== undefined && pointerY !== undefined && this.getHandSlotAt(pointerX, pointerY, source) !== null;
     const canRoute = this.cardHasRoutableAttack(source);
-    let hoveredPartId: PartId | null = null;
     for (const part of this.enemy.parts) {
       const row = this.enemyPartRows[part.id];
       if (!row) continue;
@@ -1534,30 +1531,13 @@ export class CardBattleSystem {
       }
       row.bg.setStrokeStyle(u(hovered ? 1.7 : 1), hovered ? 0x82ffe6 : 0xffd572, hovered ? 1 : 0.72);
       if (hovered) {
-        hoveredPartId = part.id;
         row.dropText.setText(this.getRoutedDamagePreview(source));
       }
     }
-    this.updatePartZoomPreview(hoveredPartId);
   }
 
   private clearPartDropHighlights() {
     this.refreshEnemyPartPanel();
-    this.clearPartZoomPreview();
-  }
-
-  private updatePartZoomPreview(partId: PartId | null) {
-    if (this.lastPreviewZoomPartId === partId) return;
-    const duration = this.lastPreviewZoomPartId === null ? 300 : 200;
-    this.lastPreviewZoomPartId = partId;
-    if (partId) this.scene.events.emit("battle-part-zoom-preview", partId, duration);
-    else this.scene.events.emit("battle-character-zoom-reset");
-  }
-
-  private clearPartZoomPreview() {
-    if (this.lastPreviewZoomPartId === null) return;
-    this.lastPreviewZoomPartId = null;
-    this.scene.events.emit("battle-character-zoom-reset");
   }
 
   private getHandSlotAt(x: number, y: number, source?: TarotCardState) {

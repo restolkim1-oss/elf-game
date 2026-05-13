@@ -155,17 +155,11 @@ export class GameScene extends Phaser.Scene {
     this.events.on("buy-pose", (id: string) => this.buyPose(id));
     this.events.on("request-economy-sync", () => this.emitEconomyState());
     this.events.on("abort-current-puzzle", () => this.abortCurrentPuzzle());
-    this.events.on("battle-part-zoom-preview", (partId: PartId, duration = 300) =>
-      this.stageManager.zoomToPart(partId, duration)
-    );
     this.events.on("battle-part-zoom-impact", (partId: PartId) =>
       this.stageManager.focusBattlePart(partId, 300)
     );
     this.events.on("battle-part-zoom-clear", (partId: PartId) =>
       this.stageManager.clearBattlePartFocus(partId, 400)
-    );
-    this.events.on("battle-character-zoom-reset", () =>
-      this.stageManager.resetCharacterZoom(400)
     );
     this.events.emit("puzzle-busy", false);
     this.time.delayedCall(650, () => this.startOrderedBattle());

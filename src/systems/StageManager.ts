@@ -28,7 +28,7 @@ export class StageManager {
   private focusedPartId: PartId | null = null;
   private battleIntroActive = false;
   private battleIntroComplete: (() => void) | null = null;
-  private introProxy: { focusY: number; zoom: number } | null = null;
+  private introProxy: { t: number } | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -85,13 +85,9 @@ export class StageManager {
     this.focusedPartId = null;
     this.clearZoomResetTimer();
     this.stopZoomTweens();
-    this.introProxy = { focusY: 0.92, zoom: 2 };
-    this.applyCharacterFocus(this.introProxy.focusY, this.introProxy.zoom);
-    this.tweenIntroProxy(0.65, 2, 500, () => {
-      this.tweenIntroProxy(0.3, 2, 500, () => {
-        this.tweenIntroProxy(0.5, 1, 500, () => this.completeBattleIntro(false));
-      });
-    });
+    this.introProxy = { t: 0 };
+    this.applyIntroFocus(0);
+    this.tweenIntroProxy(() => this.completeBattleIntro(false));
   }
 
   skipBattleIntro() {
@@ -262,17 +258,16 @@ export class StageManager {
     done?.();
   }
 
-  private tweenIntroProxy(focusY: number, zoom: number, duration: number, onComplete: () => void) {
+  private tweenIntroProxy(onComplete: () => void) {
     if (!this.battleIntroActive || !this.introProxy) return;
     const proxy = this.introProxy;
     const tween = this.scene.tweens.add({
       targets: proxy,
-      focusY,
-      zoom,
-      duration,
+      t: 1,
+      duration: 1500,
       ease: "Sine.easeInOut",
       onUpdate: () => {
-        if (this.battleIntroActive) this.applyCharacterFocus(proxy.focusY, proxy.zoom);
+        if (this.battleIntroActive) this.applyIntroFocus(proxy.t);
       },
       onComplete: () => {
         this.zoomTweens = this.zoomTweens.filter((t) => t !== tween);
@@ -280,6 +275,32 @@ export class StageManager {
       },
     });
     this.zoomTweens.push(tween);
+  }
+
+  private applyIntroFocus(t: number) {
+    const clamped = Phaser.Math.Clamp(t, 0, 1);
+    let focusY: number;
+    let zoom: number;
+    if (clamped < 1 / 3) {
+      const local = clamped * 3;
+      focusY = Phaser.Math.Linear(0.92, 0.65, this.smoothIntroStep(local));
+      zoom = 2;
+    } else if (clamped < 2 / 3) {
+      const local = (clamped - 1 / 3) * 3;
+      focusY = Phaser.Math.Linear(0.65, 0.3, this.smoothIntroStep(local));
+      zoom = 2;
+    } else {
+      const local = (clamped - 2 / 3) * 3;
+      const eased = this.smoothIntroStep(local);
+      focusY = Phaser.Math.Linear(0.3, 0.5, eased);
+      zoom = Phaser.Math.Linear(2, 1, eased);
+    }
+    this.applyCharacterFocus(focusY, zoom);
+  }
+
+  private smoothIntroStep(t: number) {
+    const clamped = Phaser.Math.Clamp(t, 0, 1);
+    return clamped * clamped * (3 - 2 * clamped);
   }
 
   private scheduleZoomReset(delay: number) {
