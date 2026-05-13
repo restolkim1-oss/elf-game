@@ -25,8 +25,10 @@ export class StageManager {
   private zoomTweens: Phaser.Tweens.Tween[] = [];
   private zoomResetTimer: Phaser.Time.TimerEvent | null = null;
   private activeZoomKey: string | null = null;
+  private focusedPartId: PartId | null = null;
   private battleIntroActive = false;
   private battleIntroComplete: (() => void) | null = null;
+  private introProxy: { focusY: number; zoom: number } | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -80,14 +82,14 @@ export class StageManager {
     this.battleIntroActive = true;
     this.battleIntroComplete = onComplete;
     this.activeZoomKey = "intro";
+    this.focusedPartId = null;
     this.clearZoomResetTimer();
     this.stopZoomTweens();
-    this.applyCharacterFocus(0.92, 2);
-    this.tweenCharacterFocus(0.65, 2, 500, "Cubic.easeInOut", () => {
-      if (!this.battleIntroActive) return;
-      this.tweenCharacterFocus(0.3, 2, 500, "Cubic.easeInOut", () => {
-        if (!this.battleIntroActive) return;
-        this.tweenCharacterFocus(0.5, 1, 500, "Cubic.easeInOut", () => this.completeBattleIntro(false));
+    this.introProxy = { focusY: 0.92, zoom: 2 };
+    this.applyCharacterFocus(this.introProxy.focusY, this.introProxy.zoom);
+    this.tweenIntroProxy(0.65, 2, 500, () => {
+      this.tweenIntroProxy(0.3, 2, 500, () => {
+        this.tweenIntroProxy(0.5, 1, 500, () => this.completeBattleIntro(false));
       });
     });
   }
@@ -109,16 +111,25 @@ export class StageManager {
     if (holdMs > 0) this.scheduleZoomReset(holdMs);
   }
 
-  zoomToMainAttack(duration = 300, holdMs = 1500) {
-    const key = "main-attack";
-    this.activeZoomKey = key;
+  focusBattlePart(partId: PartId, duration = 300) {
+    const frame = PART_ZOOM_FRAMES[partId];
+    if (!frame) return;
+    if (this.focusedPartId === partId) return;
+    this.focusedPartId = partId;
+    this.activeZoomKey = `focus:${partId}`;
     this.clearZoomResetTimer();
-    this.tweenCharacterFocus(0.3, 1.2, duration, "Cubic.easeOut");
-    if (holdMs > 0) this.scheduleZoomReset(holdMs);
+    this.tweenCharacterFocus(frame.focusY, frame.zoom, duration, "Cubic.easeOut");
+  }
+
+  clearBattlePartFocus(partId?: PartId, duration = 400) {
+    if (partId && this.focusedPartId !== partId) return;
+    this.focusedPartId = null;
+    this.resetCharacterZoom(duration);
   }
 
   resetCharacterZoom(duration = 400) {
     this.activeZoomKey = null;
+    this.focusedPartId = null;
     this.clearZoomResetTimer();
     this.tweenCharacterFocus(0.5, 1, duration, "Cubic.easeOut");
   }
@@ -241,15 +252,34 @@ export class StageManager {
     const done = this.battleIntroComplete;
     this.battleIntroActive = false;
     this.battleIntroComplete = null;
+    this.introProxy = null;
     this.activeZoomKey = null;
+    this.focusedPartId = null;
     this.clearZoomResetTimer();
     this.stopZoomTweens();
-    if (skip) {
-      this.applyCharacterFocus(0.5, 1);
-    } else {
-      this.applyCharacterFocus(0.5, 1);
-    }
+    void skip;
+    this.applyCharacterFocus(0.5, 1);
     done?.();
+  }
+
+  private tweenIntroProxy(focusY: number, zoom: number, duration: number, onComplete: () => void) {
+    if (!this.battleIntroActive || !this.introProxy) return;
+    const proxy = this.introProxy;
+    const tween = this.scene.tweens.add({
+      targets: proxy,
+      focusY,
+      zoom,
+      duration,
+      ease: "Sine.easeInOut",
+      onUpdate: () => {
+        if (this.battleIntroActive) this.applyCharacterFocus(proxy.focusY, proxy.zoom);
+      },
+      onComplete: () => {
+        this.zoomTweens = this.zoomTweens.filter((t) => t !== tween);
+        if (this.battleIntroActive) onComplete();
+      },
+    });
+    this.zoomTweens.push(tween);
   }
 
   private scheduleZoomReset(delay: number) {

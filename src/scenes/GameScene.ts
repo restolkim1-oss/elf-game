@@ -39,6 +39,7 @@ export class GameScene extends Phaser.Scene {
   private abortingPuzzle = false;
   private battleFlowId = 0;
   private battleIntroSkipHandler: (() => void) | null = null;
+  private hasPlayedBattleIntro = false;
 
   private stageSet: StageSet = 1;
   private stage2StoryUnlocked = false;
@@ -158,10 +159,10 @@ export class GameScene extends Phaser.Scene {
       this.stageManager.zoomToPart(partId, duration)
     );
     this.events.on("battle-part-zoom-impact", (partId: PartId) =>
-      this.stageManager.zoomToPart(partId, 300, 1500)
+      this.stageManager.focusBattlePart(partId, 300)
     );
-    this.events.on("battle-main-zoom-impact", () =>
-      this.stageManager.zoomToMainAttack(300, 1500)
+    this.events.on("battle-part-zoom-clear", (partId: PartId) =>
+      this.stageManager.clearBattlePartFocus(partId, 400)
     );
     this.events.on("battle-character-zoom-reset", () =>
       this.stageManager.resetCharacterZoom(400)
@@ -475,6 +476,11 @@ export class GameScene extends Phaser.Scene {
       });
     };
 
+    if (this.hasPlayedBattleIntro) {
+      beginBattle();
+      return;
+    }
+    this.hasPlayedBattleIntro = true;
     this.armBattleIntroSkip();
     this.stageManager.playBattleIntro(beginBattle);
   }

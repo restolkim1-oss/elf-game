@@ -392,7 +392,7 @@ export class CardBattleSystem {
   private nextReactionOrder = 1;
   private effectObjects: Phaser.GameObjects.GameObject[] = [];
   private lastPreviewZoomPartId: PartId | null = null;
-  private impactZoomHoldUntil = 0;
+  private blockedDragCardUid: number | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -482,6 +482,7 @@ export class CardBattleSystem {
     this.discard = [];
     this.selectedCards = [];
     this.dragStart = null;
+    this.blockedDragCardUid = null;
     this.clearPartZoomPreview();
   }
 
@@ -1556,7 +1557,6 @@ export class CardBattleSystem {
   private clearPartZoomPreview() {
     if (this.lastPreviewZoomPartId === null) return;
     this.lastPreviewZoomPartId = null;
-    if (this.scene.time.now < this.impactZoomHoldUntil) return;
     this.scene.events.emit("battle-character-zoom-reset");
   }
 
@@ -1582,6 +1582,10 @@ export class CardBattleSystem {
 
   private cardHasRoutableAttack(card: TarotCardState) {
     return CARDS[card.cardId].effects.some((effect) => effect.kind === "attack" || effect.kind === "drain");
+  }
+
+  private isCardDraggable(card: TarotCardState) {
+    return CARDS[card.cardId].role !== "charge";
   }
 
   private getRoutableAttackAmount(card: TarotCardState) {
@@ -1966,10 +1970,6 @@ export class CardBattleSystem {
     const modifier = this.applyActivePlayerDamageModifiers(raw, context);
     if (modifier.prevented) return { dealt: 0, appliedAmount: 0, prevented: true };
     const dealt = this.applyAttack(this.enemy, modifier.amount);
-    if (dealt > 0) {
-      this.impactZoomHoldUntil = this.scene.time.now + 1500;
-      this.scene.events.emit("battle-main-zoom-impact");
-    }
     return { dealt, appliedAmount: modifier.amount, prevented: false };
   }
 
@@ -2004,10 +2004,7 @@ export class CardBattleSystem {
 
     const before = target.hp;
     const partDamage = Math.min(before, modifier.amount);
-    if (partDamage > 0) {
-      this.impactZoomHoldUntil = this.scene.time.now + 1500;
-      this.scene.events.emit("battle-part-zoom-impact", target.id);
-    }
+    if (partDamage > 0) this.scene.events.emit("battle-part-zoom-impact", target.id);
     target.hp = Math.max(0, target.hp - modifier.amount);
     const overflow = Math.max(0, modifier.amount - before);
     let destroyed = false;
@@ -2143,6 +2140,7 @@ export class CardBattleSystem {
     if (!this.lastDestroyedPartIds.includes(part.id)) this.lastDestroyedPartIds.push(part.id);
     if (part.id === "shoes") this.enemy.partRuntime.shoesNegateFirstHit = false;
     if (part.id === "skirt") this.enemy.partRuntime.strongAttackNext = false;
+    this.scene.events.emit("battle-part-zoom-clear", part.id);
     this.playPartDestroyEffect(part.id);
     this.refreshEnemyPartPanel();
     this.refreshIntent();
@@ -3079,6 +3077,7 @@ export class CardBattleSystem {
     });
     bg.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this.clearCardPreview();
+      this.blockedDragCardUid = null;
       this.dragStart = { x: pointer.x, y: pointer.y, card };
       this.startCardPreviewTimer(card, pointer.x, pointer.y);
       container.setDepth(800);
@@ -3098,11 +3097,33 @@ export class CardBattleSystem {
       const moved = Math.abs(pointer.x - this.dragStart.x) + Math.abs(pointer.y - this.dragStart.y);
       if (moved > u(5)) this.clearCardPreview();
       if (moved <= u(12)) return;
+      if (!this.isCardDraggable(card)) {
+        this.blockedDragCardUid = card.uid;
+        this.dragStart = null;
+        this.playInvalidDropReturn(slot);
+        this.flashLog("충전 카드는 클릭으로 사용하세요");
+        this.scene.tweens.add({
+          targets: container,
+          x,
+          y: selected ? y - u(18) : y,
+          scaleX: 1,
+          scaleY: 1,
+          alpha: 1,
+          duration: 180,
+          ease: "Quad.easeOut",
+        });
+        return;
+      }
       container.setPosition(pointer.x, pointer.y);
       this.highlightMergeTarget(card, pointer.x, pointer.y);
       this.highlightPartDropTargets(card, pointer.x, pointer.y);
     });
     bg.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+      if (this.blockedDragCardUid === card.uid) {
+        this.blockedDragCardUid = null;
+        this.dragStart = null;
+        return;
+      }
       if (this.cardPreviewPointer?.cardUid === card.uid && this.cardPreviewPointer.shown) {
         this.clearCardPreview();
         this.dragStart = null;
@@ -3159,6 +3180,11 @@ export class CardBattleSystem {
     // visually stuck after the first interaction.
     bg.on("pointerupoutside", (pointer: Phaser.Input.Pointer) => {
       this.clearCardPreview();
+      if (this.blockedDragCardUid === card.uid) {
+        this.blockedDragCardUid = null;
+        this.dragStart = null;
+        return;
+      }
       if (this.dragStart && this.dragStart.card === card) {
         const handled = this.handleDraggedCardDrop(card, pointer.x, pointer.y);
         this.dragStart = null;
