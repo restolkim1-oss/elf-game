@@ -639,13 +639,13 @@ export class CardBattleSystem {
     this.drawEnemyPartPanel(width, height);
 
     // -- Bottom: player command panel (status, hand and actions) --
-    const playerStripY = height - u(318);
+    const playerStripY = height - u(370);
     const playerPanelW = stripW * 0.98;
     const playerStripBg = this.scene.add
-      .rectangle(width / 2, playerStripY, playerPanelW, u(86), 0x08080d, 0.6)
+      .rectangle(width / 2, playerStripY, playerPanelW, u(92), 0x08080d, 0.6)
       .setStrokeStyle(u(1.4), 0xd4a656, 0.86);
     const playerStripInner = this.scene.add
-      .rectangle(width / 2, playerStripY, playerPanelW - u(10), u(74), 0x11131a, 0.32)
+      .rectangle(width / 2, playerStripY, playerPanelW - u(10), u(80), 0x11131a, 0.32)
       .setStrokeStyle(u(0.8), 0xf3d48a, 0.28);
     const playerHpY = playerStripY + u(2);
     this.playerHpBarMaxWidth = playerPanelW * 0.58;
@@ -654,7 +654,7 @@ export class CardBattleSystem {
     const playerName = this.scene.add
       .text(this.playerHpBarLeft - u(16), playerHpY, "플레이어", {
         fontFamily: "serif",
-        fontSize: px(15),
+        fontSize: px(17),
         color: "#f3e6c9",
         fontStyle: "bold",
         stroke: "#090610",
@@ -672,7 +672,7 @@ export class CardBattleSystem {
     this.turnText = this.scene.add
       .text(this.playerHpBarLeft + this.playerHpBarMaxWidth + u(16), playerHpY, "", {
         fontFamily: "serif",
-        fontSize: px(15),
+        fontSize: px(17),
         color: "#f3d48a",
         fontStyle: "bold",
         stroke: "#090610",
@@ -684,13 +684,13 @@ export class CardBattleSystem {
         this.playerHpBarLeft + this.playerHpBarMaxWidth / 2,
         playerHpY,
         this.playerHpBarMaxWidth,
-        u(20),
+        u(26),
         0x1b141f,
         0.92
       )
       .setStrokeStyle(u(1), 0xf3d48a, 0.7);
     this.playerHpFill = this.scene.add
-      .rectangle(this.playerHpBarLeft, playerHpY, this.playerHpBarMaxWidth, u(14), 0x43e5c8, 0.96)
+      .rectangle(this.playerHpBarLeft, playerHpY, this.playerHpBarMaxWidth, u(18), 0x43e5c8, 0.96)
       .setOrigin(0, 0.5);
     this.playerHpText = this.scene.add
       .text(
@@ -699,7 +699,7 @@ export class CardBattleSystem {
         `${this.player.hp} / ${this.player.hpMax}`,
         {
           fontFamily: "serif",
-          fontSize: px(10),
+          fontSize: px(12),
           color: "#ffffff",
           fontStyle: "bold",
         }
@@ -707,20 +707,20 @@ export class CardBattleSystem {
       .setOrigin(0.5);
     this.playerEnergyOrbs = [];
     this.playerEnergyOrbStates = [];
-    const orbY = playerHpY + u(26);
-    const orbGap = u(22);
+    const orbY = playerHpY + u(31);
+    const orbGap = u(27);
     const orbStartX = width / 2 - orbGap * (ENERGY_MAX - 1) * 0.5;
     for (let i = 0; i < ENERGY_MAX; i++) {
       const orb = this.scene.add
-        .circle(orbStartX + i * orbGap, orbY, u(8), 0x43e5c8, 0.96)
-        .setStrokeStyle(u(1.2), 0xf3d48a, 0.8);
+        .circle(orbStartX + i * orbGap, orbY, u(10), 0x43e5c8, 0.96)
+        .setStrokeStyle(u(1.5), 0xf3d48a, 0.8);
       this.playerEnergyOrbs.push(orb);
       this.playerEnergyOrbStates.push(true);
     }
     this.playerChargeText = this.scene.add
       .text(width / 2, playerHpY - u(24), "", {
         fontFamily: "serif",
-        fontSize: px(12),
+        fontSize: px(13),
         color: "#ffd572",
         fontStyle: "bold",
         stroke: "#2a1605",
@@ -738,17 +738,17 @@ export class CardBattleSystem {
       })
       .setOrigin(0, 0.5);
     this.playerStatusText = this.scene.add
-      .text(width / 2 - playerPanelW / 2 + u(22), playerStripY + u(28), "", {
+      .text(width / 2 - playerPanelW / 2 + u(22), playerStripY + u(33), "", {
         fontFamily: "serif",
-        fontSize: px(12),
+        fontSize: px(13),
         color: "#ffaa66",
         fontStyle: "bold",
       })
       .setOrigin(0, 0.5);
     this.deckCountText = this.scene.add
-      .text(width / 2 + playerPanelW / 2 - u(18), playerStripY + u(28), "", {
+      .text(width / 2 + playerPanelW / 2 - u(18), playerStripY + u(33), "", {
         fontFamily: "serif",
-        fontSize: px(9),
+        fontSize: px(12),
         color: "#d4a656",
         fontStyle: "bold",
       })
@@ -784,19 +784,19 @@ export class CardBattleSystem {
     this.overlay.add(this.logText);
 
     // Hand area sits in the slot freed by the hidden bottom panel
-    this.handAreaY = height - u(178);
+    this.handAreaY = height - u(205);
     this.handAreaWidth = stripW * 0.96;
 
     // Action buttons at the very bottom corners
-    const btnY = height - u(36);
+    const btnY = height - u(38);
     const btnGap = u(8);
     const btnW = (width - btnGap * 5) / 4;
-    const btnH = u(54);
+    const btnH = u(62);
     const btnX = (idx: number) => btnGap + btnW / 2 + idx * (btnW + btnGap);
     this.makeButton(btnX(0), btnY, btnW, btnH, "포기", () => {
       this.cancelled = true;
       this.finish(false);
-    }, 15);
+    }, 16);
     this.exchangeBg = this.makeButton(
       btnX(1),
       btnY,
@@ -804,7 +804,7 @@ export class CardBattleSystem {
       btnH,
       `교환 ${this.exchangeRemaining}/${EXCHANGE_MAX}`,
       () => this.toggleExchangeMode(),
-      15,
+      16,
       (text) => {
         this.exchangeButtonText = text;
       }
@@ -816,7 +816,7 @@ export class CardBattleSystem {
       btnH,
       "카드 사용",
       () => this.playSelectedCards(),
-      15
+      16
     );
     this.endTurnBg = this.makeButton(
       btnX(3),
@@ -825,7 +825,7 @@ export class CardBattleSystem {
       btnH,
       "턴 종료",
       () => this.endPlayerTurn(),
-      15
+      16
     );
 
     // Start of battle
@@ -2969,13 +2969,13 @@ export class CardBattleSystem {
     const count = this.hand.length;
     if (count === 0) return;
 
-    const gap = u(7);
-    const maxCardW = u(126);
+    const gap = u(6);
+    const maxCardW = u(142);
     const cardW = Math.min(
       maxCardW,
       (this.handAreaWidth - gap * (count - 1)) / count
     );
-    const cardH = Math.min(u(150), cardW * 1.42);
+    const cardH = Math.min(u(178), cardW * 1.42);
     const totalW = count * cardW + (count - 1) * gap;
     const startX = this.scene.scale.width / 2 - totalW / 2 + cardW / 2;
 
