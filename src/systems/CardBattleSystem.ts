@@ -1,6 +1,6 @@
 ﻿import Phaser from "phaser";
 import type { PartDef } from "../data/parts";
-import { findFusionRecipe, type CardFusionRecipe, type FusionEffect, type FusionRole } from "../data/cardFusionRecipes";
+import { findFusionRecipe, type CardFusionRecipe, type FusionEffect, type FusionResultCard, type FusionRole } from "../data/cardFusionRecipes";
 import { ENEMY_PART_CONFIG, type EnemyPart, type PartAbility, type PartId } from "../data/enemyParts";
 import { DiceRoller } from "./Dice";
 import { UI_SCALE } from "../main";
@@ -393,6 +393,9 @@ export class CardBattleSystem {
   private nextReactionOrder = 1;
   private effectObjects: Phaser.GameObjects.GameObject[] = [];
   private blockedDragCardUid: number | null = null;
+  private visualComboCount = 0;
+  private visualComboTimer: Phaser.Time.TimerEvent | null = null;
+  private visualComboText: Phaser.GameObjects.Text | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -461,6 +464,11 @@ export class CardBattleSystem {
     this.killTrackedEffectTweens();
     this.speechBubble?.destroy();
     this.speechBubble = null;
+    this.visualComboTimer?.remove(false);
+    this.visualComboTimer = null;
+    this.visualComboText?.destroy();
+    this.visualComboText = null;
+    this.visualComboCount = 0;
     this.enemyPartPanel?.destroy();
     this.enemyPartPanel = null;
     this.enemyPartTooltip?.destroy();
@@ -1654,7 +1662,8 @@ export class CardBattleSystem {
     this.hand = this.hand.filter((card) => card !== source && card !== target);
     this.hand.splice(Math.max(0, targetIndex), 0, fusedCard);
     this.selectedCards = this.selectedCards.filter((card) => card !== source && card !== target);
-    this.playMergeEffect(targetSlot);
+    const sourceSlot = this.handObjs.find((slot) => slot.card === source) ?? null;
+    this.playMergeEffect(targetSlot, sourceSlot, sourceDef, targetDef, recipe.result);
     SoundManager.play(this.scene, "cardMerge");
     this.flashLog(`${recipe.result.name} 임시 카드 생성!`);
     this.refreshAll();
@@ -1670,49 +1679,100 @@ export class CardBattleSystem {
     );
   }
 
-  private playMergeEffect(slot: HandCard) {
-    const color = this.getCardEffectColor(CARDS[slot.card.cardId]);
+  private playMergeEffect(
+    slot: HandCard,
+    sourceSlot?: HandCard | null,
+    sourceDef?: CardDef,
+    targetDef?: CardDef,
+    resultDef?: FusionResultCard
+  ) {
+    const sourceColor = sourceDef ? this.getCardEffectColor(sourceDef) : this.getCardEffectColor(CARDS[slot.card.cardId]);
+    const targetColor = targetDef ? this.getCardEffectColor(targetDef) : sourceColor;
+    const resultColor = resultDef ? this.getCardEffectColor(resultDef) : targetColor;
+    const centerX = slot.container.x;
+    const centerY = slot.container.y;
     const ring = this.trackEffect(
       this.scene.add
-        .rectangle(slot.container.x, slot.container.y, slot.cardW + u(22), slot.cardH + u(22), 0xffffff, 0)
-        .setStrokeStyle(u(5), color, 0.95)
+        .rectangle(centerX, centerY, slot.cardW + u(30), slot.cardH + u(30), 0xffffff, 0)
+        .setStrokeStyle(u(6), resultColor, 1)
         .setDepth(820)
     );
     const bloom = this.trackEffect(
       this.scene.add
-        .circle(slot.container.x, slot.container.y, u(34), color, 0.3)
+        .circle(centerX, centerY, u(46), resultColor, 0.36)
         .setDepth(819)
     );
     this.overlay?.add(ring);
     this.overlay?.add(bloom);
-    for (let i = 0; i < 16; i++) {
+    [sourceSlot, slot].forEach((fromSlot, idx) => {
+      if (!fromSlot || fromSlot === slot && idx === 0) return;
+      const color = idx === 0 ? sourceColor : targetColor;
+      const beam = this.trackEffect(this.scene.add.graphics().setDepth(819));
+      beam.lineStyle(u(4), color, 0.82);
+      beam.beginPath();
+      beam.moveTo(fromSlot.container.x, fromSlot.container.y);
+      beam.lineTo((fromSlot.container.x + centerX) / 2, Math.min(fromSlot.container.y, centerY) - u(46));
+      beam.lineTo(centerX, centerY);
+      beam.strokePath();
+      this.overlay?.add(beam);
+      this.scene.tweens.add({
+        targets: beam,
+        alpha: 0,
+        duration: 340,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          if (beam.scene) beam.destroy();
+        },
+      });
+    });
+    for (let i = 0; i < 34; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const dist = Phaser.Math.Between(u(34), u(96));
+      const dist = Phaser.Math.Between(u(42), u(128));
+      const sparkColor = i % 5 === 0 ? 0xffffff : i % 2 === 0 ? sourceColor : targetColor;
       const spark = this.trackEffect(
         this.scene.add
-          .circle(slot.container.x, slot.container.y, Phaser.Math.Between(u(2), u(5)), i % 3 === 0 ? 0xffffff : color, 0.9)
+          .circle(centerX, centerY, Phaser.Math.Between(u(2), u(6)), sparkColor, 0.95)
           .setDepth(821)
       );
       this.overlay?.add(spark);
       this.scene.tweens.add({
         targets: spark,
-        x: slot.container.x + Math.cos(angle) * dist,
-        y: slot.container.y + Math.sin(angle) * dist,
+        x: centerX + Math.cos(angle) * dist,
+        y: centerY + Math.sin(angle) * dist,
         scale: 0.2,
         alpha: 0,
-        duration: Phaser.Math.Between(260, 460),
+        duration: Phaser.Math.Between(360, 660),
         ease: "Cubic.easeOut",
         onComplete: () => {
           if (spark.scene) spark.destroy();
         },
       });
     }
+    const flare = this.trackEffect(
+      this.scene.add
+        .star(centerX, centerY, 8, u(20), u(78), 0xffffff, 0.92)
+        .setDepth(822)
+        .setAngle(Phaser.Math.Between(0, 45))
+    );
+    this.overlay?.add(flare);
     this.scene.tweens.add({
-      targets: ring,
-      scaleX: 1.25,
-      scaleY: 1.25,
+      targets: flare,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      angle: flare.angle + 65,
       alpha: 0,
       duration: 420,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (flare.scene) flare.destroy();
+      },
+    });
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 1.42,
+      scaleY: 1.42,
+      alpha: 0,
+      duration: 560,
       ease: "Quad.easeOut",
       onComplete: () => {
         if (ring.scene) ring.destroy();
@@ -1720,10 +1780,10 @@ export class CardBattleSystem {
     });
     this.scene.tweens.add({
       targets: bloom,
-      scaleX: 2.2,
-      scaleY: 2.2,
+      scaleX: 2.8,
+      scaleY: 2.8,
       alpha: 0,
-      duration: 360,
+      duration: 520,
       ease: "Cubic.easeOut",
       onComplete: () => {
         if (bloom.scene) bloom.destroy();
@@ -1887,7 +1947,7 @@ export class CardBattleSystem {
     });
   }
 
-  private getCardEffectColor(def: CardDef) {
+  private getCardEffectColor(def: Pick<CardDef, "id" | "role" | "color">) {
     if (def.id.includes("poison") || def.role === "poison") return 0x8cff66;
     if (def.id.includes("drain") || def.id.includes("lifesteal") || def.role === "heal") return 0xff5e7a;
     if (def.id.includes("counter") || def.id.includes("parry") || def.role === "parry") return 0x82ffe6;
@@ -2383,6 +2443,7 @@ export class CardBattleSystem {
         const criticalDamage = Math.max(4, Math.round(baseDamage * 0.85));
         this.applyDirectDamage(this.enemy, criticalDamage);
         this.playAttackEffect("enemy", criticalDamage, visualStyle);
+        this.playCriticalText(width / 2, Math.max(u(190), height * 0.38));
         this.flashLog(`Critical Hit! 추가 내구도 ${criticalDamage} 감소`);
         this.refreshAll();
         if (this.enemy.hp > 0) this.maybeShowEnemySpeech();
@@ -3509,6 +3570,7 @@ export class CardBattleSystem {
     const row = this.enemyPartRows[partId];
     if (!row) return;
     SoundManager.play(this.scene, "partBreak", 0.72);
+    this.scene.events.emit("enemy-react", { intensity: "heavy" });
     const burst = this.trackEffect(
       this.scene.add
         .rectangle(this.enemyPartPanel!.x + row.container.x, this.enemyPartPanel!.y + row.container.y, u(94), u(24), 0xff4d5f, 0.18)
@@ -3867,13 +3929,34 @@ export class CardBattleSystem {
     kind: "damage" | "poison" | "heal" = "damage"
   ) {
     const bigHit = amount >= 16;
-    const color = kind === "heal" ? "#7dff9a" : kind === "poison" ? "#b86cff" : bigHit ? "#ff5e5e" : "#ffffff";
+    const smallHit = amount > 0 && amount <= 5;
+    const color = kind === "heal" ? "#7dff9a" : kind === "poison" ? "#c77cff" : bigHit ? "#ff5757" : "#ffffff";
     const stroke = kind === "heal" ? "#0b3d1c" : kind === "poison" ? "#2d0f42" : bigHit ? "#6d0c0c" : "#5a1018";
+    const fontSize = kind === "heal" ? 23 : bigHit ? 34 : smallHit ? 17 : 23;
+    if (bigHit && kind === "damage") {
+      const glow = this.trackEffect(
+        this.scene.add
+          .circle(x, y - u(54), u(46), 0xff2222, 0.18)
+          .setDepth(721)
+      );
+      this.overlay?.add(glow);
+      this.scene.tweens.add({
+        targets: glow,
+        scaleX: 1.9,
+        scaleY: 1.9,
+        alpha: 0,
+        duration: 540,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          if (glow.scene) glow.destroy();
+        },
+      });
+    }
     const damage = this.trackEffect(
       this.scene.add
         .text(x + Phaser.Math.Between(-u(18), u(18)), y - u(54), textValue, {
           fontFamily: "serif",
-          fontSize: px(bigHit ? 30 : 21),
+          fontSize: px(fontSize),
           color,
           fontStyle: "bold",
           stroke,
@@ -3892,10 +3975,20 @@ export class CardBattleSystem {
         .setDepth(722)
     );
     this.overlay?.add(damage);
+    if (kind === "poison") {
+      this.scene.tweens.add({
+        targets: damage,
+        x: { from: damage.x - u(3), to: damage.x + u(3) },
+        yoyo: true,
+        repeat: 3,
+        duration: 42,
+        ease: "Sine.easeInOut",
+      });
+    }
     this.scene.tweens.add({
       targets: damage,
-      scaleX: bigHit ? 1.24 : 1.08,
-      scaleY: bigHit ? 1.24 : 1.08,
+      scaleX: bigHit ? 1.34 : smallHit ? 0.96 : 1.1,
+      scaleY: bigHit ? 1.34 : smallHit ? 0.96 : 1.1,
       duration: 200,
       ease: "Back.easeOut",
       onComplete: () => {
@@ -3952,6 +4045,10 @@ export class CardBattleSystem {
     this.overlay?.add(burst);
     if (amount > 0) {
       this.playFloatingNumber(x, y, `-${amount}`, amount, style === "poison" ? "poison" : "damage");
+      if (target === "enemy") {
+        this.playVisualCombo(x + u(112), y - u(86));
+        if (amount >= 16) this.scene.events.emit("enemy-react", { intensity: "light" });
+      }
     }
 
     if (style === "drain") this.playReturnLightEffect(0xff5e7a);
@@ -3997,6 +4094,106 @@ export class CardBattleSystem {
       onComplete: () => {
         if (shock.scene) shock.destroy();
       },
+    });
+  }
+
+  private playCriticalText(x: number, y: number) {
+    const text = this.trackEffect(
+      this.scene.add
+        .text(x, y - u(118), "CRITICAL!", {
+          fontFamily: "serif",
+          fontSize: px(30),
+          color: "#ffe28a",
+          fontStyle: "bold",
+          stroke: "#5b2100",
+          strokeThickness: u(4),
+          shadow: {
+            offsetX: 0,
+            offsetY: u(4),
+            color: "#000000",
+            blur: u(8),
+            fill: true,
+          },
+        })
+        .setOrigin(0.5)
+        .setScale(0.6)
+        .setDepth(728)
+    );
+    this.overlay?.add(text);
+    this.scene.tweens.add({
+      targets: text,
+      scaleX: 1.18,
+      scaleY: 1.18,
+      duration: 180,
+      ease: "Back.easeOut",
+      onComplete: () => {
+        if (!text.scene) return;
+        this.scene.tweens.add({
+          targets: text,
+          y: text.y - u(32),
+          alpha: 0,
+          duration: 620,
+          delay: 280,
+          ease: "Cubic.easeOut",
+          onComplete: () => {
+            if (text.scene) text.destroy();
+          },
+        });
+      },
+    });
+  }
+
+  private playVisualCombo(x: number, y: number) {
+    this.visualComboCount += 1;
+    this.visualComboTimer?.remove(false);
+    if (this.visualComboCount < 2) {
+      this.visualComboTimer = this.scene.time.delayedCall(1050, () => {
+        this.visualComboCount = 0;
+      });
+      return;
+    }
+
+    if (!this.visualComboText || !this.visualComboText.scene) {
+      this.visualComboText = this.trackEffect(
+        this.scene.add
+          .text(x, y, "", {
+            fontFamily: "serif",
+            fontSize: px(25),
+            color: "#ffd572",
+            fontStyle: "bold",
+            stroke: "#2a1307",
+            strokeThickness: u(3),
+          })
+          .setOrigin(0.5)
+          .setDepth(729)
+      );
+      this.overlay?.add(this.visualComboText);
+    }
+
+    this.visualComboText.setText(`x${this.visualComboCount} COMBO`).setPosition(x, y).setAlpha(1).setScale(0.75);
+    this.scene.tweens.killTweensOf(this.visualComboText);
+    this.scene.tweens.add({
+      targets: this.visualComboText,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      duration: 160,
+      ease: "Back.easeOut",
+    });
+    this.visualComboTimer = this.scene.time.delayedCall(1150, () => {
+      this.visualComboCount = 0;
+      const combo = this.visualComboText;
+      this.visualComboText = null;
+      if (!combo?.scene) return;
+      this.scene.tweens.add({
+        targets: combo,
+        y: combo.y - u(20),
+        alpha: 0,
+        duration: 260,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          if (combo.scene) combo.destroy();
+        },
+      });
     });
   }
 

@@ -215,6 +215,9 @@ export class GameScene extends Phaser.Scene {
     this.events.on("zoom-in", () => this.adjustZoomAt(1.25));
     this.events.on("zoom-out", () => this.adjustZoomAt(0.8));
     this.events.on("zoom-reset", () => this.resetView());
+    this.events.on("enemy-react", (payload?: { intensity?: "light" | "heavy" }) => {
+      this.stageManager.nudgeCharacter(payload?.intensity ?? "light");
+    });
   }
 
   private onWheel = (

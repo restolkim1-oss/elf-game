@@ -148,6 +148,25 @@ export class StageManager {
     this.resetCharacterZoom(duration);
   }
 
+  nudgeCharacter(intensity: "light" | "heavy" = "light") {
+    const distance = intensity === "heavy" ? 12 : 6;
+    const targets = this.getVisibleCharacterLayers();
+    targets.forEach((img) => {
+      const startX = img.x;
+      this.scene.tweens.add({
+        targets: img,
+        x: startX + Phaser.Math.Between(-distance, distance),
+        yoyo: true,
+        repeat: intensity === "heavy" ? 2 : 1,
+        duration: intensity === "heavy" ? 54 : 42,
+        ease: "Sine.easeInOut",
+        onComplete: () => {
+          if (img.scene) img.x = startX;
+        },
+      });
+    });
+  }
+
   resetCharacterZoom(duration = 400) {
     this.activeZoomKey = null;
     this.focusedPartId = null;
@@ -397,71 +416,92 @@ export class StageManager {
     this.zoomTweens = [];
   }
 
+  private getVisibleCharacterLayers() {
+    return [
+      ...Array.from(this.layers.values()),
+      ...Array.from(this.extraLayers.values()),
+    ].filter((img) => img.visible && img.alpha > 0);
+  }
+
   private playLayerRemovalEffect(img: Phaser.GameObjects.Image, partId: string, duration: number) {
     const cx = img.x;
     const cy = img.y;
-    const burstRadius = Math.min(img.displayWidth, img.displayHeight) * 0.18;
+    const burstRadius = Math.min(img.displayWidth, img.displayHeight) * 0.24;
     const palette = this.getPartEffectPalette(partId);
     const effectDuration = Math.max(760, Math.min(duration, 2600));
     SoundManager.play(this.scene, "partBreak");
+    this.nudgeCharacter("heavy");
 
-    [0, 220, 520].forEach((delay, idx) => {
+    const core = this.scene.add
+      .circle(cx, cy, Math.min(img.displayWidth, img.displayHeight) * 0.12, palette.light, 0.42)
+      .setDepth(img.depth + 28);
+    this.scene.tweens.add({
+      targets: core,
+      scaleX: 3.1,
+      scaleY: 2.4,
+      alpha: 0,
+      duration: 900,
+      ease: "Cubic.easeOut",
+      onComplete: () => core.destroy(),
+    });
+
+    [0, 160, 360, 620].forEach((delay, idx) => {
       const ring = this.scene.add
-        .ellipse(cx, cy, img.displayWidth * (0.26 + idx * 0.08), img.displayHeight * (0.14 + idx * 0.05), 0xffffff, 0)
-        .setStrokeStyle(Phaser.Math.Between(3, 5), idx === 0 ? palette.light : palette.main, 0.82 - idx * 0.14)
+        .ellipse(cx, cy, img.displayWidth * (0.3 + idx * 0.1), img.displayHeight * (0.16 + idx * 0.06), 0xffffff, 0)
+        .setStrokeStyle(Phaser.Math.Between(4, 7), idx === 0 ? palette.light : palette.main, 0.9 - idx * 0.13)
         .setDepth(img.depth + 20 + idx);
       this.scene.tweens.add({
         targets: ring,
-        scaleX: 1.45 + idx * 0.22,
-        scaleY: 1.45 + idx * 0.22,
+        scaleX: 1.7 + idx * 0.26,
+        scaleY: 1.65 + idx * 0.22,
         alpha: 0,
         delay,
-        duration: 760 + idx * 240,
+        duration: 980 + idx * 220,
         ease: "Quad.easeOut",
         onComplete: () => ring.destroy(),
       });
     });
 
-    for (let i = 0; i < 42; i++) {
+    for (let i = 0; i < 74; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const distance = Phaser.Math.FloatBetween(burstRadius * 0.35, burstRadius * 1.45);
-      const delay = Phaser.Math.Between(0, 520);
+      const distance = Phaser.Math.FloatBetween(burstRadius * 0.45, burstRadius * 1.9);
+      const delay = Phaser.Math.Between(0, 760);
       const shard = this.scene.add
         .rectangle(
-          cx + Phaser.Math.Between(-18, 18),
-          cy + Phaser.Math.Between(-30, 30),
-          Phaser.Math.Between(8, 20),
-          Phaser.Math.Between(4, 11),
+          cx + Phaser.Math.Between(-28, 28),
+          cy + Phaser.Math.Between(-42, 42),
+          Phaser.Math.Between(10, 28),
+          Phaser.Math.Between(5, 14),
           i % 5 === 0 ? palette.light : i % 2 === 0 ? palette.main : palette.dark,
-          0.82
+          0.9
         )
         .setAngle(Phaser.Math.Between(0, 180))
         .setDepth(img.depth + 21);
       this.scene.tweens.add({
         targets: shard,
         x: cx + Math.cos(angle) * distance,
-        y: cy + Math.sin(angle) * distance * 0.7,
+        y: cy + Math.sin(angle) * distance * 0.7 - Phaser.Math.Between(30, 110),
         alpha: 0,
         angle: shard.angle + Phaser.Math.Between(-240, 240),
         scaleX: 0.25,
         scaleY: 0.25,
         delay,
-        duration: Phaser.Math.Between(900, effectDuration),
+        duration: Phaser.Math.Between(1200, Math.max(1400, effectDuration)),
         ease: "Cubic.easeOut",
         onComplete: () => shard.destroy(),
       });
     }
 
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 48; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const distance = Phaser.Math.FloatBetween(burstRadius * 0.45, burstRadius * 1.65);
+      const distance = Phaser.Math.FloatBetween(burstRadius * 0.55, burstRadius * 2.1);
       const sparkle = this.scene.add
         .star(
-          cx + Phaser.Math.Between(-24, 24),
-          cy + Phaser.Math.Between(-34, 34),
+          cx + Phaser.Math.Between(-32, 32),
+          cy + Phaser.Math.Between(-48, 48),
           5,
           Phaser.Math.Between(3, 5),
-          Phaser.Math.Between(8, 15),
+          Phaser.Math.Between(9, 19),
           i % 3 === 0 ? palette.light : palette.main,
           0.9
         )
@@ -470,13 +510,13 @@ export class StageManager {
       this.scene.tweens.add({
         targets: sparkle,
         x: cx + Math.cos(angle) * distance,
-        y: cy + Math.sin(angle) * distance * 0.75,
+        y: cy + Math.sin(angle) * distance * 0.75 - Phaser.Math.Between(24, 96),
         alpha: 0,
         scaleX: 0.1,
         scaleY: 0.1,
         angle: sparkle.angle + Phaser.Math.Between(-180, 180),
-        delay: Phaser.Math.Between(120, 780),
-        duration: Phaser.Math.Between(800, effectDuration),
+        delay: Phaser.Math.Between(80, 900),
+        duration: Phaser.Math.Between(980, Math.max(1300, effectDuration)),
         ease: "Sine.easeOut",
         onComplete: () => sparkle.destroy(),
       });

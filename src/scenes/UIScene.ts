@@ -322,10 +322,38 @@ export class UIScene extends Phaser.Scene {
     this.topEnemyHpText?.setText(`${payload.hp} / ${payload.hpMax}`);
     if (payload.intent !== undefined) {
       const intent = this.formatEnemyIntent(payload.intent);
+      const urgent = "urgent" in intent && intent.urgent === true;
+      const previous = this.topEnemyIntent?.text ?? "";
       this.topEnemyIntent?.setText(intent.text);
       this.topEnemyIntent?.setColor(intent.color);
-      this.topEnemyIntentBg?.setFillStyle(intent.bg, 0.62);
-      this.topEnemyIntentBg?.setStrokeStyle(u(1), intent.stroke, 0.65);
+      this.topEnemyIntentBg?.setFillStyle(intent.bg, urgent ? 0.74 : 0.64);
+      this.topEnemyIntentBg?.setStrokeStyle(u(urgent ? 2 : 1.2), intent.stroke, urgent ? 0.96 : 0.72);
+      if (previous !== intent.text) {
+        const targets = [this.topEnemyIntent, this.topEnemyIntentBg].filter(Boolean) as Phaser.GameObjects.GameObject[];
+        this.tweens.killTweensOf(targets);
+        targets.forEach((target) => {
+          const t = target as Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform;
+          t.setScale(1);
+        });
+        this.tweens.add({
+          targets,
+          scaleX: urgent ? 1.08 : 1.04,
+          scaleY: urgent ? 1.08 : 1.04,
+          duration: 130,
+          yoyo: true,
+          ease: "Sine.easeOut",
+        });
+      }
+      if (urgent && this.topEnemyIntentBg) {
+        this.tweens.add({
+          targets: this.topEnemyIntentBg,
+          alpha: { from: 1, to: 0.58 },
+          duration: 190,
+          yoyo: true,
+          repeat: 1,
+          ease: "Sine.easeInOut",
+        });
+      }
     }
   }
 
@@ -338,6 +366,7 @@ export class UIScene extends Phaser.Scene {
         color: "#ff9a70",
         bg: 0x2c1110,
         stroke: 0xff7f50,
+        urgent: Number(number || "0") >= 18,
       };
     }
     if (raw.includes("보호막") || raw.includes("蹂댄샇")) {
