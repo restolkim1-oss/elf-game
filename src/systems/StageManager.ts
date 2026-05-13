@@ -113,8 +113,8 @@ export class StageManager {
       this.scene.time.delayedCall(320, onComplete);
     };
     const removeLayer = () => {
-      this.hidePartLayer(stagePartId, 700);
-      this.scene.time.delayedCall(740, finish);
+      this.hidePartLayer(stagePartId, 2500);
+      this.scene.time.delayedCall(2600, finish);
     };
     if (!zoomPartId) {
       removeLayer();
@@ -168,7 +168,7 @@ export class StageManager {
         console.warn("[STAGE] layer image missing", layerId);
         return;
       }
-      this.playLayerRemovalEffect(img);
+      this.playLayerRemovalEffect(img, partId, duration);
       this.scene.tweens.add({
         targets: img,
         alpha: 0,
@@ -396,34 +396,41 @@ export class StageManager {
     this.zoomTweens = [];
   }
 
-  private playLayerRemovalEffect(img: Phaser.GameObjects.Image) {
+  private playLayerRemovalEffect(img: Phaser.GameObjects.Image, partId: string, duration: number) {
     const cx = img.x;
     const cy = img.y;
     const burstRadius = Math.min(img.displayWidth, img.displayHeight) * 0.18;
-    const ring = this.scene.add
-      .ellipse(cx, cy, img.displayWidth * 0.32, img.displayHeight * 0.18, 0xffffff, 0)
-      .setStrokeStyle(4, 0xfff0a8, 0.85)
-      .setDepth(img.depth + 20);
-    this.scene.tweens.add({
-      targets: ring,
-      scaleX: 1.35,
-      scaleY: 1.35,
-      alpha: 0,
-      duration: 520,
-      ease: "Quad.easeOut",
-      onComplete: () => ring.destroy(),
+    const palette = this.getPartEffectPalette(partId);
+    const effectDuration = Math.max(760, Math.min(duration, 2600));
+
+    [0, 220, 520].forEach((delay, idx) => {
+      const ring = this.scene.add
+        .ellipse(cx, cy, img.displayWidth * (0.26 + idx * 0.08), img.displayHeight * (0.14 + idx * 0.05), 0xffffff, 0)
+        .setStrokeStyle(Phaser.Math.Between(3, 5), idx === 0 ? palette.light : palette.main, 0.82 - idx * 0.14)
+        .setDepth(img.depth + 20 + idx);
+      this.scene.tweens.add({
+        targets: ring,
+        scaleX: 1.45 + idx * 0.22,
+        scaleY: 1.45 + idx * 0.22,
+        alpha: 0,
+        delay,
+        duration: 760 + idx * 240,
+        ease: "Quad.easeOut",
+        onComplete: () => ring.destroy(),
+      });
     });
 
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 42; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const distance = Phaser.Math.FloatBetween(burstRadius * 0.35, burstRadius);
+      const distance = Phaser.Math.FloatBetween(burstRadius * 0.35, burstRadius * 1.45);
+      const delay = Phaser.Math.Between(0, 520);
       const shard = this.scene.add
         .rectangle(
           cx + Phaser.Math.Between(-18, 18),
           cy + Phaser.Math.Between(-30, 30),
           Phaser.Math.Between(8, 20),
           Phaser.Math.Between(4, 11),
-          i % 4 === 0 ? 0xffffff : 0xffd572,
+          i % 5 === 0 ? palette.light : i % 2 === 0 ? palette.main : palette.dark,
           0.82
         )
         .setAngle(Phaser.Math.Between(0, 180))
@@ -436,10 +443,61 @@ export class StageManager {
         angle: shard.angle + Phaser.Math.Between(-240, 240),
         scaleX: 0.25,
         scaleY: 0.25,
-        duration: Phaser.Math.Between(420, 780),
+        delay,
+        duration: Phaser.Math.Between(900, effectDuration),
         ease: "Cubic.easeOut",
         onComplete: () => shard.destroy(),
       });
+    }
+
+    for (let i = 0; i < 26; i++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const distance = Phaser.Math.FloatBetween(burstRadius * 0.45, burstRadius * 1.65);
+      const sparkle = this.scene.add
+        .star(
+          cx + Phaser.Math.Between(-24, 24),
+          cy + Phaser.Math.Between(-34, 34),
+          5,
+          Phaser.Math.Between(3, 5),
+          Phaser.Math.Between(8, 15),
+          i % 3 === 0 ? palette.light : palette.main,
+          0.9
+        )
+        .setDepth(img.depth + 24)
+        .setAngle(Phaser.Math.Between(0, 180));
+      this.scene.tweens.add({
+        targets: sparkle,
+        x: cx + Math.cos(angle) * distance,
+        y: cy + Math.sin(angle) * distance * 0.75,
+        alpha: 0,
+        scaleX: 0.1,
+        scaleY: 0.1,
+        angle: sparkle.angle + Phaser.Math.Between(-180, 180),
+        delay: Phaser.Math.Between(120, 780),
+        duration: Phaser.Math.Between(800, effectDuration),
+        ease: "Sine.easeOut",
+        onComplete: () => sparkle.destroy(),
+      });
+    }
+  }
+
+  private getPartEffectPalette(partId: string) {
+    switch (partId) {
+      case "circlet":
+        return { light: 0xfff7c2, main: 0xffd66b, dark: 0xb87a1f };
+      case "cape":
+        return { light: 0xffb08d, main: 0xd94832, dark: 0x7b1d22 };
+      case "sweater":
+        return { light: 0xfff0cf, main: 0xc9a574, dark: 0x7a5a38 };
+      case "skirt":
+        return { light: 0xffd2ef, main: 0xb76b9b, dark: 0x5a304f };
+      case "boots":
+      case "shoes":
+        return { light: 0xdac0a2, main: 0x6c4b35, dark: 0x2d1d17 };
+      case "underwear":
+        return { light: 0xffffff, main: 0xf2d8d8, dark: 0xc98590 };
+      default:
+        return { light: 0xffffff, main: 0xffd572, dark: 0x8a5a22 };
     }
   }
 }
