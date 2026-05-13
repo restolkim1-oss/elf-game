@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { STAGE_LAYERS, type StageKey, type StageLayerDef } from "../data/parts";
 import type { PartId } from "../data/enemyParts";
+import { SoundManager } from "./SoundManager";
 
 const PART_ZOOM_FRAMES: Record<PartId, { focusY: number; zoom: number }> = {
   circlet: { focusY: 0.13, zoom: 1.6 },
@@ -402,6 +403,7 @@ export class StageManager {
     const burstRadius = Math.min(img.displayWidth, img.displayHeight) * 0.18;
     const palette = this.getPartEffectPalette(partId);
     const effectDuration = Math.max(760, Math.min(duration, 2600));
+    SoundManager.play(this.scene, "partBreak");
 
     [0, 220, 520].forEach((delay, idx) => {
       const ring = this.scene.add

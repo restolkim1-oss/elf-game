@@ -1225,7 +1225,11 @@ export class CardBattleSystem {
         didGuard = true;
         break;
       case "heal":
-        this.player.hp = Math.min(this.player.hpMax, this.player.hp + totalEffect);
+        {
+          const before = this.player.hp;
+          this.player.hp = Math.min(this.player.hpMax, this.player.hp + totalEffect);
+          if (this.player.hp > before) SoundManager.play(this.scene, "heal");
+        }
         break;
       case "poison":
         this.applyPoisonToEnemy(totalEffect);
@@ -1321,6 +1325,7 @@ export class CardBattleSystem {
           const before = this.player.hp;
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + effect.amount);
           logParts.push(`회복 +${this.player.hp - before}`);
+          if (this.player.hp > before) SoundManager.play(this.scene, "heal");
           break;
         }
         case "energy":
@@ -1913,6 +1918,7 @@ export class CardBattleSystem {
     const applied = Math.max(0, Math.round(amount));
     if (applied <= 0) return 0;
     this.enemy.poisonStacks = Math.min(POISON_STACK_CAP, this.enemy.poisonStacks + applied);
+    SoundManager.play(this.scene, "poison", 0.72);
     return applied;
   }
 
@@ -3502,6 +3508,7 @@ export class CardBattleSystem {
   private playPartDestroyEffect(partId: PartId) {
     const row = this.enemyPartRows[partId];
     if (!row) return;
+    SoundManager.play(this.scene, "partBreak", 0.72);
     const burst = this.trackEffect(
       this.scene.add
         .rectangle(this.enemyPartPanel!.x + row.container.x, this.enemyPartPanel!.y + row.container.y, u(94), u(24), 0xff4d5f, 0.18)
@@ -3549,6 +3556,7 @@ export class CardBattleSystem {
   }
 
   private playPoisonEffect(amount: number) {
+    SoundManager.play(this.scene, "poison");
     const { width } = this.scene.scale;
     const x = width / 2 + u(52);
     const y = u(190);
@@ -3623,6 +3631,7 @@ export class CardBattleSystem {
   }
 
   private playCounterReadyEffect() {
+    SoundManager.play(this.scene, "shield", 0.78);
     const { width, height } = this.scene.scale;
     const ring = this.trackEffect(
       this.scene.add
@@ -3645,6 +3654,7 @@ export class CardBattleSystem {
   }
 
   private playCounterStanceReadyEffect() {
+    SoundManager.play(this.scene, "parry", 0.82);
     const { width, height } = this.scene.scale;
     const ring = this.trackEffect(
       this.scene.add
@@ -3667,6 +3677,7 @@ export class CardBattleSystem {
   }
 
   private playDodgeReadyEffect(label: string) {
+    SoundManager.play(this.scene, "parry", 0.68);
     const { width, height } = this.scene.scale;
     const text = this.trackEffect(
       this.scene.add
@@ -3724,6 +3735,7 @@ export class CardBattleSystem {
   }
 
   private playAutoParryEffect(amount: number) {
+    SoundManager.play(this.scene, "parry");
     const { width } = this.scene.scale;
     this.scene.cameras.main.shake(180, 0.006);
     const text = this.trackEffect(
@@ -3753,6 +3765,7 @@ export class CardBattleSystem {
   }
 
   private playDisarmReadyEffect() {
+    SoundManager.play(this.scene, "parry", 0.72);
     const { width } = this.scene.scale;
     const icon = this.trackEffect(
       this.scene.add
@@ -3803,6 +3816,7 @@ export class CardBattleSystem {
   }
 
   private playReflectEffect(amount: number) {
+    SoundManager.play(this.scene, "parry", 0.9);
     const { width } = this.scene.scale;
     this.scene.cameras.main.shake(180, 0.005);
     const text = this.trackEffect(
@@ -3904,6 +3918,7 @@ export class CardBattleSystem {
   }
 
   private playAttackEffect(target: "enemy" | "player", amount = 0, style: AttackVisualStyle = "normal") {
+    SoundManager.play(this.scene, amount >= 16 || style !== "normal" ? "bigHit" : "attackHit");
     const { width, height } = this.scene.scale;
     const y = target === "enemy" ? Math.max(u(190), height * 0.38) : height - u(280);
     const x = width / 2;
@@ -4037,6 +4052,7 @@ export class CardBattleSystem {
   }
 
   private playGuardEffect(target: "enemy" | "player") {
+    SoundManager.play(this.scene, "shield");
     const { width, height } = this.scene.scale;
     const y = target === "enemy" ? u(180) : height - u(280);
     const x = width / 2;
