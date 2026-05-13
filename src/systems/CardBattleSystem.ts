@@ -639,7 +639,7 @@ export class CardBattleSystem {
     this.drawEnemyPartPanel(width, height);
 
     // -- Bottom: player command panel (status, hand and actions) --
-    const playerStripY = height - u(278);
+    const playerStripY = height - u(318);
     const playerPanelW = stripW * 0.98;
     const playerStripBg = this.scene.add
       .rectangle(width / 2, playerStripY, playerPanelW, u(86), 0x08080d, 0.6)
@@ -784,14 +784,14 @@ export class CardBattleSystem {
     this.overlay.add(this.logText);
 
     // Hand area sits in the slot freed by the hidden bottom panel
-    this.handAreaY = height - u(148);
+    this.handAreaY = height - u(178);
     this.handAreaWidth = stripW * 0.96;
 
     // Action buttons at the very bottom corners
-    const btnY = height - u(38);
+    const btnY = height - u(36);
     const btnGap = u(8);
     const btnW = (width - btnGap * 5) / 4;
-    const btnH = u(56);
+    const btnH = u(54);
     const btnX = (idx: number) => btnGap + btnW / 2 + idx * (btnW + btnGap);
     this.makeButton(btnX(0), btnY, btnW, btnH, "포기", () => {
       this.cancelled = true;
@@ -2975,7 +2975,7 @@ export class CardBattleSystem {
       maxCardW,
       (this.handAreaWidth - gap * (count - 1)) / count
     );
-    const cardH = Math.min(u(174), cardW * 1.48);
+    const cardH = Math.min(u(150), cardW * 1.42);
     const totalW = count * cardW + (count - 1) * gap;
     const startX = this.scene.scale.width / 2 - totalW / 2 + cardW / 2;
 
