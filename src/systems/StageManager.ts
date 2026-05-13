@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { STAGE_LAYERS, type StageKey, type StageLayerDef } from "../data/parts";
+import { PARTS, STAGE_LAYERS, type StageKey, type StageLayerDef } from "../data/parts";
 import type { PartId } from "../data/enemyParts";
 import { SoundManager } from "./SoundManager";
 
@@ -10,6 +10,13 @@ const PART_ZOOM_FRAMES: Record<PartId, { focusY: number; zoom: number }> = {
   skirt: { focusY: 0.55, zoom: 1.4 },
   shoes: { focusY: 0.79, zoom: 1.5 },
   underwear: { focusY: 0.47, zoom: 1.42 },
+};
+
+const PART_EFFECT_CENTER_OVERRIDES: Record<string, { x?: number; y?: number }> = {
+  cape: { y: 0.3 },
+  boots: { y: 0.84 },
+  shoes: { y: 0.84 },
+  underwear: { y: 0.48 },
 };
 
 export class StageManager {
@@ -424,8 +431,7 @@ export class StageManager {
   }
 
   private playLayerRemovalEffect(img: Phaser.GameObjects.Image, partId: string, duration: number) {
-    const cx = img.x;
-    const cy = img.y;
+    const { x: cx, y: cy } = this.getPartEffectCenter(partId, img);
     const burstRadius = Math.min(img.displayWidth, img.displayHeight) * 0.24;
     const palette = this.getPartEffectPalette(partId);
     const effectDuration = Math.max(760, Math.min(duration, 2600));
@@ -521,6 +527,20 @@ export class StageManager {
         onComplete: () => sparkle.destroy(),
       });
     }
+  }
+
+  private getPartEffectCenter(partId: string, fallback: Phaser.GameObjects.Image) {
+    const normalized = partId === "shoes" ? "boots" : partId;
+    const part = PARTS.find((entry) => entry.id === normalized);
+    if (!part) return { x: fallback.x, y: fallback.y };
+    const override = PART_EFFECT_CENTER_OVERRIDES[partId] ?? PART_EFFECT_CENTER_OVERRIDES[normalized];
+    const bounds = this.getDisplayBounds();
+    const centerRatioX = override?.x ?? part.hitbox.x + part.hitbox.w / 2;
+    const centerRatioY = override?.y ?? part.hitbox.y + part.hitbox.h / 2;
+    return {
+      x: bounds.left + bounds.width * centerRatioX,
+      y: bounds.top + bounds.height * centerRatioY,
+    };
   }
 
   private getPartEffectPalette(partId: string) {

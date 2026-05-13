@@ -251,13 +251,22 @@ export class UIScene extends Phaser.Scene {
     const name = this.add
       .text(width * 0.19, centerY - u(26), "", {
         fontFamily: "serif",
-        fontSize: px(13),
-        color: COLORS.text,
+        fontSize: px(22),
+        color: "#ffd572",
         fontStyle: "bold",
+        stroke: "#24120a",
+        strokeThickness: u(2),
+        shadow: {
+          offsetX: 0,
+          offsetY: u(2),
+          color: "#000000",
+          blur: u(5),
+          fill: true,
+        },
       })
       .setOrigin(0, 0.5);
     const intentBg = this.add
-      .rectangle(width * 0.81, centerY - u(26), u(190), u(34), 0x170b12, 0.58)
+      .rectangle(width * 0.81, centerY - u(26), u(122), u(32), 0x170b12, 0.58)
       .setOrigin(1, 0.5)
       .setStrokeStyle(u(1), COLORS.gild, 0.45);
     const intent = this.add
@@ -312,7 +321,7 @@ export class UIScene extends Phaser.Scene {
 
   private showTopEnemyEnergy(payload: { label: string; hp: number; hpMax: number; intent?: string }) {
     this.topEnemyGroup?.setVisible(true);
-    this.topEnemyName?.setText(`적 파츠 · ${payload.label}`);
+    this.topEnemyName?.setText(payload.label);
     this.updateTopEnemyEnergy(payload);
   }
 
@@ -326,6 +335,8 @@ export class UIScene extends Phaser.Scene {
       const previous = this.topEnemyIntent?.text ?? "";
       this.topEnemyIntent?.setText(intent.text);
       this.topEnemyIntent?.setColor(intent.color);
+      const textW = this.topEnemyIntent?.width ?? u(86);
+      this.topEnemyIntentBg?.setSize(Math.max(u(102), textW + u(34)), u(32));
       this.topEnemyIntentBg?.setFillStyle(intent.bg, urgent ? 0.74 : 0.64);
       this.topEnemyIntentBg?.setStrokeStyle(u(urgent ? 2 : 1.2), intent.stroke, urgent ? 0.96 : 0.72);
       if (previous !== intent.text) {

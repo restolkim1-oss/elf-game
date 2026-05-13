@@ -641,11 +641,13 @@ export class CardBattleSystem {
       .rectangle(width / 2, playerStripY, playerPanelW - u(10), u(74), 0x11131a, 0.32)
       .setStrokeStyle(u(0.8), 0xf3d48a, 0.28);
     const playerName = this.scene.add
-      .text(width / 2 - playerPanelW / 2 + u(18), playerStripY - u(30), "당신", {
+      .text(width / 2 - playerPanelW / 2 + u(18), playerStripY - u(31), "플레이어", {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: px(18),
         color: "#f3e6c9",
         fontStyle: "bold",
+        stroke: "#090610",
+        strokeThickness: u(1.4),
       })
       .setOrigin(0, 0.5);
     this.energyText = this.scene.add
@@ -657,11 +659,13 @@ export class CardBattleSystem {
       })
       .setOrigin(0.5);
     this.turnText = this.scene.add
-      .text(width / 2 + playerPanelW / 2 - u(18), playerStripY - u(30), "", {
+      .text(width / 2 + playerPanelW / 2 - u(18), playerStripY - u(31), "", {
         fontFamily: "serif",
-        fontSize: px(13),
+        fontSize: px(18),
         color: "#f3d48a",
         fontStyle: "bold",
+        stroke: "#090610",
+        strokeThickness: u(1.4),
       })
       .setOrigin(1, 0.5);
 
