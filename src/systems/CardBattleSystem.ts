@@ -3188,42 +3188,19 @@ export class CardBattleSystem {
         cornerLb,
         cornerRb,
       ].forEach((obj) => obj.setAlpha(0));
-      const overlayStroke = temporary ? 0x82ffe6 : 0xffd572;
+      const overlayStroke = 0x82ffe6;
       const overlayText = temporary ? "#d8fff7" : "#f7e6bf";
       const costBadge = this.scene.add
-        .rectangle(-cardW / 2 + u(27), -cardH / 2 + u(24), u(42), u(22), 0x071018, 0.78)
-        .setStrokeStyle(u(1), overlayStroke, 0.9);
+        .circle(cardW / 2 - u(26), -cardH / 2 + u(25), u(14), 0x103c43, 0.92)
+        .setStrokeStyle(u(1.4), overlayStroke, 0.98);
       const imageCostText = this.scene.add
-        .text(costBadge.x, costBadge.y, `C${def.cost}`, {
+        .text(costBadge.x, costBadge.y, String(def.cost), {
           fontFamily: "serif",
-          fontSize: px(9.8),
-          color: "#ffe28a",
-          fontStyle: "bold",
-          stroke: "#081018",
-          strokeThickness: u(1.6),
-        })
-        .setOrigin(0.5);
-      const imageBadge = this.scene.add
-        .text(cardW / 2 - u(29), -cardH / 2 + u(24), temporary ? "TEMP" : `Lv.${card.level}`, {
-          fontFamily: "serif",
-          fontSize: px(7.6),
-          color: overlayText,
-          fontStyle: "bold",
-          stroke: "#061018",
-          strokeThickness: u(1.5),
-        })
-        .setOrigin(0.5);
-      const powerBg = this.scene.add
-        .rectangle(0, cardH / 2 - u(102), cardW - u(46), u(24), 0x05070a, 0.56)
-        .setStrokeStyle(u(0.8), overlayStroke, 0.5);
-      const imagePowerText = this.scene.add
-        .text(0, powerBg.y, `전투력 ${card.power}`, {
-          fontFamily: "serif",
-          fontSize: px(10.2),
+          fontSize: px(11.4),
           color: "#ffffff",
           fontStyle: "bold",
-          stroke: "#111111",
-          strokeThickness: u(1.8),
+          stroke: "#063238",
+          strokeThickness: u(1.6),
         })
         .setOrigin(0.5);
       const imageDescBg = this.scene.add
@@ -3241,7 +3218,7 @@ export class CardBattleSystem {
           wordWrap: { width: cardW - u(38) },
         })
         .setOrigin(0.5);
-      imageOverlay.push(costBadge, imageCostText, imageBadge, powerBg, imagePowerText, imageDescBg, imageDescText);
+      imageOverlay.push(costBadge, imageCostText, imageDescBg, imageDescText);
     }
 
     const cardChildren: Phaser.GameObjects.GameObject[] = [
@@ -3557,41 +3534,18 @@ export class CardBattleSystem {
       cardFace.setScale(scale);
       const imageW = cardFace.width * scale;
       const imageH = cardFace.height * scale;
-      const overlayStroke = temporary ? 0x82ffe6 : 0xffd572;
+      const overlayStroke = 0x82ffe6;
       const overlayText = temporary ? "#d8fff7" : "#f7e6bf";
       const costBadge = this.scene.add
-        .rectangle(-imageW / 2 + u(34), -imageH / 2 + u(34), u(56), u(30), 0x071018, 0.78)
-        .setStrokeStyle(u(1.2), overlayStroke, 0.92);
+        .circle(imageW / 2 - u(38), -imageH / 2 + u(36), u(19), 0x103c43, 0.93)
+        .setStrokeStyle(u(1.6), overlayStroke, 0.98);
       const costText = this.scene.add
-        .text(costBadge.x, costBadge.y, `C${def.cost}`, {
+        .text(costBadge.x, costBadge.y, String(def.cost), {
           fontFamily: "serif",
-          fontSize: px(12),
-          color: "#ffe28a",
-          fontStyle: "bold",
-          stroke: "#081018",
-          strokeThickness: u(2),
-        })
-        .setOrigin(0.5);
-      const badge = this.scene.add
-        .text(imageW / 2 - u(38), -imageH / 2 + u(34), temporary ? "TEMP" : `Lv.${card.level}`, {
-          fontFamily: "serif",
-          fontSize: px(9.5),
-          color: overlayText,
-          fontStyle: "bold",
-          stroke: "#061018",
-          strokeThickness: u(1.8),
-        })
-        .setOrigin(0.5);
-      const powerBg = this.scene.add
-        .rectangle(0, imageH / 2 - u(112), imageW - u(58), u(30), 0x05070a, 0.58)
-        .setStrokeStyle(u(1), overlayStroke, 0.55);
-      const powerText = this.scene.add
-        .text(0, powerBg.y, `전투력 ${card.power}`, {
-          fontFamily: "serif",
-          fontSize: px(13),
+          fontSize: px(15),
           color: "#ffffff",
           fontStyle: "bold",
-          stroke: "#111111",
+          stroke: "#063238",
           strokeThickness: u(2),
         })
         .setOrigin(0.5);
@@ -3618,7 +3572,7 @@ export class CardBattleSystem {
           fontStyle: "bold",
         })
         .setOrigin(0.5);
-      preview.add([glow, bg, cardFace, costBadge, costText, badge, powerBg, powerText, descBg, descText, hint]);
+      preview.add([glow, bg, cardFace, costBadge, costText, descBg, descText, hint]);
       preview.setScale(0.92).setAlpha(0);
       this.overlay?.add(preview);
       this.cardPreview = preview;
