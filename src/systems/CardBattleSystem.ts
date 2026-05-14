@@ -347,6 +347,7 @@ export class CardBattleSystem {
   private playerBlockText!: Phaser.GameObjects.Text;
   private playerStatusText!: Phaser.GameObjects.Text;
   private playerChargeText: Phaser.GameObjects.Text | null = null;
+  private playerChargeBg: Phaser.GameObjects.Rectangle | null = null;
   private enemyHpFill!: Phaser.GameObjects.Rectangle;
   private enemyHpText!: Phaser.GameObjects.Text;
   private enemyBlockText!: Phaser.GameObjects.Text;
@@ -393,6 +394,8 @@ export class CardBattleSystem {
   private cardPreviewTimer: Phaser.Time.TimerEvent | null = null;
   private cardPreviewPointer: { cardUid: number; x: number; y: number; shown: boolean } | null = null;
   private lastSpeechAt = 0;
+  private lastBattleCommentKey = "";
+  private lastBattleCommentAt = 0;
   private flowWatchdog: Phaser.Time.TimerEvent | null = null;
   private battleRunId = 0;
   private nextReactionOrder = 1;
@@ -487,8 +490,11 @@ export class CardBattleSystem {
     this.enemyPoisonText = null;
     this.playerEnergyOrbs = [];
     this.playerEnergyOrbStates = [];
+    this.playerChargeBg = null;
     this.playerChargeText = null;
     this.lastSpeechAt = 0;
+    this.lastBattleCommentKey = "";
+    this.lastBattleCommentAt = 0;
     this.overlay?.destroy();
     this.overlay = null;
     this.handObjs = [];
@@ -719,16 +725,17 @@ export class CardBattleSystem {
       this.playerEnergyOrbs.push(orb);
       this.playerEnergyOrbStates.push(true);
     }
+    this.playerChargeBg = this.scene.add
+      .rectangle(width / 2, playerHpY - u(24), u(118), u(28), 0x102f35, 0)
+      .setStrokeStyle(u(1.5), 0xffd572, 0);
     this.playerChargeText = this.scene.add
       .text(width / 2, playerHpY - u(24), "", {
         fontFamily: "serif",
-        fontSize: px(13),
-        color: "#ffd572",
+        fontSize: px(16),
+        color: "#82ffe6",
         fontStyle: "bold",
-        stroke: "#2a1605",
-        strokeThickness: u(1.5),
-        backgroundColor: "rgba(28, 14, 5, 0.56)",
-        padding: { x: 8, y: 3 },
+        stroke: "#102f35",
+        strokeThickness: u(2),
       })
       .setOrigin(0.5);
     this.playerBlockText = this.scene.add
@@ -766,6 +773,7 @@ export class CardBattleSystem {
       this.playerHpFill,
       this.playerHpText,
       ...this.playerEnergyOrbs,
+      this.playerChargeBg,
       this.playerChargeText,
       this.playerBlockText,
       this.playerStatusText,
@@ -1400,11 +1408,11 @@ export class CardBattleSystem {
           break;
         case "applyCharge":
           this.applyChargeToPlayer(effect.amount);
-          logParts.push(`충전 +${effect.amount}`);
+          logParts.push(`충전 대기`);
           break;
         case "applyPoison":
           this.applyPoisonToEnemy(effect.amount);
-          logParts.push(`독 +${effect.amount}`);
+          logParts.push(`독 부여`);
           break;
         case "reflectNextAttack":
           this.player.reflectNextAttack = {
@@ -1466,7 +1474,8 @@ export class CardBattleSystem {
     }
 
     if (didGuard) this.playGuardEffect("player");
-    this.flashLog(`${def.roleLabel} 사용 · ${logParts.join(" · ")}`);
+    const uniqueLogParts = Array.from(new Set(logParts)).filter(Boolean);
+    this.flashLog(uniqueLogParts.length > 0 ? `${def.roleLabel} 사용 · ${uniqueLogParts.join(" · ")}` : `${def.roleLabel} 사용`);
     return { didAttack, damage: Math.max(1, totalDamage || card.damage) };
   }
 
@@ -2079,6 +2088,8 @@ export class CardBattleSystem {
     if (applied <= 0) return 0;
     this.player.chargeStacks = Math.min(CHARGE_STACK_CAP, this.player.chargeStacks + applied);
     this.playChargeTextPulse();
+    this.playChargeGainEffect(applied);
+    this.playBattleComment(`충전 +${applied}스택!`, "counter", "player");
     return applied;
   }
 
@@ -2088,6 +2099,7 @@ export class CardBattleSystem {
     const boosted = baseAmount + charge * 3;
     this.player.chargeStacks = 0;
     this.playChargeConsumeEffect(charge);
+    this.playBattleComment(`충전 발동! +${charge * 3} 데미지`, "critical", "enemy");
     return boosted;
   }
 
@@ -2591,13 +2603,56 @@ export class CardBattleSystem {
         this.deck = shuffle(this.discard);
         this.discard = [];
       }
-      const card = this.deck.pop();
+      const card = this.drawOneCardAvoidingDuplicateCharge();
       if (card) {
         this.hand.push(card);
         drawn++;
       }
     }
     if (drawn > 0) SoundManager.play(this.scene, "cardDraw", Math.min(1, 0.55 + drawn * 0.12));
+  }
+
+  private drawOneCardAvoidingDuplicateCharge() {
+    const skipped: TarotCardState[] = [];
+    let card: TarotCardState | undefined;
+    const handHasCharge = this.hand.some((handCard) => handCard.cardId === "charge");
+
+    while (this.deck.length > 0) {
+      const candidate = this.deck.pop();
+      if (!candidate) break;
+      if (handHasCharge && candidate.cardId === "charge") {
+        skipped.push(candidate);
+        continue;
+      }
+      card = candidate;
+      break;
+    }
+
+    if (skipped.length > 0) {
+      this.deck = shuffle([...this.deck, ...skipped]);
+    }
+    if (!card && handHasCharge && this.discard.length > 0) {
+      this.deck = shuffle([...this.deck, ...this.discard]);
+      this.discard = [];
+      const retrySkipped: TarotCardState[] = [];
+      while (this.deck.length > 0) {
+        const candidate = this.deck.pop();
+        if (!candidate) break;
+        if (candidate.cardId === "charge") {
+          retrySkipped.push(candidate);
+          continue;
+        }
+        card = candidate;
+        break;
+      }
+      if (retrySkipped.length > 0) {
+        this.deck = shuffle([...this.deck, ...retrySkipped]);
+      }
+    }
+    if (!card && !handHasCharge && this.deck.length > 0) {
+      card = this.deck.pop();
+    }
+    return card ?? null;
   }
 
   // -- Rendering --
@@ -2629,7 +2684,11 @@ export class CardBattleSystem {
   private refreshEnergyOrbs() {
     const selectedCost = this.selectedCards.reduce((sum, c) => sum + CARDS[c.cardId].cost, 0);
     this.energyText.setText(selectedCost > 0 ? `선택 ${selectedCost}` : "");
-    this.playerChargeText?.setText(this.player.chargeStacks > 0 ? `충전: ${this.player.chargeStacks}` : "");
+    const chargeActive = this.player.chargeStacks > 0;
+    this.playerChargeText?.setText(chargeActive ? `충전 ${this.player.chargeStacks}스택` : "");
+    this.playerChargeText?.setAlpha(chargeActive ? 1 : 0);
+    this.playerChargeBg?.setAlpha(chargeActive ? 0.72 : 0);
+    this.playerChargeBg?.setStrokeStyle(u(1.5), 0xffd572, chargeActive ? 0.88 : 0);
     this.playerEnergyOrbs.forEach((orb, idx) => {
       const active = idx < this.energy;
       if (this.playerEnergyOrbStates[idx] === active) {
@@ -3917,14 +3976,84 @@ export class CardBattleSystem {
     });
   }
 
+  private playChargeGainEffect(amount: number) {
+    if (!this.overlay || !this.playerChargeText) return;
+    SoundManager.play(this.scene, "cardMerge", 0.72);
+    const { x, y } = this.playerChargeText;
+    const ring = this.trackEffect(
+      this.scene.add
+        .circle(x, y, u(18), 0x82ffe6, 0.16)
+        .setStrokeStyle(u(3), 0xffd572, 0.9)
+        .setDepth(724)
+    );
+    const sparkCount = 10;
+    const sparks: Phaser.GameObjects.GameObject[] = [];
+    for (let i = 0; i < sparkCount; i++) {
+      const angle = (Math.PI * 2 * i) / sparkCount + Phaser.Math.FloatBetween(-0.18, 0.18);
+      const spark = this.trackEffect(
+        this.scene.add
+          .rectangle(x, y, u(4), u(14), i % 2 === 0 ? 0x82ffe6 : 0xffd572, 0.92)
+          .setAngle(Phaser.Math.RadToDeg(angle))
+          .setDepth(725)
+      );
+      sparks.push(spark);
+      this.scene.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * u(42),
+        y: y + Math.sin(angle) * u(24),
+        alpha: 0,
+        scaleY: 0.35,
+        duration: 430,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          if (spark.scene) spark.destroy();
+        },
+      });
+    }
+    const label = this.trackEffect(
+      this.scene.add
+        .text(x, y - u(32), `충전 +${amount}`, {
+          fontFamily: "serif",
+          fontSize: px(14),
+          color: "#82ffe6",
+          fontStyle: "bold",
+          stroke: "#102f35",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5)
+        .setDepth(725)
+    );
+    this.overlay.add([ring, label, ...sparks]);
+    this.scene.tweens.add({
+      targets: ring,
+      radius: u(72),
+      alpha: 0,
+      duration: 520,
+      ease: "Sine.easeOut",
+      onComplete: () => {
+        if (ring.scene) ring.destroy();
+      },
+    });
+    this.scene.tweens.add({
+      targets: label,
+      y: label.y - u(18),
+      alpha: 0,
+      duration: 620,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        if (label.scene) label.destroy();
+      },
+    });
+  }
+
   private playChargeConsumeEffect(charge: number) {
     if (!this.playerChargeText) return;
     const { x, y } = this.playerChargeText;
     const flash = this.trackEffect(
       this.scene.add
-        .text(x, y - u(18), `충전 +${charge * 3}`, {
+        .text(x, y - u(18), `충전 발동! +${charge * 3}`, {
           fontFamily: "serif",
-          fontSize: px(13),
+          fontSize: px(15),
           color: "#ffd572",
           fontStyle: "bold",
           stroke: "#2a1605",
@@ -4191,6 +4320,11 @@ export class CardBattleSystem {
 
   private playBattleComment(text: string, kind: BattleCommentKind, target: "enemy" | "player" = "enemy") {
     if (!this.overlay || this.finished) return;
+    const now = this.scene.time.now;
+    const commentKey = `${target}:${kind}:${text}`;
+    if (this.lastBattleCommentKey === commentKey && now - this.lastBattleCommentAt < 260) return;
+    this.lastBattleCommentKey = commentKey;
+    this.lastBattleCommentAt = now;
     const { width, height } = this.scene.scale;
     const palette = {
       hit: { color: "#ffffff", stroke: "#4d1518", bg: 0x321818, alpha: 0.7 },
