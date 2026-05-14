@@ -1,5 +1,6 @@
 ﻿import Phaser from "phaser";
 import type { PartDef } from "../data/parts";
+import { getCardImageKey } from "../data/cardImages";
 import { findFusionRecipe, type CardFusionRecipe, type FusionEffect, type FusionResultCard, type FusionRole } from "../data/cardFusionRecipes";
 import { ENEMY_PART_CONFIG, type EnemyPart, type PartAbility, type PartId } from "../data/enemyParts";
 import { DiceRoller } from "./Dice";
@@ -3056,6 +3057,8 @@ export class CardBattleSystem {
       !this.busy &&
       !this.finished &&
       (!temporary || this.selectedCards.length === 0 || selected);
+    const cardImageKey = getCardImageKey(card.cardId);
+    const hasCardImage = !!cardImageKey && this.scene.textures.exists(cardImageKey);
 
     const cardFill = temporary ? 0x172a32 : selected ? 0xffe8aa : playable ? 0xefe0bd : 0x5f5446;
     const bg = this.scene.add
@@ -3066,6 +3069,12 @@ export class CardBattleSystem {
         playable ? 1 : 0.62
       )
       .setInteractive({ useHandCursor: true });
+    const cardFace = hasCardImage
+      ? this.scene.add
+          .image(0, 0, cardImageKey)
+          .setDisplaySize(cardW - u(2), cardH - u(2))
+          .setAlpha(playable ? 1 : 0.5)
+      : null;
     const selectionAura = this.scene.add
       .rectangle(0, 0, cardW + u(10), cardH + u(10), 0xffffff, 0)
       .setStrokeStyle(u(3), 0xfff0a8, selected ? 0.95 : 0);
@@ -3159,12 +3168,8 @@ export class CardBattleSystem {
       .rectangle(0, 0, cardW + u(7), cardH + u(7), 0xffffff, 0)
       .setStrokeStyle(u(2), 0x82ffe6, temporary ? 0.8 : 0);
 
-    const container = this.scene.add
-      .container(x, y, [
-        dropGlow,
-        tempGlow,
-        selectionAura,
-        bg,
+    if (cardFace) {
+      [
         innerFrame,
         accent,
         headerLine,
@@ -3181,7 +3186,37 @@ export class CardBattleSystem {
         cornerRt,
         cornerLb,
         cornerRb,
-      ])
+      ].forEach((obj) => obj.setAlpha(0));
+    }
+
+    const cardChildren: Phaser.GameObjects.GameObject[] = [
+        dropGlow,
+        tempGlow,
+        selectionAura,
+        bg,
+    ];
+    if (cardFace) cardChildren.push(cardFace);
+    cardChildren.push(
+        innerFrame,
+        accent,
+        headerLine,
+        costCircle,
+        costText,
+        nameText,
+        reverseBadge,
+        portrait,
+        roleText,
+        powerText,
+        descBg,
+        descText,
+        cornerLt,
+        cornerRt,
+        cornerLb,
+        cornerRb
+    );
+
+    const container = this.scene.add
+      .container(x, y, cardChildren)
       .setSize(cardW, cardH);
     if (selected) {
       container.setY(y - u(18));
@@ -3459,6 +3494,33 @@ export class CardBattleSystem {
     const glow = this.scene.add
       .rectangle(0, 0, previewW + u(12), previewH + u(12), 0xffffff, 0)
       .setStrokeStyle(u(3), temporary ? 0x82ffe6 : 0xffd572, 0.38);
+    const cardImageKey = getCardImageKey(card.cardId);
+    if (cardImageKey && this.scene.textures.exists(cardImageKey)) {
+      const cardFace = this.scene.add.image(0, -u(2), cardImageKey);
+      const scale = Math.min((previewW - u(30)) / cardFace.width, (previewH - u(54)) / cardFace.height);
+      cardFace.setScale(scale);
+      const hint = this.scene.add
+        .text(0, previewH / 2 - u(18), "손을 떼면 미리보기 닫기", {
+          fontFamily: "serif",
+          fontSize: px(8.5),
+          color: "#d6c5a1",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
+      preview.add([glow, bg, cardFace, hint]);
+      preview.setScale(0.92).setAlpha(0);
+      this.overlay?.add(preview);
+      this.cardPreview = preview;
+      this.scene.tweens.add({
+        targets: preview,
+        alpha: 1,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 150,
+        ease: "Back.easeOut",
+      });
+      return;
+    }
     const header = this.scene.add.rectangle(0, -previewH / 2 + u(32), previewW - u(18), u(48), temporary ? 0x166d79 : def.color, 0.92);
     const cost = this.scene.add
       .circle(-previewW / 2 + u(28), -previewH / 2 + u(32), u(16), 0x120b17, 0.98)
