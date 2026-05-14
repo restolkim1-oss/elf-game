@@ -3167,6 +3167,7 @@ export class CardBattleSystem {
     const tempGlow = this.scene.add
       .rectangle(0, 0, cardW + u(7), cardH + u(7), 0xffffff, 0)
       .setStrokeStyle(u(2), 0x82ffe6, temporary ? 0.8 : 0);
+    const imageOverlay: Phaser.GameObjects.GameObject[] = [];
 
     if (cardFace) {
       [
@@ -3187,6 +3188,60 @@ export class CardBattleSystem {
         cornerLb,
         cornerRb,
       ].forEach((obj) => obj.setAlpha(0));
+      const overlayStroke = temporary ? 0x82ffe6 : 0xffd572;
+      const overlayText = temporary ? "#d8fff7" : "#f7e6bf";
+      const costBadge = this.scene.add
+        .rectangle(-cardW / 2 + u(27), -cardH / 2 + u(24), u(42), u(22), 0x071018, 0.78)
+        .setStrokeStyle(u(1), overlayStroke, 0.9);
+      const imageCostText = this.scene.add
+        .text(costBadge.x, costBadge.y, `C${def.cost}`, {
+          fontFamily: "serif",
+          fontSize: px(9.8),
+          color: "#ffe28a",
+          fontStyle: "bold",
+          stroke: "#081018",
+          strokeThickness: u(1.6),
+        })
+        .setOrigin(0.5);
+      const imageBadge = this.scene.add
+        .text(cardW / 2 - u(29), -cardH / 2 + u(24), temporary ? "TEMP" : `Lv.${card.level}`, {
+          fontFamily: "serif",
+          fontSize: px(7.6),
+          color: overlayText,
+          fontStyle: "bold",
+          stroke: "#061018",
+          strokeThickness: u(1.5),
+        })
+        .setOrigin(0.5);
+      const powerBg = this.scene.add
+        .rectangle(0, cardH / 2 - u(102), cardW - u(46), u(24), 0x05070a, 0.56)
+        .setStrokeStyle(u(0.8), overlayStroke, 0.5);
+      const imagePowerText = this.scene.add
+        .text(0, powerBg.y, `전투력 ${card.power}`, {
+          fontFamily: "serif",
+          fontSize: px(10.2),
+          color: "#ffffff",
+          fontStyle: "bold",
+          stroke: "#111111",
+          strokeThickness: u(1.8),
+        })
+        .setOrigin(0.5);
+      const imageDescBg = this.scene.add
+        .rectangle(0, cardH / 2 - u(45), cardW - u(28), u(58), 0x05070a, 0.68)
+        .setStrokeStyle(u(1), overlayStroke, 0.45);
+      const imageDescText = this.scene.add
+        .text(0, imageDescBg.y, `${def.name}\n${def.description}`, {
+          fontFamily: "serif",
+          fontSize: px(8.2),
+          color: overlayText,
+          fontStyle: "bold",
+          align: "center",
+          stroke: "#05070a",
+          strokeThickness: u(1.3),
+          wordWrap: { width: cardW - u(38) },
+        })
+        .setOrigin(0.5);
+      imageOverlay.push(costBadge, imageCostText, imageBadge, powerBg, imagePowerText, imageDescBg, imageDescText);
     }
 
     const cardChildren: Phaser.GameObjects.GameObject[] = [
@@ -3196,6 +3251,7 @@ export class CardBattleSystem {
         bg,
     ];
     if (cardFace) cardChildren.push(cardFace);
+    cardChildren.push(...imageOverlay);
     cardChildren.push(
         innerFrame,
         accent,
@@ -3499,6 +3555,61 @@ export class CardBattleSystem {
       const cardFace = this.scene.add.image(0, -u(2), cardImageKey);
       const scale = Math.min((previewW - u(30)) / cardFace.width, (previewH - u(54)) / cardFace.height);
       cardFace.setScale(scale);
+      const imageW = cardFace.width * scale;
+      const imageH = cardFace.height * scale;
+      const overlayStroke = temporary ? 0x82ffe6 : 0xffd572;
+      const overlayText = temporary ? "#d8fff7" : "#f7e6bf";
+      const costBadge = this.scene.add
+        .rectangle(-imageW / 2 + u(34), -imageH / 2 + u(34), u(56), u(30), 0x071018, 0.78)
+        .setStrokeStyle(u(1.2), overlayStroke, 0.92);
+      const costText = this.scene.add
+        .text(costBadge.x, costBadge.y, `C${def.cost}`, {
+          fontFamily: "serif",
+          fontSize: px(12),
+          color: "#ffe28a",
+          fontStyle: "bold",
+          stroke: "#081018",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5);
+      const badge = this.scene.add
+        .text(imageW / 2 - u(38), -imageH / 2 + u(34), temporary ? "TEMP" : `Lv.${card.level}`, {
+          fontFamily: "serif",
+          fontSize: px(9.5),
+          color: overlayText,
+          fontStyle: "bold",
+          stroke: "#061018",
+          strokeThickness: u(1.8),
+        })
+        .setOrigin(0.5);
+      const powerBg = this.scene.add
+        .rectangle(0, imageH / 2 - u(112), imageW - u(58), u(30), 0x05070a, 0.58)
+        .setStrokeStyle(u(1), overlayStroke, 0.55);
+      const powerText = this.scene.add
+        .text(0, powerBg.y, `전투력 ${card.power}`, {
+          fontFamily: "serif",
+          fontSize: px(13),
+          color: "#ffffff",
+          fontStyle: "bold",
+          stroke: "#111111",
+          strokeThickness: u(2),
+        })
+        .setOrigin(0.5);
+      const descBg = this.scene.add
+        .rectangle(0, imageH / 2 - u(49), imageW - u(42), u(70), 0x05070a, 0.7)
+        .setStrokeStyle(u(1.2), overlayStroke, 0.55);
+      const descText = this.scene.add
+        .text(0, descBg.y, `${def.name}\n${def.description}`, {
+          fontFamily: "serif",
+          fontSize: px(10.6),
+          color: overlayText,
+          fontStyle: "bold",
+          align: "center",
+          stroke: "#05070a",
+          strokeThickness: u(1.6),
+          wordWrap: { width: imageW - u(58) },
+        })
+        .setOrigin(0.5);
       const hint = this.scene.add
         .text(0, previewH / 2 - u(18), "손을 떼면 미리보기 닫기", {
           fontFamily: "serif",
@@ -3507,7 +3618,7 @@ export class CardBattleSystem {
           fontStyle: "bold",
         })
         .setOrigin(0.5);
-      preview.add([glow, bg, cardFace, hint]);
+      preview.add([glow, bg, cardFace, costBadge, costText, badge, powerBg, powerText, descBg, descText, hint]);
       preview.setScale(0.92).setAlpha(0);
       this.overlay?.add(preview);
       this.cardPreview = preview;
