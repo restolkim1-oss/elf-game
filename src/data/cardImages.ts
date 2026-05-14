@@ -20,6 +20,7 @@ const fileByCardId: Record<string, string> = {
   temp_lifesteal: "흡혈.png",
   temp_strong_poison: "맹독.png",
   temp_poison_arrow: "독화살.png",
+  temp_drain_poison: "흡독.png",
   temp_poison_barrier: "독방벽.png",
   temp_poison_blade: "독칼날.png",
   temp_fortify: "강화방어.png",
