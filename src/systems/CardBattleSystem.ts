@@ -257,6 +257,7 @@ interface Intent {
   kind: IntentKind;
   amount: number;
 }
+type BattleCommentKind = "hit" | "critical" | "block" | "reduce" | "heal" | "poison" | "counter" | "danger";
 
 interface EnemyRuntimePart {
   id: PartId;
@@ -989,8 +990,13 @@ export class CardBattleSystem {
     }
 
     const playerBlockBeforeHit = this.player.block;
-    this.applyAttack(this.player, incoming);
+    const received = this.applyAttack(this.player, incoming);
     this.playAttackEffect("player", incoming);
+    if (incoming > 0 && received <= 0 && playerBlockBeforeHit > 0) {
+      this.playBattleComment("보호막에 막혔다!", "block", "player");
+    } else if (received > 0) {
+      this.playBattleComment(`${received} 피해를 받았다!`, "danger", "player");
+    }
 
     let reflected = 0;
     if (this.player.reflectNextAttack) {
@@ -1003,6 +1009,7 @@ export class CardBattleSystem {
         if (reflected > 0) {
           this.applyAttack(this.enemy, reflected);
           this.playReflectEffect(reflected);
+          this.playBattleComment(`${reflected} 반사!`, "counter", "enemy");
         }
         if (reaction.poisonOnTrigger) {
           const poison = this.applyPoisonToEnemy(reaction.poisonOnTrigger);
@@ -1276,7 +1283,11 @@ export class CardBattleSystem {
         {
           const before = this.player.hp;
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + totalEffect);
-          if (this.player.hp > before) SoundManager.play(this.scene, "heal");
+          const healed = this.player.hp - before;
+          if (healed > 0) {
+            SoundManager.play(this.scene, "heal");
+            this.playBattleComment(`+${healed} HP 회복`, "heal", "player");
+          }
         }
         break;
       case "poison":
@@ -1358,10 +1369,14 @@ export class CardBattleSystem {
           const dealt = result.dealt;
           const before = this.player.hp;
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + dealt);
+          const healed = this.player.hp - before;
           didAttack = didAttack || !result.prevented;
           totalDamage += result.appliedAmount;
           logParts.push(`흡혈 ${dealt}`);
-          if (this.player.hp > before) logParts.push(`회복 +${this.player.hp - before}`);
+          if (healed > 0) {
+            logParts.push(`회복 +${healed}`);
+            this.playBattleComment(`+${healed} HP 회복`, "heal", "player");
+          }
           break;
         }
         case "block":
@@ -1372,8 +1387,12 @@ export class CardBattleSystem {
         case "heal": {
           const before = this.player.hp;
           this.player.hp = Math.min(this.player.hpMax, this.player.hp + effect.amount);
-          logParts.push(`회복 +${this.player.hp - before}`);
-          if (this.player.hp > before) SoundManager.play(this.scene, "heal");
+          const healed = this.player.hp - before;
+          logParts.push(`회복 +${healed}`);
+          if (healed > 0) {
+            SoundManager.play(this.scene, "heal");
+            this.playBattleComment(`+${healed} HP 회복`, "heal", "player");
+          }
           break;
         }
         case "energy":
@@ -2052,6 +2071,7 @@ export class CardBattleSystem {
     if (applied <= 0) return 0;
     this.enemy.poisonStacks = Math.min(POISON_STACK_CAP, this.enemy.poisonStacks + applied);
     SoundManager.play(this.scene, "poison", 0.72);
+    this.playBattleComment(`독 +${applied}스택!`, "poison", "enemy");
     return applied;
   }
 
@@ -2092,7 +2112,13 @@ export class CardBattleSystem {
     }
     const modifier = this.applyActivePlayerDamageModifiers(raw, context);
     if (modifier.prevented) return { dealt: 0, appliedAmount: 0, prevented: true };
+    const blockBefore = this.enemy.block;
     const dealt = this.applyAttack(this.enemy, modifier.amount);
+    if (modifier.amount > 0 && dealt <= 0 && blockBefore > 0) {
+      this.playBattleComment("보호막에 막혔다!", "block", "enemy");
+    } else if (dealt > 0) {
+      this.playBattleComment(`${dealt}의 데미지${dealt >= 14 ? "!!" : "!"}`, "hit", "enemy");
+    }
     return { dealt, appliedAmount: modifier.amount, prevented: false };
   }
 
@@ -2113,7 +2139,13 @@ export class CardBattleSystem {
     }
 
     if (!target || target.destroyed) {
+      const blockBefore = this.enemy.block;
       const dealt = this.applyAttack(this.enemy, modifier.amount);
+      if (modifier.amount > 0 && dealt <= 0 && blockBefore > 0) {
+        this.playBattleComment("보호막에 막혔다!", "block", "enemy");
+      } else if (dealt > 0) {
+        this.playBattleComment(`${dealt}의 데미지!`, "hit", "enemy");
+      }
       return {
         partName,
         partDamage: 0,
@@ -2136,7 +2168,10 @@ export class CardBattleSystem {
     } else {
       this.playPartDamageEffect(target.id);
     }
+    if (partDamage > 0) this.playBattleComment(`${partDamage}의 데미지!`, "hit", "enemy");
+    const blockBefore = this.enemy.block;
     const overflowDealt = overflow > 0 ? this.applyAttack(this.enemy, overflow) : 0;
+    if (overflow > 0 && overflowDealt <= 0 && blockBefore > 0) this.playBattleComment("보호막에 막혔다!", "block", "enemy");
     return {
       partName,
       partDamage,
@@ -2160,6 +2195,7 @@ export class CardBattleSystem {
       }
       this.highlightEnemyPart(shoes.id);
       this.flashLog(`${shoes.displayName} 효과! 첫 공격 무효`);
+      this.playBattleComment("신발에 막혔다!", "block", "enemy");
       return { amount: 0, prevented: true };
     }
     if (context && shouldCheckShoes) context.shoesChecked = true;
@@ -2167,8 +2203,10 @@ export class CardBattleSystem {
     let amount = Math.max(0, raw);
     const cape = this.getActiveEnemyPartByAbility("damageReductionPercent");
     if (cape && cape.ability.kind === "damageReductionPercent") {
+      const before = amount;
       amount = Math.max(0, Math.round(amount * (1 - cape.ability.value)));
       this.highlightEnemyPart(cape.id);
+      if (amount < before) this.playBattleComment(`케이프로 -${Math.round(cape.ability.value * 100)}%!`, "reduce", "enemy");
     }
     return { amount, prevented: false };
   }
@@ -2517,6 +2555,7 @@ export class CardBattleSystem {
         this.applyDirectDamage(this.enemy, criticalDamage);
         this.playAttackEffect("enemy", criticalDamage, visualStyle);
         this.playCriticalText(width / 2, Math.max(u(190), height * 0.38));
+        this.playBattleComment(`크리티컬! ${criticalDamage}의 데미지!!`, "critical", "enemy");
         this.flashLog(`Critical Hit! 추가 내구도 ${criticalDamage} 감소`);
         this.refreshAll();
         if (this.enemy.hp > 0) this.maybeShowEnemySpeech();
@@ -2829,11 +2868,21 @@ export class CardBattleSystem {
       row.hpText.setText(`${part.hp}/${part.maxHp}`);
       const hpRatio = Phaser.Math.Clamp(part.hp / Math.max(1, part.maxHp), 0, 1);
       row.hpFill.width = u(72) * hpRatio;
-      row.dropText.setText(part.destroyed ? "파괴됨" : "");
-      row.bg.setFillStyle(part.destroyed ? 0x2a2222 : 0x1b1420, part.destroyed ? 0.36 : 0.62);
+      const active = this.isCurrentTargetPart(part.id);
+      row.dropText.setText(part.destroyed ? "파괴됨" : active ? "현재 목표" : "");
+      const accent = this.getPartAccentColor(part);
+      row.bg.setFillStyle(
+        part.destroyed ? 0x2a2222 : active ? accent : 0x1b1420,
+        part.destroyed ? 0.36 : active ? 0.22 : 0.62
+      );
+      row.bg.setStrokeStyle(u(active ? 2.2 : 1), active ? accent : 0x8f6a34, part.destroyed ? 0.28 : active ? 0.95 : 0.5);
       const hpColor = hpRatio > 0.62 ? 0x58d68d : hpRatio > 0.32 ? 0xffd572 : 0xff5e7a;
       row.hpFill.setFillStyle(part.destroyed ? 0x777777 : hpColor, part.destroyed ? 0.5 : 0.95);
     }
+  }
+
+  private isCurrentTargetPart(partId: PartId) {
+    return this.activePartId === partId || (this.activePartId === "boots" && partId === "shoes");
   }
 
   private showEnemyPartTooltip(partId: PartId, pinned: boolean) {
@@ -2970,12 +3019,12 @@ export class CardBattleSystem {
     if (count === 0) return;
 
     const gap = u(6);
-    const maxCardW = u(142);
+    const maxCardW = u(160);
     const cardW = Math.min(
       maxCardW,
       (this.handAreaWidth - gap * (count - 1)) / count
     );
-    const cardH = Math.min(u(178), cardW * 1.42);
+    const cardH = Math.min(u(200), cardW * 1.42);
     const totalW = count * cardW + (count - 1) * gap;
     const startX = this.scene.scale.width / 2 - totalW / 2 + cardW / 2;
 
@@ -3036,7 +3085,7 @@ export class CardBattleSystem {
     const costText = this.scene.add
       .text(-cardW / 2 + u(17), -cardH / 2 + u(17), String(def.cost), {
         fontFamily: "serif",
-        fontSize: px(12),
+        fontSize: px(13),
         color: "#ffd572",
         fontStyle: "bold",
       })
@@ -3044,7 +3093,7 @@ export class CardBattleSystem {
     const nameText = this.scene.add
       .text(0, -cardH / 2 + u(17), def.roleLabel, {
         fontFamily: "serif",
-        fontSize: px(15),
+        fontSize: px(17),
         color: "#fdf3d4",
         fontStyle: "bold",
         stroke: "#1a0f22",
@@ -3054,7 +3103,7 @@ export class CardBattleSystem {
     const reverseBadge = this.scene.add
       .text(cardW / 2 - u(20), -cardH / 2 + u(17), temporary ? "TEMP" : `C${def.cost}`, {
         fontFamily: "serif",
-        fontSize: px(temporary ? 7 : 9),
+        fontSize: px(temporary ? 8 : 10),
         color: "#fdf3d4",
         fontStyle: "bold",
         stroke: "#1a0f22",
@@ -3067,7 +3116,7 @@ export class CardBattleSystem {
     const roleText = this.scene.add
       .text(0, -cardH / 2 + u(55), def.name, {
         fontFamily: "serif",
-        fontSize: px(11),
+        fontSize: px(12),
         color: playable ? "#3b2a27" : "#d0c1aa",
         fontStyle: "bold",
       })
@@ -3075,7 +3124,7 @@ export class CardBattleSystem {
     const powerText = this.scene.add
       .text(0, -cardH / 2 + u(79), `전투력 ${card.power}`, {
         fontFamily: "serif",
-        fontSize: px(10),
+        fontSize: px(11),
         color: playable ? "#2f2520" : "#d0c1aa",
         fontStyle: "bold",
       })
@@ -3086,7 +3135,7 @@ export class CardBattleSystem {
     const descText = this.scene.add
       .text(0, u(43), `${def.description}\n같은 역할 선택\n합체`, {
         fontFamily: "serif",
-        fontSize: px(7.8),
+        fontSize: px(8.6),
         color: temporary ? "#08282c" : playable ? "#2f2520" : "#cfc0b0",
         fontStyle: "bold",
         align: "center",
@@ -3864,6 +3913,7 @@ export class CardBattleSystem {
   }
 
   private playDodgeTriggerEffect(label: string) {
+    this.playBattleComment("회피했다!", "counter", "player");
     const { width, height } = this.scene.scale;
     const text = this.trackEffect(
       this.scene.add
@@ -3894,6 +3944,7 @@ export class CardBattleSystem {
 
   private playAutoParryEffect(amount: number) {
     SoundManager.play(this.scene, "parry");
+    this.playBattleComment(amount > 0 ? `패링 성공! ${amount} 반격!` : "패링 성공!", "counter", "enemy");
     const { width } = this.scene.scale;
     this.scene.cameras.main.shake(180, 0.006);
     const text = this.trackEffect(
@@ -4015,6 +4066,72 @@ export class CardBattleSystem {
       intensity = target === "player" ? 0.0042 : 0.0038;
     }
     this.scene.cameras.main.shake(duration, intensity);
+  }
+
+  private playBattleComment(text: string, kind: BattleCommentKind, target: "enemy" | "player" = "enemy") {
+    if (!this.overlay || this.finished) return;
+    const { width, height } = this.scene.scale;
+    const palette = {
+      hit: { color: "#ffffff", stroke: "#4d1518", bg: 0x321818, alpha: 0.7 },
+      critical: { color: "#ffe28a", stroke: "#5b2100", bg: 0x5f2b00, alpha: 0.82 },
+      block: { color: "#d8d8d8", stroke: "#1c1c22", bg: 0x20242c, alpha: 0.72 },
+      reduce: { color: "#ffd572", stroke: "#3d2500", bg: 0x3a2c12, alpha: 0.74 },
+      heal: { color: "#8dff9f", stroke: "#083a19", bg: 0x0f3218, alpha: 0.72 },
+      poison: { color: "#d894ff", stroke: "#32104a", bg: 0x2c153a, alpha: 0.74 },
+      counter: { color: "#82ffe6", stroke: "#063238", bg: 0x102f35, alpha: 0.76 },
+      danger: { color: "#ff8b79", stroke: "#4f1010", bg: 0x3a1618, alpha: 0.76 },
+    } satisfies Record<BattleCommentKind, { color: string; stroke: string; bg: number; alpha: number }>;
+    const p = palette[kind];
+    const x = width / 2 + Phaser.Math.Between(-u(30), u(30));
+    const y = target === "enemy" ? Math.max(u(188), height * 0.31) : height - u(332);
+    const fontSize = kind === "critical" ? 19 : kind === "hit" ? 16 : 15;
+    const boxW = u(Math.min(300, Math.max(132, text.length * 11.2)));
+    const boxH = u(kind === "critical" ? 40 : 34);
+    const c = this.trackEffect(this.scene.add.container(x, y).setDepth(729).setAlpha(0).setScale(0.84));
+    const bg = this.scene.add
+      .rectangle(0, 0, boxW, boxH, p.bg, p.alpha)
+      .setStrokeStyle(u(kind === "critical" ? 2 : 1.2), Phaser.Display.Color.HexStringToColor(p.color).color, 0.75);
+    const label = this.scene.add
+      .text(0, 0, text, {
+        fontFamily: "serif",
+        fontSize: px(fontSize),
+        color: p.color,
+        fontStyle: "bold",
+        stroke: p.stroke,
+        strokeThickness: u(kind === "critical" ? 3 : 2),
+        shadow: {
+          offsetX: 0,
+          offsetY: u(2),
+          color: "#000000",
+          blur: u(4),
+          fill: true,
+        },
+      })
+      .setOrigin(0.5);
+    c.add([bg, label]);
+    this.overlay.add(c);
+    this.scene.tweens.add({
+      targets: c,
+      alpha: 1,
+      scaleX: kind === "critical" ? 1.12 : 1,
+      scaleY: kind === "critical" ? 1.12 : 1,
+      duration: 150,
+      ease: "Back.easeOut",
+      onComplete: () => {
+        if (!c.scene) return;
+        this.scene.tweens.add({
+          targets: c,
+          y: c.y - u(32),
+          alpha: 0,
+          duration: 520,
+          delay: kind === "critical" ? 430 : 250,
+          ease: "Cubic.easeOut",
+          onComplete: () => {
+            if (c.scene) c.destroy();
+          },
+        });
+      },
+    });
   }
 
   private playFloatingNumber(

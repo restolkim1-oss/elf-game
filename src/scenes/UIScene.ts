@@ -321,7 +321,7 @@ export class UIScene extends Phaser.Scene {
 
   private showTopEnemyEnergy(payload: { label: string; hp: number; hpMax: number; intent?: string }) {
     this.topEnemyGroup?.setVisible(true);
-    this.topEnemyName?.setText(payload.label);
+    this.topEnemyName?.setText("");
     this.updateTopEnemyEnergy(payload);
   }
 
