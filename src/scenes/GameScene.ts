@@ -427,15 +427,8 @@ export class GameScene extends Phaser.Scene {
     this.partSystem.setInputEnabled(false);
 
     let battleStarted = false;
-    const beginBattle = () => {
-      if (battleStarted) return;
-      battleStarted = true;
-      this.clearBattleIntroSkip();
-      if (flowId !== this.battleFlowId || this.finaleTriggered || this.interactionActive) {
-        this.releaseBattleLock();
-        return;
-      }
-      this.cardBattle.start(part, (success, battleResult) => {
+    let runBattleAttempt!: () => void;
+    const handleBattleDone = (success: boolean, battleResult?: { destroyedPartIds: PartId[] }) => {
       if (flowId !== this.battleFlowId) return;
       if (success) {
         const destroyedInBattle = this.handlePartsDestroyedInBattle(battleResult?.destroyedPartIds ?? [], part.id);
@@ -472,11 +465,39 @@ export class GameScene extends Phaser.Scene {
       if (this.cardBattle.consumeLastCancelled() || this.abortingPuzzle) {
         this.abortingPuzzle = false;
         this.feedback("미니게임을 포기했습니다.");
+        this.releaseBattleLock();
       } else {
-        this.events.emit("failure", part.id);
+        this.showBattleDefeat(
+          () => {
+            if (flowId !== this.battleFlowId || this.finaleTriggered || this.interactionActive) {
+              this.releaseBattleLock();
+              return;
+            }
+            this.partSystem.setActivePart(part.id);
+            this.partSystem.setPuzzleActive(true);
+            this.partSystem.setInputEnabled(false);
+            runBattleAttempt();
+          },
+          () => {
+            if (flowId !== this.battleFlowId) return;
+            this.events.emit("failure", part.id);
+            this.releaseBattleLock();
+          }
+        );
       }
-      this.releaseBattleLock();
-      });
+    };
+    runBattleAttempt = () => {
+      this.cardBattle.start(part, handleBattleDone);
+    };
+    const beginBattle = () => {
+      if (battleStarted) return;
+      battleStarted = true;
+      this.clearBattleIntroSkip();
+      if (flowId !== this.battleFlowId || this.finaleTriggered || this.interactionActive) {
+        this.releaseBattleLock();
+        return;
+      }
+      runBattleAttempt();
     };
 
     if (this.hasPlayedBattleIntro) {
@@ -514,6 +535,13 @@ export class GameScene extends Phaser.Scene {
       battleDestroyedPartIds: destroyedPartIds,
       battleDestroyedLabels: destroyedPartIds.map((partId) => this.getBattlePartLabel(partId)),
       onContinue,
+    });
+  }
+
+  private showBattleDefeat(onRetry: () => void, onQuit: () => void) {
+    this.events.emit("battle-defeat-show", {
+      onRetry,
+      onQuit,
     });
   }
 

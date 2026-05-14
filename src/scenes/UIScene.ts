@@ -60,6 +60,11 @@ interface BattleRewardPayload {
   onContinue: () => void;
 }
 
+interface BattleDefeatPayload {
+  onRetry: () => void;
+  onQuit: () => void;
+}
+
 export class UIScene extends Phaser.Scene {
   private parts: PartDef[] = [];
   private pills: Pill[] = [];
@@ -79,6 +84,7 @@ export class UIScene extends Phaser.Scene {
   private galleryView: Phaser.GameObjects.Container | null = null;
   private posePreview: Phaser.GameObjects.Container | null = null;
   private rewardModal: Phaser.GameObjects.Container | null = null;
+  private defeatModal: Phaser.GameObjects.Container | null = null;
   private topCoinText: Phaser.GameObjects.Text | null = null;
   private displayedCoins = 0;
   private topEnemyGroup: Phaser.GameObjects.Container | null = null;
@@ -115,6 +121,7 @@ export class UIScene extends Phaser.Scene {
     this.galleryView = null;
     this.posePreview = null;
     this.rewardModal = null;
+    this.defeatModal = null;
     this.topCoinText = null;
     this.displayedCoins = 0;
     this.topEnemyGroup = null;
@@ -167,6 +174,9 @@ export class UIScene extends Phaser.Scene {
     });
     game.events.on("battle-reward-show", (payload: BattleRewardPayload) => {
       this.showBattleRewardModal(payload);
+    });
+    game.events.on("battle-defeat-show", (payload: BattleDefeatPayload) => {
+      this.showBattleDefeatModal(payload);
     });
     game.events.on("viewing-mode", () => this.drawZoomControls(width, height));
     game.events.on("finale", () => this.onFinale());
@@ -1261,6 +1271,102 @@ export class UIScene extends Phaser.Scene {
       duration: 300,
       scaleFrom: 0.86,
       onComplete: startCoinCountUp,
+    });
+  }
+
+  private showBattleDefeatModal(payload: BattleDefeatPayload) {
+    this.defeatModal?.destroy();
+    const { width, height } = this.scale;
+    const c = this.add.container(0, 0).setDepth(2300);
+    this.defeatModal = c;
+    let closed = false;
+
+    c.add(
+      this.add
+        .rectangle(width / 2, height / 2, width, height, 0x050208, 0.72)
+        .setInteractive()
+    );
+
+    const panelW = Math.min(width * 0.86, u(360));
+    const panelH = Math.min(height * 0.42, u(260));
+    const panelX = width / 2;
+    const panelY = height / 2;
+
+    c.add(
+      this.add
+        .rectangle(panelX, panelY, panelW, panelH, COLORS.panelMid, 0.98)
+        .setStrokeStyle(u(2), 0xff6b6b, 0.92)
+    );
+    c.add(
+      this.add
+        .rectangle(panelX, panelY - panelH / 2 + u(44), panelW - u(18), u(58), 0x2d1518, 0.92)
+        .setStrokeStyle(u(1), 0xff6b6b, 0.68)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - panelH / 2 + u(25), "공략 실패", {
+          fontFamily: "serif",
+          fontSize: px(25),
+          color: "#ff9a8a",
+          fontStyle: "bold",
+          stroke: "#160509",
+          strokeThickness: u(1.4),
+        })
+        .setOrigin(0.5, 0)
+    );
+    c.add(
+      this.add
+        .text(panelX, panelY - u(18), "HP가 0이 되었거나\n12턴 안에 공략하지 못했습니다.", {
+          fontFamily: "serif",
+          fontSize: px(15),
+          color: COLORS.text,
+          fontStyle: "bold",
+          align: "center",
+          lineSpacing: u(5),
+          wordWrap: { width: panelW - u(44) },
+        })
+        .setOrigin(0.5)
+    );
+
+    const closeWith = (next: () => void) => {
+      if (closed) return;
+      closed = true;
+      const old = this.defeatModal;
+      this.defeatModal = null;
+      this.closeModalWithTransition(old, {
+        onComplete: () => {
+          old?.destroy();
+          next();
+        },
+      });
+    };
+
+    const btnY = panelY + panelH / 2 - u(42);
+    const btnW = panelW * 0.38;
+    this.makeButton(
+      c,
+      panelX - btnW * 0.58,
+      btnY,
+      btnW,
+      u(44),
+      "다시 시작",
+      () => closeWith(payload.onRetry),
+      px(12)
+    );
+    this.makeButton(
+      c,
+      panelX + btnW * 0.58,
+      btnY,
+      btnW,
+      u(44),
+      "포기",
+      () => closeWith(payload.onQuit),
+      px(12)
+    );
+
+    this.openModalWithTransition(c, {
+      duration: 260,
+      scaleFrom: 0.86,
     });
   }
 

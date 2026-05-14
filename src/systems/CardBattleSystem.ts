@@ -995,8 +995,6 @@ export class CardBattleSystem {
     this.playAttackEffect("player", incoming);
     if (incoming > 0 && received <= 0 && playerBlockBeforeHit > 0) {
       this.playBattleComment("보호막에 막혔다!", "block", "player");
-    } else if (received > 0) {
-      this.playBattleComment(`${received} 피해를 받았다!`, "danger", "player");
     }
 
     let reflected = 0;
@@ -2117,8 +2115,6 @@ export class CardBattleSystem {
     const dealt = this.applyAttack(this.enemy, modifier.amount);
     if (modifier.amount > 0 && dealt <= 0 && blockBefore > 0) {
       this.playBattleComment("보호막에 막혔다!", "block", "enemy");
-    } else if (dealt > 0) {
-      this.playBattleComment(`${dealt}의 데미지${dealt >= 14 ? "!!" : "!"}`, "hit", "enemy");
     }
     return { dealt, appliedAmount: modifier.amount, prevented: false };
   }
@@ -2144,8 +2140,6 @@ export class CardBattleSystem {
       const dealt = this.applyAttack(this.enemy, modifier.amount);
       if (modifier.amount > 0 && dealt <= 0 && blockBefore > 0) {
         this.playBattleComment("보호막에 막혔다!", "block", "enemy");
-      } else if (dealt > 0) {
-        this.playBattleComment(`${dealt}의 데미지!`, "hit", "enemy");
       }
       return {
         partName,
@@ -2169,7 +2163,6 @@ export class CardBattleSystem {
     } else {
       this.playPartDamageEffect(target.id);
     }
-    if (partDamage > 0) this.playBattleComment(`${partDamage}의 데미지!`, "hit", "enemy");
     const blockBefore = this.enemy.block;
     const overflowDealt = overflow > 0 ? this.applyAttack(this.enemy, overflow) : 0;
     if (overflow > 0 && overflowDealt <= 0 && blockBefore > 0) this.playBattleComment("보호막에 막혔다!", "block", "enemy");
@@ -2556,7 +2549,6 @@ export class CardBattleSystem {
         this.applyDirectDamage(this.enemy, criticalDamage);
         this.playAttackEffect("enemy", criticalDamage, visualStyle);
         this.playCriticalText(width / 2, Math.max(u(190), height * 0.38));
-        this.playBattleComment(`크리티컬! ${criticalDamage}의 데미지!!`, "critical", "enemy");
         this.flashLog(`Critical Hit! 추가 내구도 ${criticalDamage} 감소`);
         this.refreshAll();
         if (this.enemy.hp > 0) this.maybeShowEnemySpeech();
