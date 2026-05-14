@@ -67,7 +67,7 @@ export const STAGE_LAYERS: StageLayerDef[] = [
   {
     id: "base",
     textureKey: "E1_base",
-    path: "/assets/E1_base.png?v=base-20260511",
+    path: "/assets/E1_base.png?v=base-20260514-underwear2",
     depth: 10,
   },
   {
@@ -76,6 +76,13 @@ export const STAGE_LAYERS: StageLayerDef[] = [
     path: "/assets/E1_Underwear.png",
     depth: 11,
     partId: "underwear",
+  },
+  {
+    id: "underwear2",
+    textureKey: "E1_Underwear2",
+    path: "/assets/E1_Underwear2.png",
+    depth: 11.5,
+    partId: "underwear2",
   },
   {
     id: "boots",
@@ -197,6 +204,17 @@ const PARTS_STAGE1: PartDef[] = [
     hitbox: { x: 0.22, y: 0.18, w: 0.56, h: 0.45 },
     tint: 0xf1c6a8,
     order: 6,
+    stageAfter: null,
+    prerequisites: [],
+  },
+  {
+    id: "underwear2",
+    label: "언더웨어2",
+    act: "finale",
+    difficulty: 5,
+    hitbox: { x: 0.22, y: 0.24, w: 0.56, h: 0.42 },
+    tint: 0xff8fb3,
+    order: 7,
     stageAfter: null,
     prerequisites: [],
   },

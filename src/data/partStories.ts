@@ -55,4 +55,9 @@ export const PART_STORIES: Record<PartId, PartStory> = {
 더 이상 가진 게 없어. 내 자존심도, 내 숲도, 내 이름도. 다 가져갔어.
 숲은 침묵했다. 수호자는, 더 이상 수호자가 아니었다.`,
   },
+  underwear2: {
+    partId: "underwear2",
+    title: "마지막 조각",
+    text: `[언더웨어2 이야기 — 추후 작성]`,
+  },
 };

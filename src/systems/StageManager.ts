@@ -10,6 +10,7 @@ const PART_ZOOM_FRAMES: Record<PartId, { focusY: number; zoom: number }> = {
   skirt: { focusY: 0.55, zoom: 1.4 },
   shoes: { focusY: 0.79, zoom: 1.5 },
   underwear: { focusY: 0.47, zoom: 1.42 },
+  underwear2: { focusY: 0.47, zoom: 1.42 },
 };
 
 const PART_EFFECT_CENTER_OVERRIDES: Record<string, { x?: number; y?: number }> = {
@@ -17,6 +18,7 @@ const PART_EFFECT_CENTER_OVERRIDES: Record<string, { x?: number; y?: number }> =
   boots: { y: 0.84 },
   shoes: { y: 0.84 },
   underwear: { y: 0.48 },
+  underwear2: { y: 0.5 },
 };
 
 export class StageManager {
@@ -557,6 +559,7 @@ export class StageManager {
       case "shoes":
         return { light: 0xdac0a2, main: 0x6c4b35, dark: 0x2d1d17 };
       case "underwear":
+      case "underwear2":
         return { light: 0xffffff, main: 0xf2d8d8, dark: 0xc98590 };
       default:
         return { light: 0xffffff, main: 0xffd572, dark: 0x8a5a22 };

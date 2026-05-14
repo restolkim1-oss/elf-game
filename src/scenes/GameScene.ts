@@ -374,6 +374,7 @@ export class GameScene extends Phaser.Scene {
       case "sweater":
       case "skirt":
       case "underwear":
+      case "underwear2":
         return partId;
       default:
         return null;
@@ -394,6 +395,8 @@ export class GameScene extends Phaser.Scene {
         return "신발";
       case "underwear":
         return "언더웨어";
+      case "underwear2":
+        return "언더웨어2";
     }
   }
 

@@ -2995,6 +2995,8 @@ export class CardBattleSystem {
         return 0x82ffe6;
       case "underwear":
         return 0xff8fb3;
+      case "underwear2":
+        return 0xff6fc5;
     }
   }
 

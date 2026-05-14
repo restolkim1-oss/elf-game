@@ -1,4 +1,4 @@
-export type PartId = "circlet" | "cape" | "sweater" | "skirt" | "shoes" | "underwear";
+export type PartId = "circlet" | "cape" | "sweater" | "skirt" | "shoes" | "underwear" | "underwear2";
 
 export type PartAbility =
   | { kind: "shieldOnTurnStart"; value: number }
@@ -52,6 +52,12 @@ export const ENEMY_PART_CONFIG: Record<EnemyPartConfigKey, EnemyPart[]> = {
     {
       id: "underwear",
       displayName: "언더웨어",
+      maxHp: 30,
+      ability: { kind: "berserkBelowHpRatio", value: 1.5, threshold: 0.5 },
+    },
+    {
+      id: "underwear2",
+      displayName: "언더웨어2",
       maxHp: 30,
       ability: { kind: "berserkBelowHpRatio", value: 1.5, threshold: 0.5 },
     },
